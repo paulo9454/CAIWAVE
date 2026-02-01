@@ -5,7 +5,7 @@
 @tailwind utilities;
 
 @layer base {
-    :root {
+    :root, html {
         --background: 0 0% 2%;
         --foreground: 0 0% 98%;
         --card: 0 0% 4%;
@@ -35,7 +35,13 @@
         --chart-4: 263 70% 58%;
         --chart-5: 0 84% 60%;
         --radius: 0.5rem;
+        color-scheme: dark;
     }
+}
+
+html, body, #root {
+    background-color: #050505 !important;
+    color: #fafafa;
 }
 
 * {
