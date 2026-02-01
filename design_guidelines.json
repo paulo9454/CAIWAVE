@@ -1,0 +1,199 @@
+{
+  "identity": {
+    "name": "CAITECH",
+    "mission": "To democratize internet access while monetizing connectivity through precision location-based advertising.",
+    "persona": "The Architect of Connectivity. Reliable, sophisticated, yet hyper-modern. Think 'Cisco meets Cyberpunk' but cleaner.",
+    "tone": "Professional, Authoritative, High-Tech, Transparent."
+  },
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "weights": ["500", "700"],
+      "usage": "Use for all H1-H6. Tight tracking (-0.02em).",
+      "fallback": "sans-serif"
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "Use for all paragraphs, labels, and data tables.",
+      "fallback": "system-ui"
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "Use for IP addresses, MAC addresses, and API keys."
+    },
+    "forbidden_fonts": ["Space Grotesk", "Roboto", "Open Sans"]
+  },
+  "colors": {
+    "theme": "dark",
+    "palette": {
+      "background": {
+        "default": "#050505",
+        "paper": "#0A0A0A",
+        "subtle": "#121212"
+      },
+      "primary": {
+        "main": "#2563EB",
+        "light": "#60A5FA",
+        "dark": "#1D4ED8",
+        "foreground": "#FFFFFF"
+      },
+      "secondary": {
+        "main": "#7C3AED",
+        "light": "#A78BFA",
+        "dark": "#5B21B6",
+        "foreground": "#FFFFFF"
+      },
+      "success": {
+        "main": "#10B981",
+        "glow": "0 0 10px rgba(16, 185, 129, 0.4)"
+      },
+      "warning": {
+        "main": "#F59E0B"
+      },
+      "error": {
+        "main": "#EF4444",
+        "glow": "0 0 10px rgba(239, 68, 68, 0.4)"
+      },
+      "neutral": {
+        "50": "#FAFAFA",
+        "100": "#F4F4F5",
+        "200": "#E4E4E7",
+        "300": "#D4D4D8",
+        "400": "#A1A1AA",
+        "500": "#71717A",
+        "600": "#52525B",
+        "700": "#3F3F46",
+        "800": "#27272A",
+        "900": "#18181B",
+        "950": "#09090B"
+      }
+    },
+    "gradients": {
+      "primary": "linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)",
+      "campaign_active": "linear-gradient(135deg, #7C3AED 0%, #2563EB 100%)",
+      "surface_glow": "radial-gradient(circle at top center, rgba(37, 99, 235, 0.15), transparent 70%)"
+    },
+    "forbidden_colors": ["#7351B7", "#1B93A4"]
+  },
+  "visual_enhancers": {
+    "borders": {
+      "default": "1px solid #27272A",
+      "active": "1px solid #2563EB",
+      "grid": "1px solid rgba(255, 255, 255, 0.05)"
+    },
+    "shadows": {
+      "card": "0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3)",
+      "glow": "0 0 15px rgba(37, 99, 235, 0.3)",
+      "inner": "inset 0 2px 4px 0 rgba(0, 0, 0, 0.6)"
+    },
+    "glassmorphism": {
+      "nav": "backdrop-filter: blur(12px); background-color: rgba(5, 5, 5, 0.7); border-bottom: 1px solid rgba(255, 255, 255, 0.05);",
+      "overlay": "backdrop-filter: blur(8px); background-color: rgba(0, 0, 0, 0.6);"
+    }
+  },
+  "layout_strategies": {
+    "marketing": {
+      "grid_type": "Tetris Grid",
+      "columns": "grid-cols-1 md:grid-cols-12",
+      "gap": "gap-8",
+      "container_padding": "px-6 md:px-12 lg:px-24"
+    },
+    "dashboard": {
+      "grid_type": "High Density Grid",
+      "columns": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4",
+      "gap": "gap-4",
+      "style": "Grid Borders (The Technical Look)",
+      "rule": "Every pixel must be utilized. Use h-full on children."
+    },
+    "captive_portal": {
+      "type": "Mobile-First Stack",
+      "alignment": "Center/Bottom",
+      "constraints": "Max-width 400px centered on screen."
+    }
+  },
+  "component_guidelines": {
+    "marketing_components": {
+      "implementation": "Custom HTML + Tailwind CSS",
+      "rules": [
+        "Do not use Shadcn Cards for marketing sections.",
+        "Use generous padding (py-20, py-32).",
+        "Use 'Tetris' grid for feature showcases."
+      ]
+    },
+    "app_components": {
+      "implementation": "Shadcn UI",
+      "rules": [
+        "Customize Shadcn components to match the Dark/Obsidian theme.",
+        "Use 'sonner' for toasts.",
+        "Use 'recharts' for data visualization.",
+        "Buttons must be sharp or slightly rounded (rounded-md), never pill-shaped for dashboards."
+      ]
+    },
+    "buttons": {
+      "primary": "bg-primary text-white hover:bg-primary-dark shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all duration-300",
+      "secondary": "border border-neutral-700 bg-transparent hover:bg-neutral-800 text-white",
+      "ghost": "hover:bg-neutral-800 text-neutral-400 hover:text-white"
+    },
+    "cards": {
+      "dashboard_card": "bg-card border border-neutral-800 rounded-lg p-6 hover:border-neutral-700 transition-colors",
+      "stat_card": "bg-neutral-900/50 border border-neutral-800 p-4 rounded-md"
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px (Thin/Tech feel)"
+    },
+    "images": {
+      "hero_bg": {
+        "url": "https://images.unsplash.com/photo-1680691257251-5fead813b73e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHwxfHxzZXJ2ZXIlMjByYWNrJTIwYmx1ZXxlbnwwfHx8fDE3Njk5ODQ5NDh8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Network Switch Close Up",
+        "usage": "Hero section background with heavy overlay or 'How It Works' feature image."
+      },
+      "user_connecting": {
+        "url": "https://images.unsplash.com/photo-1758876201450-cf77ab8b95bc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDF8MHwxfHNlYXJjaHwzfHxoYXBweSUyMHBlcnNvbiUyMGhvbGRpbmclMjBwaG9uZXxlbnwwfHx8fDE3Njk5ODQ5NDh8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Woman smiling on phone",
+        "usage": "Captive Portal success screen or Landing page 'User Experience' section."
+      },
+      "hotspot_owner_context": {
+        "url": "https://images.unsplash.com/photo-1615847014013-0dfa967ba04f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHw0fHxsYXB0b3AlMjBjb2ZmZWUlMjBzaG9wfGVufDB8fHx8MTc2OTk4NDk0N3ww&ixlib=rb-4.1.0&q=85",
+        "alt": "Laptop and coffee",
+        "usage": "Hotspot Owner landing page section."
+      },
+      "team": {
+        "url": "https://images.unsplash.com/photo-1758691736975-9f7f643d178e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwzfHxkaXZlcnNlJTIwYnVzaW5lc3MlMjB0ZWFtJTIwbWVldGluZ3xlbnwwfHx8fDE3Njk5ODQ5Mzd8MA&ixlib=rb-4.1.0&q=85",
+        "alt": "Diverse professional team",
+        "usage": "About Us or Contact page."
+      }
+    }
+  },
+  "motion": {
+    "libraries": ["framer-motion"],
+    "preferences": {
+      "reduced_motion": "Respect prefers-reduced-motion",
+      "page_transition": "Opacity fade + gentle y-axis slide (y: 10 -> 0)",
+      "hover": "Scale 1.02 or Border brightness increase. No heavy movement."
+    }
+  },
+  "accessibility": {
+    "contrast_ratio": "AA (4.5:1) for normal text, AAA (7:1) for critical data.",
+    "focus_states": "Visible focus ring (2px solid #2563EB) with offset.",
+    "testing": "All interactive elements must have data-testid attributes."
+  },
+  "universal_guidelines": [
+    "You tend to converge toward generic outputs. Avoid this.",
+    "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition (transition: all).",
+    "You MUST NOT center align the app container.",
+    "Always use modern button styles.",
+    "NEVER use AI assistant Emoji characters like 🤖 etc.",
+    "Every interaction needs micro-animations.",
+    "Use 2-3x more spacing than feels comfortable.",
+    "Subtle grain textures and noise overlays separate good from extraordinary.",
+    "Missing categories = main agent will use placeholder text which is FORBIDDEN."
+  ]
+}
