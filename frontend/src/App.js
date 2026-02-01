@@ -36,7 +36,7 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#050505]">
+    <div className="min-h-screen bg-[#050505] text-white dark">
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
