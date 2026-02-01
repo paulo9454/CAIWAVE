@@ -54,12 +54,21 @@ html {
     scroll-behavior: smooth;
 }
 
+html {
+    background: #050505 !important;
+}
+
 body {
     font-family: 'Inter', system-ui, sans-serif;
-    background-color: #050505;
-    color: #fafafa;
+    background-color: #050505 !important;
+    color: #fafafa !important;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+}
+
+#root {
+    background-color: #050505;
     min-height: 100vh;
 }
 
