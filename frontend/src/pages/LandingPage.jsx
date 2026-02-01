@@ -213,7 +213,7 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 px-6 lg:px-12 bg-[#0a0a0a]">
+      <section id="features" className="py-24 px-6 lg:px-12 bg-[#0a0a0a]" style={{backgroundColor: '#0a0a0a'}}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
