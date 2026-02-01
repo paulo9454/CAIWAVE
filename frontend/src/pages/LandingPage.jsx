@@ -33,7 +33,7 @@ const LandingPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-dark-bg relative overflow-hidden text-white">
+    <div className="min-h-screen relative overflow-hidden text-white" style={{ backgroundColor: '#050505' }}>
       {/* Navigation */}
       <nav className="nav-glass fixed top-0 left-0 right-0 z-50">
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
@@ -213,7 +213,7 @@ const LandingPage = () => {
       </section>
 
       {/* Features Section */}
-      <section id="features" className="py-24 px-6 lg:px-12 bg-dark-100">
+      <section id="features" className="py-24 px-6 lg:px-12" style={{ backgroundColor: '#0a0a0a' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -261,7 +261,8 @@ const LandingPage = () => {
             ].map((feature, index) => (
               <div
                 key={index}
-                className="bg-dark-200 border border-neutral-800 rounded-xl p-6 card-hover"
+                className="border border-neutral-800 rounded-xl p-6 card-hover"
+                style={{ backgroundColor: '#121212' }}
                 data-testid={`feature-card-${index}`}
               >
                 <div className="w-12 h-12 bg-blue-600/10 rounded-lg flex items-center justify-center mb-4">
@@ -329,7 +330,7 @@ const LandingPage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-24 px-6 lg:px-12 bg-dark-100">
+      <section id="pricing" className="py-24 px-6 lg:px-12" style={{ backgroundColor: '#0a0a0a' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -429,7 +430,7 @@ const LandingPage = () => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-24 px-6 lg:px-12 bg-dark-100">
+      <section className="py-24 px-6 lg:px-12" style={{ backgroundColor: '#0a0a0a' }}>
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl sm:text-4xl font-bold mb-6">
             Ready to Transform Your
