@@ -184,12 +184,10 @@ class CaitechAPITester:
     def test_get_portal_data(self):
         """Test captive portal data endpoint"""
         if not self.created_hotspot_id:
-            # Use demo hotspot ID
-            hotspot_id = "demo"
-        else:
-            hotspot_id = self.created_hotspot_id
+            self.log("⚠️  Skipping portal data - no hotspot ID available")
+            return False
             
-        return self.run_test("Portal Data", "GET", f"portal/{hotspot_id}", 200)
+        return self.run_test("Portal Data", "GET", f"portal/{self.created_hotspot_id}", 200)
 
     def test_create_session(self):
         """Test creating a session"""
