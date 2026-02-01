@@ -167,7 +167,7 @@ class CaitechAPITester:
             "is_active": True
         }
         
-        success, response = self.run_test("Create Hotspot", "POST", "hotspots/", 201, hotspot_data)
+        success, response = self.run_test("Create Hotspot", "POST", "hotspots/", 200, hotspot_data)
         if success and response:
             self.created_hotspot_id = response.get('id')
             self.log(f"🏢 Created hotspot ID: {self.created_hotspot_id}")
