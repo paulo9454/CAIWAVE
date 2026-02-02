@@ -1445,6 +1445,44 @@ async def redeem_voucher(code: str, hotspot_id: str, user_mac: Optional[str] = N
 
 # ==================== Sessions Routes ====================
 
+@sessions_router.post("/")
+async def create_session(session_data: SessionCreate):
+    """Create a new session"""
+    package = await db.packages.find_one({"id": session_data.package_id}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    hotspot = await db.hotspots.find_one({"id": session_data.hotspot_id}, {"_id": 0})
+    username, password = generate_radius_credentials(
+        hotspot.get("username_prefix", "") if hotspot else ""
+    )
+    
+    session = Session(**session_data.model_dump())
+    session.username = username
+    session.password = password
+    session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
+    
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session_dict["started_at"].isoformat()
+    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+    
+    await db.sessions.insert_one(session_dict)
+    
+    # Update hotspot stats
+    if hotspot:
+        await db.hotspots.update_one(
+            {"id": session_data.hotspot_id},
+            {"$inc": {"total_sessions": 1}}
+        )
+    
+    return {
+        "session_id": session.id,
+        "username": session.username,
+        "password": session.password,
+        "expires_at": session.expires_at.isoformat(),
+        "duration_minutes": package["duration_minutes"]
+    }
+
 @sessions_router.get("/active")
 async def get_active_sessions(
     user: dict = Depends(get_current_user),
