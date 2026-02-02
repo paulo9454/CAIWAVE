@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7,12 +7,15 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import jwt
 import bcrypt
 from enum import Enum
+import httpx
+import base64
+import hashlib
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -27,8 +30,33 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'caitech-secret-key-change-in-producti
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
+# M-Pesa Configuration (Daraja API)
+MPESA_CONSUMER_KEY = os.environ.get('MPESA_CONSUMER_KEY', '')
+MPESA_CONSUMER_SECRET = os.environ.get('MPESA_CONSUMER_SECRET', '')
+MPESA_SHORTCODE = os.environ.get('MPESA_SHORTCODE', '')
+MPESA_PASSKEY = os.environ.get('MPESA_PASSKEY', '')
+MPESA_CALLBACK_URL = os.environ.get('MPESA_CALLBACK_URL', '')
+MPESA_ENV = os.environ.get('MPESA_ENV', 'sandbox')  # 'sandbox' or 'production'
+
+# SMS Configuration
+SMS_PROVIDER = os.environ.get('SMS_PROVIDER', 'africas_talking')  # 'africas_talking', 'centipid', etc.
+SMS_API_KEY = os.environ.get('SMS_API_KEY', '')
+SMS_USERNAME = os.environ.get('SMS_USERNAME', '')
+SMS_SENDER_ID = os.environ.get('SMS_SENDER_ID', 'CAITECH')
+
+# Twilio WhatsApp Configuration
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_WHATSAPP_NUMBER = os.environ.get('TWILIO_WHATSAPP_NUMBER', '')
+
+# FreeRADIUS Configuration
+RADIUS_HOST = os.environ.get('RADIUS_HOST', 'localhost')
+RADIUS_SECRET = os.environ.get('RADIUS_SECRET', 'testing123')
+RADIUS_AUTH_PORT = int(os.environ.get('RADIUS_AUTH_PORT', '1812'))
+RADIUS_ACCT_PORT = int(os.environ.get('RADIUS_ACCT_PORT', '1813'))
+
 # Create the main app
-app = FastAPI(title="CAITECH Wi-Fi Hotspot Billing Platform")
+app = FastAPI(title="CAITECH Wi-Fi Hotspot Billing Platform", version="2.0.0")
 
 # Create routers
 api_router = APIRouter(prefix="/api")
@@ -37,14 +65,21 @@ packages_router = APIRouter(prefix="/packages", tags=["Packages"])
 hotspots_router = APIRouter(prefix="/hotspots", tags=["Hotspots"])
 sessions_router = APIRouter(prefix="/sessions", tags=["Sessions"])
 payments_router = APIRouter(prefix="/payments", tags=["Payments"])
+mpesa_router = APIRouter(prefix="/mpesa", tags=["M-Pesa"])
 ads_router = APIRouter(prefix="/ads", tags=["Advertisements"])
 campaigns_router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 analytics_router = APIRouter(prefix="/analytics", tags=["Analytics"])
 locations_router = APIRouter(prefix="/locations", tags=["Locations"])
+radius_router = APIRouter(prefix="/radius", tags=["RADIUS"])
+notifications_router = APIRouter(prefix="/notifications", tags=["Notifications"])
+settings_router = APIRouter(prefix="/settings", tags=["Settings"])
+vouchers_router = APIRouter(prefix="/vouchers", tags=["Vouchers"])
+marketplace_router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
 
 security = HTTPBearer()
 
-# Enums
+# ==================== Enums ====================
+
 class UserRole(str, Enum):
     SUPER_ADMIN = "super_admin"
     HOTSPOT_OWNER = "hotspot_owner"
@@ -54,15 +89,14 @@ class UserRole(str, Enum):
 class AdType(str, Enum):
     IMAGE = "image"
     VIDEO = "video"
+    BANNER = "banner"
     TEXT = "text"
-    LINK = "link"
 
-class CampaignStatus(str, Enum):
-    DRAFT = "draft"
+class AdStatus(str, Enum):
     PENDING = "pending"
-    ACTIVE = "active"
-    PAUSED = "paused"
-    COMPLETED = "completed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUSPENDED = "suspended"
 
 class SessionStatus(str, Enum):
     ACTIVE = "active"
@@ -71,8 +105,27 @@ class SessionStatus(str, Enum):
 
 class PaymentStatus(str, Enum):
     PENDING = "pending"
+    PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class PaymentMethod(str, Enum):
+    MPESA = "mpesa"
+    BANK = "bank"
+    VOUCHER = "voucher"
+    FREE_AD = "free_ad"
+
+class HotspotStatus(str, Enum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+    PENDING_SETUP = "pending_setup"
+
+class NotificationType(str, Enum):
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+    EMAIL = "email"
 
 # ==================== Models ====================
 
@@ -96,6 +149,11 @@ class User(UserBase):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
     balance: float = 0.0
+    notification_preferences: Dict[str, bool] = Field(default_factory=lambda: {
+        "sms_enabled": True,
+        "whatsapp_enabled": False,
+        "email_enabled": True
+    })
 
 class UserResponse(BaseModel):
     id: str
@@ -106,17 +164,15 @@ class UserResponse(BaseModel):
     is_active: bool
     balance: float
 
-# Package Models
+# Package Models - UPDATED PRICING
 class PackageBase(BaseModel):
     name: str
-    price: float
+    price: float  # KES
     duration_minutes: int
     speed_mbps: float = 10.0
+    data_limit_mb: Optional[int] = None  # None = unlimited
     description: Optional[str] = None
     is_active: bool = True
-
-class PackageCreate(PackageBase):
-    pass
 
 class Package(PackageBase):
     model_config = ConfigDict(extra="ignore")
@@ -124,6 +180,14 @@ class Package(PackageBase):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # Hotspot Models
+class MikroTikConfig(BaseModel):
+    ip_address: str
+    api_port: int = 8728
+    api_username: str = "admin"
+    api_password: str = ""
+    hotspot_server: str = "hotspot1"
+    radius_secret: str = ""
+
 class HotspotBase(BaseModel):
     name: str
     ssid: str
@@ -133,45 +197,63 @@ class HotspotBase(BaseModel):
     county: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    mikrotik_ip: Optional[str] = None
-    mikrotik_user: Optional[str] = None
-    is_active: bool = True
+    mikrotik_config: Optional[MikroTikConfig] = None
+    username_prefix: str = ""
+    captive_portal_language: str = "en"
+    redirect_url: Optional[str] = None
+    auto_prune_days: int = 30
 
 class HotspotCreate(HotspotBase):
-    owner_id: str
+    owner_id: Optional[str] = None
 
 class Hotspot(HotspotBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     owner_id: str
+    status: HotspotStatus = HotspotStatus.PENDING_SETUP
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     total_revenue: float = 0.0
     total_sessions: int = 0
+    total_data_mb: float = 0.0
+    uptime_percentage: float = 100.0
+    last_seen: Optional[datetime] = None
+    enabled_packages: List[str] = Field(default_factory=list)  # Package IDs
+    # Dynamic revenue factors
+    coverage_area_sqm: float = 100.0
+    avg_daily_clients: int = 0
+    ad_impressions_delivered: int = 0
 
 # Session Models
 class SessionBase(BaseModel):
     package_id: str
     hotspot_id: str
     user_mac: Optional[str] = None
+    user_ip: Optional[str] = None
 
 class SessionCreate(SessionBase):
     user_id: Optional[str] = None
+    phone_number: Optional[str] = None
 
 class Session(SessionBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: Optional[str] = None
+    phone_number: Optional[str] = None
+    username: str = ""  # RADIUS username
+    password: str = ""  # RADIUS password (for vouchers)
     status: SessionStatus = SessionStatus.ACTIVE
     started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: datetime = None
+    expires_at: Optional[datetime] = None
     data_used_mb: float = 0.0
     is_free: bool = False
+    voucher_code: Optional[str] = None
+    payment_id: Optional[str] = None
 
 # Payment Models
 class PaymentBase(BaseModel):
     amount: float
     phone_number: str
-    session_id: Optional[str] = None
+    method: PaymentMethod = PaymentMethod.MPESA
 
 class PaymentCreate(PaymentBase):
     hotspot_id: str
@@ -182,12 +264,35 @@ class Payment(PaymentBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     hotspot_id: str
     package_id: str
+    session_id: Optional[str] = None
     status: PaymentStatus = PaymentStatus.PENDING
+    mpesa_checkout_request_id: Optional[str] = None
     mpesa_receipt: Optional[str] = None
+    bank_reference: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
+    # Revenue sharing
+    owner_share: float = 0.0
+    platform_share: float = 0.0
 
-# Ad Models
+# M-Pesa Models
+class MPesaSTKPushRequest(BaseModel):
+    phone_number: str
+    amount: float
+    account_reference: str
+    transaction_desc: str
+
+class MPesaSTKCallback(BaseModel):
+    Body: Dict[str, Any]
+
+# Ad Models - WITH APPROVAL WORKFLOW
+class AdTargeting(BaseModel):
+    is_global: bool = False
+    counties: List[str] = Field(default_factory=list)
+    constituencies: List[str] = Field(default_factory=list)
+    wards: List[str] = Field(default_factory=list)
+    hotspot_ids: List[str] = Field(default_factory=list)
+
 class AdBase(BaseModel):
     title: str
     ad_type: AdType
@@ -195,6 +300,7 @@ class AdBase(BaseModel):
     text_content: Optional[str] = None
     link_url: Optional[str] = None
     duration_seconds: int = 10
+    targeting: AdTargeting = Field(default_factory=AdTargeting)
 
 class AdCreate(AdBase):
     pass
@@ -203,58 +309,83 @@ class Ad(AdBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     advertiser_id: str
+    status: AdStatus = AdStatus.PENDING  # REQUIRES ADMIN APPROVAL
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    approved_at: Optional[datetime] = None
+    approved_by: Optional[str] = None
+    rejection_reason: Optional[str] = None
     impressions: int = 0
     clicks: int = 0
-    is_active: bool = True
+    is_active: bool = False  # Only active after approval
 
-# Campaign Models
-class CampaignBase(BaseModel):
-    name: str
-    budget: float
-    start_date: datetime
-    end_date: datetime
-    target_global: bool = False
-    target_hotspots: List[str] = []
-    target_wards: List[str] = []
-    target_constituencies: List[str] = []
+class AdApproval(BaseModel):
+    approved: bool
+    rejection_reason: Optional[str] = None
 
-class CampaignCreate(CampaignBase):
-    ad_ids: List[str]
+# Voucher Models
+class VoucherBase(BaseModel):
+    package_id: str
+    hotspot_id: str
+    quantity: int = 1
 
-class Campaign(CampaignBase):
+class Voucher(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    advertiser_id: str
-    ad_ids: List[str] = []
-    status: CampaignStatus = CampaignStatus.DRAFT
+    code: str
+    package_id: str
+    hotspot_id: str
+    owner_id: str
+    username: str
+    password: str
+    is_used: bool = False
+    used_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    total_impressions: int = 0
-    total_spent: float = 0.0
+    expires_at: datetime
 
-# Location Models
-class Location(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    type: str  # county, constituency, ward
-    parent_id: Optional[str] = None
+# Notification Models
+class NotificationRequest(BaseModel):
+    recipient: str  # Phone number or email
+    message: str
+    notification_type: NotificationType
 
-# Analytics Models
-class RevenueStats(BaseModel):
-    total_revenue: float
+# Revenue Sharing Models
+class RevenueConfig(BaseModel):
+    base_owner_percentage: float = 60.0  # Base percentage
+    coverage_bonus_per_100sqm: float = 0.5
+    client_bonus_per_10: float = 0.5
+    ad_impression_bonus_per_1000: float = 1.0
+    uptime_bonus_threshold: float = 99.0
+    uptime_bonus_percentage: float = 2.0
+    max_owner_percentage: float = 80.0
+
+class DynamicRevenue(BaseModel):
+    total_amount: float
     owner_share: float
     platform_share: float
-    total_sessions: int
-    active_users: int
+    owner_percentage: float
+    breakdown: Dict[str, float]
 
-class DashboardStats(BaseModel):
-    total_hotspots: int
-    active_hotspots: int
-    total_users: int
-    total_revenue: float
-    total_sessions: int
-    active_campaigns: int
+# Settings Models
+class SystemSettings(BaseModel):
+    mpesa_enabled: bool = False
+    bank_enabled: bool = False
+    sms_enabled: bool = False
+    whatsapp_enabled: bool = False
+    email_enabled: bool = False
+    voucher_printing_enabled: bool = True
+    auto_approve_ads: bool = False  # Always False for CAITECH
+
+# Marketplace Models
+class MarketplaceItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    description: str
+    category: str  # router, access_point, accessory, tutorial
+    price: float
+    image_url: Optional[str] = None
+    purchase_url: Optional[str] = None
+    is_active: bool = True
 
 # ==================== Helper Functions ====================
 
@@ -290,6 +421,361 @@ def require_role(allowed_roles: List[UserRole]):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
     return role_checker
+
+def require_admin(user: dict = Depends(get_current_user)):
+    if user["role"] != UserRole.SUPER_ADMIN.value:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+def generate_voucher_code() -> str:
+    """Generate a unique voucher code"""
+    return uuid.uuid4().hex[:8].upper()
+
+def generate_radius_credentials(prefix: str = "") -> tuple:
+    """Generate RADIUS username and password"""
+    username = f"{prefix}{uuid.uuid4().hex[:6]}"
+    password = uuid.uuid4().hex[:8]
+    return username, password
+
+async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRevenue:
+    """Calculate dynamic revenue sharing based on hotspot metrics"""
+    hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
+    if not hotspot:
+        # Default split if hotspot not found
+        return DynamicRevenue(
+            total_amount=amount,
+            owner_share=amount * 0.6,
+            platform_share=amount * 0.4,
+            owner_percentage=60.0,
+            breakdown={"base": 60.0}
+        )
+    
+    # Get revenue config
+    config = await db.settings.find_one({"type": "revenue_config"}, {"_id": 0})
+    if not config:
+        config = RevenueConfig().model_dump()
+    else:
+        config = config.get("config", RevenueConfig().model_dump())
+    
+    # Calculate dynamic percentage
+    breakdown = {"base": config.get("base_owner_percentage", 60.0)}
+    owner_percentage = config.get("base_owner_percentage", 60.0)
+    
+    # Coverage bonus
+    coverage_area = hotspot.get("coverage_area_sqm", 100)
+    coverage_bonus = (coverage_area / 100) * config.get("coverage_bonus_per_100sqm", 0.5)
+    breakdown["coverage_bonus"] = min(coverage_bonus, 5.0)
+    owner_percentage += breakdown["coverage_bonus"]
+    
+    # Client bonus
+    avg_clients = hotspot.get("avg_daily_clients", 0)
+    client_bonus = (avg_clients / 10) * config.get("client_bonus_per_10", 0.5)
+    breakdown["client_bonus"] = min(client_bonus, 5.0)
+    owner_percentage += breakdown["client_bonus"]
+    
+    # Ad impression bonus
+    ad_impressions = hotspot.get("ad_impressions_delivered", 0)
+    ad_bonus = (ad_impressions / 1000) * config.get("ad_impression_bonus_per_1000", 1.0)
+    breakdown["ad_bonus"] = min(ad_bonus, 5.0)
+    owner_percentage += breakdown["ad_bonus"]
+    
+    # Uptime bonus
+    uptime = hotspot.get("uptime_percentage", 100)
+    if uptime >= config.get("uptime_bonus_threshold", 99.0):
+        breakdown["uptime_bonus"] = config.get("uptime_bonus_percentage", 2.0)
+        owner_percentage += breakdown["uptime_bonus"]
+    
+    # Cap at maximum
+    max_percentage = config.get("max_owner_percentage", 80.0)
+    owner_percentage = min(owner_percentage, max_percentage)
+    
+    owner_share = amount * (owner_percentage / 100)
+    platform_share = amount - owner_share
+    
+    return DynamicRevenue(
+        total_amount=amount,
+        owner_share=round(owner_share, 2),
+        platform_share=round(platform_share, 2),
+        owner_percentage=round(owner_percentage, 2),
+        breakdown=breakdown
+    )
+
+# ==================== M-Pesa Daraja Integration ====================
+
+class MPesaService:
+    """Real M-Pesa Daraja API Integration"""
+    
+    def __init__(self):
+        self.consumer_key = MPESA_CONSUMER_KEY
+        self.consumer_secret = MPESA_CONSUMER_SECRET
+        self.shortcode = MPESA_SHORTCODE
+        self.passkey = MPESA_PASSKEY
+        self.callback_url = MPESA_CALLBACK_URL
+        self.env = MPESA_ENV
+        
+        if self.env == "sandbox":
+            self.base_url = "https://sandbox.safaricom.co.ke"
+        else:
+            self.base_url = "https://api.safaricom.co.ke"
+    
+    def is_configured(self) -> bool:
+        """Check if M-Pesa is properly configured"""
+        return all([
+            self.consumer_key,
+            self.consumer_secret,
+            self.shortcode,
+            self.passkey,
+            self.callback_url
+        ])
+    
+    async def get_access_token(self) -> str:
+        """Get OAuth access token from Daraja API"""
+        if not self.is_configured():
+            raise HTTPException(status_code=503, detail="M-Pesa not configured")
+        
+        credentials = base64.b64encode(
+            f"{self.consumer_key}:{self.consumer_secret}".encode()
+        ).decode()
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials",
+                headers={"Authorization": f"Basic {credentials}"}
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=502, detail="Failed to get M-Pesa access token")
+            
+            return response.json()["access_token"]
+    
+    def generate_password(self) -> tuple:
+        """Generate password and timestamp for STK Push"""
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        password_str = f"{self.shortcode}{self.passkey}{timestamp}"
+        password = base64.b64encode(password_str.encode()).decode()
+        return password, timestamp
+    
+    async def stk_push(self, phone_number: str, amount: float, account_ref: str, description: str) -> dict:
+        """Initiate STK Push request"""
+        if not self.is_configured():
+            raise HTTPException(status_code=503, detail="M-Pesa not configured. Please add credentials in settings.")
+        
+        # Format phone number (254XXXXXXXXX)
+        phone = phone_number.replace("+", "").replace(" ", "")
+        if phone.startswith("0"):
+            phone = "254" + phone[1:]
+        elif not phone.startswith("254"):
+            phone = "254" + phone
+        
+        access_token = await self.get_access_token()
+        password, timestamp = self.generate_password()
+        
+        payload = {
+            "BusinessShortCode": self.shortcode,
+            "Password": password,
+            "Timestamp": timestamp,
+            "TransactionType": "CustomerPayBillOnline",
+            "Amount": int(amount),
+            "PartyA": phone,
+            "PartyB": self.shortcode,
+            "PhoneNumber": phone,
+            "CallBackURL": self.callback_url,
+            "AccountReference": account_ref,
+            "TransactionDesc": description
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/mpesa/stkpush/v1/processrequest",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            return response.json()
+    
+    async def query_stk_status(self, checkout_request_id: str) -> dict:
+        """Query the status of an STK Push request"""
+        if not self.is_configured():
+            raise HTTPException(status_code=503, detail="M-Pesa not configured")
+        
+        access_token = await self.get_access_token()
+        password, timestamp = self.generate_password()
+        
+        payload = {
+            "BusinessShortCode": self.shortcode,
+            "Password": password,
+            "Timestamp": timestamp,
+            "CheckoutRequestID": checkout_request_id
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/mpesa/stkpushquery/v1/query",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                }
+            )
+            
+            return response.json()
+
+mpesa_service = MPesaService()
+
+# ==================== SMS Service ====================
+
+class SMSService:
+    """SMS Gateway Integration (Africa's Talking / Centipid compatible)"""
+    
+    def __init__(self):
+        self.provider = SMS_PROVIDER
+        self.api_key = SMS_API_KEY
+        self.username = SMS_USERNAME
+        self.sender_id = SMS_SENDER_ID
+    
+    def is_configured(self) -> bool:
+        return bool(self.api_key and self.username)
+    
+    async def send_sms(self, phone_number: str, message: str) -> dict:
+        """Send SMS via configured provider"""
+        if not self.is_configured():
+            logging.warning("SMS not configured, skipping notification")
+            return {"status": "skipped", "reason": "SMS not configured"}
+        
+        # Format phone number
+        phone = phone_number.replace("+", "").replace(" ", "")
+        if phone.startswith("0"):
+            phone = "+254" + phone[1:]
+        elif not phone.startswith("+"):
+            phone = "+" + phone
+        
+        if self.provider == "africas_talking":
+            return await self._send_africas_talking(phone, message)
+        elif self.provider == "centipid":
+            return await self._send_centipid(phone, message)
+        else:
+            return {"status": "error", "reason": f"Unknown provider: {self.provider}"}
+    
+    async def _send_africas_talking(self, phone: str, message: str) -> dict:
+        """Send via Africa's Talking API"""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.africastalking.com/version1/messaging",
+                data={
+                    "username": self.username,
+                    "to": phone,
+                    "message": message,
+                    "from": self.sender_id
+                },
+                headers={
+                    "apiKey": self.api_key,
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+            )
+            return response.json()
+    
+    async def _send_centipid(self, phone: str, message: str) -> dict:
+        """Send via Centipid SMS API"""
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.centipid.com/v1/sms/send",
+                json={
+                    "api_key": self.api_key,
+                    "to": phone,
+                    "message": message,
+                    "sender_id": self.sender_id
+                }
+            )
+            return response.json()
+
+sms_service = SMSService()
+
+# ==================== WhatsApp Service (Twilio) ====================
+
+class WhatsAppService:
+    """Twilio WhatsApp Integration"""
+    
+    def __init__(self):
+        self.account_sid = TWILIO_ACCOUNT_SID
+        self.auth_token = TWILIO_AUTH_TOKEN
+        self.whatsapp_number = TWILIO_WHATSAPP_NUMBER
+    
+    def is_configured(self) -> bool:
+        return all([self.account_sid, self.auth_token, self.whatsapp_number])
+    
+    async def send_message(self, phone_number: str, message: str) -> dict:
+        """Send WhatsApp message via Twilio"""
+        if not self.is_configured():
+            logging.warning("WhatsApp not configured, skipping notification")
+            return {"status": "skipped", "reason": "WhatsApp not configured"}
+        
+        # Format phone number
+        phone = phone_number.replace("+", "").replace(" ", "")
+        if phone.startswith("0"):
+            phone = "254" + phone[1:]
+        elif not phone.startswith("254"):
+            phone = "254" + phone
+        
+        credentials = base64.b64encode(
+            f"{self.account_sid}:{self.auth_token}".encode()
+        ).decode()
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/{self.account_sid}/Messages.json",
+                data={
+                    "From": f"whatsapp:{self.whatsapp_number}",
+                    "To": f"whatsapp:+{phone}",
+                    "Body": message
+                },
+                headers={
+                    "Authorization": f"Basic {credentials}"
+                }
+            )
+            
+            if response.status_code in [200, 201]:
+                return {"status": "sent", "data": response.json()}
+            else:
+                return {"status": "error", "data": response.json()}
+
+whatsapp_service = WhatsAppService()
+
+# ==================== Notification Service ====================
+
+class NotificationService:
+    """Unified notification service"""
+    
+    async def send_payment_confirmation(self, phone: str, amount: float, duration: str, preferences: dict):
+        """Send payment confirmation via preferred channels"""
+        message = f"CAITECH WiFi: Payment of KES {amount} received. Your {duration} session is now active. Enjoy browsing!"
+        
+        if preferences.get("sms_enabled", True):
+            await sms_service.send_sms(phone, message)
+        
+        if preferences.get("whatsapp_enabled", False):
+            await whatsapp_service.send_message(phone, message)
+    
+    async def send_expiry_reminder(self, phone: str, minutes_left: int, preferences: dict):
+        """Send expiry reminder"""
+        message = f"CAITECH WiFi: Your session expires in {minutes_left} minutes. Purchase more time to stay connected!"
+        
+        if preferences.get("sms_enabled", True):
+            await sms_service.send_sms(phone, message)
+        
+        if preferences.get("whatsapp_enabled", False):
+            await whatsapp_service.send_message(phone, message)
+    
+    async def send_session_expired(self, phone: str, preferences: dict):
+        """Send session expired notification"""
+        message = "CAITECH WiFi: Your session has expired. Visit the captive portal to purchase more time."
+        
+        if preferences.get("sms_enabled", True):
+            await sms_service.send_sms(phone, message)
+
+notification_service = NotificationService()
 
 # ==================== Auth Routes ====================
 
@@ -328,18 +814,45 @@ async def login(credentials: UserLogin):
 async def get_me(user: dict = Depends(get_current_user)):
     return UserResponse(**user)
 
+@auth_router.post("/forgot-password")
+async def forgot_password(email: EmailStr):
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        # Don't reveal if email exists
+        return {"message": "If the email exists, a reset link will be sent"}
+    
+    # Generate reset token
+    reset_token = str(uuid.uuid4())
+    await db.password_resets.insert_one({
+        "user_id": user["id"],
+        "token": reset_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        "used": False
+    })
+    
+    # TODO: Send email with reset link
+    return {"message": "If the email exists, a reset link will be sent"}
+
 # ==================== Packages Routes ====================
 
 @packages_router.get("/", response_model=List[Package])
 async def get_packages(active_only: bool = True):
     query = {"is_active": True} if active_only else {}
-    packages = await db.packages.find(query, {"_id": 0}).to_list(100)
+    packages = await db.packages.find(query, {"_id": 0}).sort("price", 1).to_list(100)
     return packages
 
+@packages_router.get("/{package_id}", response_model=Package)
+async def get_package(package_id: str):
+    package = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="Package not found")
+    return package
+
+# Admin only - packages are predefined
 @packages_router.post("/", response_model=Package)
 async def create_package(
-    package_data: PackageCreate,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+    package_data: PackageBase,
+    user: dict = Depends(require_admin)
 ):
     package = Package(**package_data.model_dump())
     package_dict = package.model_dump()
@@ -350,8 +863,8 @@ async def create_package(
 @packages_router.put("/{package_id}", response_model=Package)
 async def update_package(
     package_id: str,
-    package_data: PackageCreate,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+    package_data: PackageBase,
+    user: dict = Depends(require_admin)
 ):
     result = await db.packages.find_one_and_update(
         {"id": package_id},
@@ -363,16 +876,6 @@ async def update_package(
     result.pop("_id", None)
     return result
 
-@packages_router.delete("/{package_id}")
-async def delete_package(
-    package_id: str,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
-):
-    result = await db.packages.delete_one({"id": package_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Package not found")
-    return {"message": "Package deleted"}
-
 # ==================== Hotspots Routes ====================
 
 @hotspots_router.get("/", response_model=List[Hotspot])
@@ -383,17 +886,22 @@ async def get_hotspots(
     query = {}
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         query["owner_id"] = user["id"]
-    elif owner_id:
+    elif owner_id and user["role"] == UserRole.SUPER_ADMIN.value:
         query["owner_id"] = owner_id
     
     hotspots = await db.hotspots.find(query, {"_id": 0}).to_list(1000)
     return hotspots
 
 @hotspots_router.get("/{hotspot_id}", response_model=Hotspot)
-async def get_hotspot(hotspot_id: str):
+async def get_hotspot(hotspot_id: str, user: dict = Depends(get_current_user)):
     hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
     if not hotspot:
         raise HTTPException(status_code=404, detail="Hotspot not found")
+    
+    # Check access
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and hotspot["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     return hotspot
 
 @hotspots_router.post("/", response_model=Hotspot)
@@ -403,26 +911,32 @@ async def create_hotspot(
 ):
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         hotspot_data.owner_id = user["id"]
+    elif not hotspot_data.owner_id:
+        hotspot_data.owner_id = user["id"]
     
     hotspot = Hotspot(**hotspot_data.model_dump())
     hotspot_dict = hotspot.model_dump()
     hotspot_dict["created_at"] = hotspot_dict["created_at"].isoformat()
+    if hotspot_dict.get("last_seen"):
+        hotspot_dict["last_seen"] = hotspot_dict["last_seen"].isoformat()
+    
     await db.hotspots.insert_one(hotspot_dict)
     return hotspot
 
-@hotspots_router.put("/{hotspot_id}", response_model=Hotspot)
-async def update_hotspot(
+@hotspots_router.put("/{hotspot_id}/packages", response_model=Hotspot)
+async def update_hotspot_packages(
     hotspot_id: str,
-    hotspot_data: HotspotBase,
+    package_ids: List[str],
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
 ):
+    """Update which packages are enabled for a hotspot"""
     query = {"id": hotspot_id}
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         query["owner_id"] = user["id"]
     
     result = await db.hotspots.find_one_and_update(
         query,
-        {"$set": hotspot_data.model_dump()},
+        {"$set": {"enabled_packages": package_ids}},
         return_document=True
     )
     if not result:
@@ -430,129 +944,242 @@ async def update_hotspot(
     result.pop("_id", None)
     return result
 
-# ==================== Sessions Routes ====================
+@hotspots_router.put("/{hotspot_id}/status")
+async def update_hotspot_status(
+    hotspot_id: str,
+    status: HotspotStatus,
+    user: dict = Depends(require_admin)
+):
+    """Admin only - suspend/activate hotspots"""
+    result = await db.hotspots.find_one_and_update(
+        {"id": hotspot_id},
+        {"$set": {"status": status.value}},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    result.pop("_id", None)
+    return result
 
-@sessions_router.post("/", response_model=Session)
-async def create_session(session_data: SessionCreate):
-    package = await db.packages.find_one({"id": session_data.package_id}, {"_id": 0})
-    if not package:
-        raise HTTPException(status_code=404, detail="Package not found")
-    
-    session = Session(**session_data.model_dump())
-    session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
-    
-    session_dict = session.model_dump()
-    session_dict["started_at"] = session_dict["started_at"].isoformat()
-    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
-    
-    await db.sessions.insert_one(session_dict)
-    
-    # Update hotspot stats
-    await db.hotspots.update_one(
-        {"id": session_data.hotspot_id},
-        {"$inc": {"total_sessions": 1}}
+# ==================== M-Pesa Routes ====================
+
+@mpesa_router.post("/stk-push")
+async def initiate_stk_push(
+    request: MPesaSTKPushRequest,
+    background_tasks: BackgroundTasks
+):
+    """Initiate M-Pesa STK Push payment"""
+    result = await mpesa_service.stk_push(
+        phone_number=request.phone_number,
+        amount=request.amount,
+        account_ref=request.account_reference,
+        description=request.transaction_desc
     )
     
-    return session
+    if result.get("ResponseCode") == "0":
+        return {
+            "success": True,
+            "checkout_request_id": result.get("CheckoutRequestID"),
+            "merchant_request_id": result.get("MerchantRequestID"),
+            "message": "STK Push sent successfully"
+        }
+    else:
+        return {
+            "success": False,
+            "error": result.get("errorMessage", "Failed to initiate payment"),
+            "details": result
+        }
 
-@sessions_router.get("/active", response_model=List[Session])
-async def get_active_sessions(
-    hotspot_id: Optional[str] = None,
-    user: dict = Depends(get_current_user)
-):
-    query = {"status": SessionStatus.ACTIVE.value}
-    if hotspot_id:
-        query["hotspot_id"] = hotspot_id
+@mpesa_router.post("/callback")
+async def mpesa_callback(callback_data: MPesaSTKCallback):
+    """Handle M-Pesa STK Push callback"""
+    body = callback_data.Body
+    stk_callback = body.get("stkCallback", {})
     
-    sessions = await db.sessions.find(query, {"_id": 0}).to_list(1000)
-    return sessions
+    checkout_request_id = stk_callback.get("CheckoutRequestID")
+    result_code = stk_callback.get("ResultCode")
+    
+    # Find the payment
+    payment = await db.payments.find_one(
+        {"mpesa_checkout_request_id": checkout_request_id},
+        {"_id": 0}
+    )
+    
+    if not payment:
+        logging.error(f"Payment not found for checkout: {checkout_request_id}")
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
+    
+    if result_code == 0:
+        # Payment successful
+        callback_metadata = stk_callback.get("CallbackMetadata", {}).get("Item", [])
+        mpesa_receipt = None
+        for item in callback_metadata:
+            if item.get("Name") == "MpesaReceiptNumber":
+                mpesa_receipt = item.get("Value")
+                break
+        
+        # Calculate revenue sharing
+        revenue = await calculate_dynamic_revenue(payment["hotspot_id"], payment["amount"])
+        
+        # Update payment
+        await db.payments.update_one(
+            {"id": payment["id"]},
+            {
+                "$set": {
+                    "status": PaymentStatus.COMPLETED.value,
+                    "mpesa_receipt": mpesa_receipt,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "owner_share": revenue.owner_share,
+                    "platform_share": revenue.platform_share
+                }
+            }
+        )
+        
+        # Create session
+        package = await db.packages.find_one({"id": payment["package_id"]}, {"_id": 0})
+        hotspot = await db.hotspots.find_one({"id": payment["hotspot_id"]}, {"_id": 0})
+        
+        username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
+        
+        session = Session(
+            package_id=payment["package_id"],
+            hotspot_id=payment["hotspot_id"],
+            phone_number=payment["phone_number"],
+            username=username,
+            password=password,
+            payment_id=payment["id"],
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
+        )
+        
+        session_dict = session.model_dump()
+        session_dict["started_at"] = session_dict["started_at"].isoformat()
+        session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+        
+        await db.sessions.insert_one(session_dict)
+        
+        # Update payment with session ID
+        await db.payments.update_one(
+            {"id": payment["id"]},
+            {"$set": {"session_id": session.id}}
+        )
+        
+        # Update hotspot stats
+        await db.hotspots.update_one(
+            {"id": payment["hotspot_id"]},
+            {
+                "$inc": {
+                    "total_revenue": payment["amount"],
+                    "total_sessions": 1
+                }
+            }
+        )
+        
+        # Send notification
+        await notification_service.send_payment_confirmation(
+            payment["phone_number"],
+            payment["amount"],
+            f"{package['duration_minutes']} minutes",
+            {"sms_enabled": True, "whatsapp_enabled": False}
+        )
+    else:
+        # Payment failed
+        await db.payments.update_one(
+            {"id": payment["id"]},
+            {"$set": {"status": PaymentStatus.FAILED.value}}
+        )
+    
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
 
-@sessions_router.get("/{session_id}", response_model=Session)
-async def get_session(session_id: str):
-    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
+@mpesa_router.get("/status/{checkout_request_id}")
+async def check_payment_status(checkout_request_id: str):
+    """Check the status of an STK Push request"""
+    result = await mpesa_service.query_stk_status(checkout_request_id)
+    return result
 
-# ==================== Payments Routes (Mock M-Pesa) ====================
+@mpesa_router.get("/config-status")
+async def get_mpesa_config_status(user: dict = Depends(require_admin)):
+    """Check if M-Pesa is configured"""
+    return {
+        "configured": mpesa_service.is_configured(),
+        "environment": MPESA_ENV,
+        "shortcode": MPESA_SHORTCODE if MPESA_SHORTCODE else None
+    }
 
-@payments_router.post("/initiate", response_model=Payment)
+# ==================== Payments Routes ====================
+
+@payments_router.post("/initiate", response_model=dict)
 async def initiate_payment(payment_data: PaymentCreate):
+    """Initiate a payment"""
     package = await db.packages.find_one({"id": payment_data.package_id}, {"_id": 0})
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
     
+    hotspot = await db.hotspots.find_one({"id": payment_data.hotspot_id}, {"_id": 0})
+    if not hotspot:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    
+    if hotspot.get("status") != HotspotStatus.ACTIVE.value:
+        raise HTTPException(status_code=400, detail="Hotspot is not active")
+    
+    # Create payment record
     payment = Payment(**payment_data.model_dump())
+    payment.amount = package["price"]
     payment_dict = payment.model_dump()
     payment_dict["created_at"] = payment_dict["created_at"].isoformat()
     
+    if payment_data.method == PaymentMethod.MPESA:
+        # Initiate STK Push
+        if not mpesa_service.is_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="M-Pesa is not configured. Please contact admin."
+            )
+        
+        stk_result = await mpesa_service.stk_push(
+            phone_number=payment_data.phone_number,
+            amount=package["price"],
+            account_ref=f"CAITECH-{payment.id[:8]}",
+            description=f"WiFi {package['name']}"
+        )
+        
+        if stk_result.get("ResponseCode") == "0":
+            payment_dict["mpesa_checkout_request_id"] = stk_result.get("CheckoutRequestID")
+            payment_dict["status"] = PaymentStatus.PROCESSING.value
+        else:
+            payment_dict["status"] = PaymentStatus.FAILED.value
+            await db.payments.insert_one(payment_dict)
+            raise HTTPException(
+                status_code=400,
+                detail=stk_result.get("errorMessage", "Failed to initiate M-Pesa payment")
+            )
+    
     await db.payments.insert_one(payment_dict)
     
-    # Mock M-Pesa STK Push - In production, this would call Daraja API
-    # Simulate instant success for demo
-    return payment
+    return {
+        "payment_id": payment.id,
+        "status": payment_dict["status"],
+        "checkout_request_id": payment_dict.get("mpesa_checkout_request_id"),
+        "message": "Payment initiated. Check your phone for M-Pesa prompt."
+    }
 
-@payments_router.post("/confirm/{payment_id}", response_model=dict)
-async def confirm_payment(payment_id: str, mpesa_code: Optional[str] = None):
-    """Mock payment confirmation - simulates M-Pesa callback"""
+@payments_router.get("/{payment_id}")
+async def get_payment(payment_id: str):
+    """Get payment details"""
     payment = await db.payments.find_one({"id": payment_id}, {"_id": 0})
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
-    
-    # Generate mock receipt
-    receipt = mpesa_code or f"MOCK{uuid.uuid4().hex[:8].upper()}"
-    
-    await db.payments.update_one(
-        {"id": payment_id},
-        {
-            "$set": {
-                "status": PaymentStatus.COMPLETED.value,
-                "mpesa_receipt": receipt,
-                "completed_at": datetime.now(timezone.utc).isoformat()
-            }
-        }
-    )
-    
-    # Create session automatically
-    session_data = SessionCreate(
-        package_id=payment["package_id"],
-        hotspot_id=payment["hotspot_id"]
-    )
-    
-    package = await db.packages.find_one({"id": payment["package_id"]}, {"_id": 0})
-    session = Session(**session_data.model_dump())
-    session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
-    
-    session_dict = session.model_dump()
-    session_dict["started_at"] = session_dict["started_at"].isoformat()
-    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
-    
-    await db.sessions.insert_one(session_dict)
-    
-    # Update hotspot revenue
-    await db.hotspots.update_one(
-        {"id": payment["hotspot_id"]},
-        {
-            "$inc": {
-                "total_revenue": payment["amount"],
-                "total_sessions": 1
-            }
-        }
-    )
-    
-    return {
-        "status": "success",
-        "receipt": receipt,
-        "session_id": session.id,
-        "expires_at": session.expires_at.isoformat()
-    }
+    return payment
 
-@payments_router.get("/", response_model=List[Payment])
+@payments_router.get("/")
 async def get_payments(
+    user: dict = Depends(get_current_user),
     hotspot_id: Optional[str] = None,
-    user: dict = Depends(get_current_user)
+    status: Optional[PaymentStatus] = None,
+    limit: int = 100
 ):
+    """Get payments list"""
     query = {}
+    
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"id": 1}).to_list(100)
         hotspot_ids = [h["id"] for h in hotspots]
@@ -560,49 +1187,99 @@ async def get_payments(
     elif hotspot_id:
         query["hotspot_id"] = hotspot_id
     
-    payments = await db.payments.find(query, {"_id": 0}).to_list(1000)
+    if status:
+        query["status"] = status.value
+    
+    payments = await db.payments.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return payments
 
-# ==================== Ads Routes ====================
+# ==================== Ads Routes (WITH ADMIN APPROVAL) ====================
 
 @ads_router.get("/", response_model=List[Ad])
 async def get_ads(
     user: dict = Depends(get_current_user),
-    active_only: bool = True
+    status: Optional[AdStatus] = None,
+    approved_only: bool = False
 ):
     query = {}
+    
     if user["role"] == UserRole.ADVERTISER.value:
         query["advertiser_id"] = user["id"]
-    if active_only:
+    elif approved_only:
+        query["status"] = AdStatus.APPROVED.value
         query["is_active"] = True
     
+    if status and user["role"] == UserRole.SUPER_ADMIN.value:
+        query["status"] = status.value
+    
     ads = await db.ads.find(query, {"_id": 0}).to_list(1000)
+    return ads
+
+@ads_router.get("/pending", response_model=List[Ad])
+async def get_pending_ads(user: dict = Depends(require_admin)):
+    """Admin only - get ads pending approval"""
+    ads = await db.ads.find(
+        {"status": AdStatus.PENDING.value},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(1000)
     return ads
 
 @ads_router.post("/", response_model=Ad)
 async def create_ad(
     ad_data: AdCreate,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.ADVERTISER]))
+    user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
 ):
+    """Create ad - goes to PENDING status for admin approval"""
     ad = Ad(**ad_data.model_dump(), advertiser_id=user["id"])
+    ad.status = AdStatus.PENDING  # Always pending until admin approves
+    ad.is_active = False
+    
     ad_dict = ad.model_dump()
     ad_dict["created_at"] = ad_dict["created_at"].isoformat()
+    
     await db.ads.insert_one(ad_dict)
     return ad
 
-@ads_router.put("/{ad_id}", response_model=Ad)
-async def update_ad(
+@ads_router.post("/{ad_id}/approve", response_model=Ad)
+async def approve_ad(
     ad_id: str,
-    ad_data: AdBase,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.ADVERTISER]))
+    approval: AdApproval,
+    user: dict = Depends(require_admin)
 ):
-    query = {"id": ad_id}
-    if user["role"] == UserRole.ADVERTISER.value:
-        query["advertiser_id"] = user["id"]
+    """Admin only - approve or reject an ad"""
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    if approval.approved:
+        update = {
+            "status": AdStatus.APPROVED.value,
+            "is_active": True,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "approved_by": user["id"],
+            "rejection_reason": None
+        }
+    else:
+        update = {
+            "status": AdStatus.REJECTED.value,
+            "is_active": False,
+            "rejection_reason": approval.rejection_reason
+        }
     
     result = await db.ads.find_one_and_update(
-        query,
-        {"$set": ad_data.model_dump()},
+        {"id": ad_id},
+        {"$set": update},
+        return_document=True
+    )
+    result.pop("_id", None)
+    return result
+
+@ads_router.post("/{ad_id}/suspend")
+async def suspend_ad(ad_id: str, user: dict = Depends(require_admin)):
+    """Admin only - suspend an approved ad"""
+    result = await db.ads.find_one_and_update(
+        {"id": ad_id},
+        {"$set": {"status": AdStatus.SUSPENDED.value, "is_active": False}},
         return_document=True
     )
     if not result:
@@ -611,77 +1288,217 @@ async def update_ad(
     return result
 
 @ads_router.post("/{ad_id}/impression")
-async def record_impression(ad_id: str):
+async def record_impression(ad_id: str, hotspot_id: Optional[str] = None):
+    """Record an ad impression"""
     result = await db.ads.update_one(
-        {"id": ad_id},
+        {"id": ad_id, "status": AdStatus.APPROVED.value},
         {"$inc": {"impressions": 1}}
     )
+    
+    if hotspot_id:
+        await db.hotspots.update_one(
+            {"id": hotspot_id},
+            {"$inc": {"ad_impressions_delivered": 1}}
+        )
+    
     if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Ad not found")
+        raise HTTPException(status_code=404, detail="Ad not found or not approved")
+    
     return {"status": "recorded"}
 
 @ads_router.post("/{ad_id}/click")
 async def record_click(ad_id: str):
+    """Record an ad click"""
     result = await db.ads.update_one(
-        {"id": ad_id},
+        {"id": ad_id, "status": AdStatus.APPROVED.value},
         {"$inc": {"clicks": 1}}
     )
     if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Ad not found")
+        raise HTTPException(status_code=404, detail="Ad not found or not approved")
     return {"status": "recorded"}
 
-# ==================== Campaigns Routes ====================
+# ==================== Voucher Routes ====================
 
-@campaigns_router.get("/", response_model=List[Campaign])
-async def get_campaigns(
-    user: dict = Depends(get_current_user),
-    status: Optional[CampaignStatus] = None
+@vouchers_router.post("/generate", response_model=List[Voucher])
+async def generate_vouchers(
+    voucher_data: VoucherBase,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
 ):
+    """Generate vouchers for a hotspot"""
+    package = await db.packages.find_one({"id": voucher_data.package_id}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    hotspot = await db.hotspots.find_one({"id": voucher_data.hotspot_id}, {"_id": 0})
+    if not hotspot:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    
+    # Check access
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and hotspot["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    vouchers = []
+    for _ in range(voucher_data.quantity):
+        code = generate_voucher_code()
+        username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
+        
+        voucher = Voucher(
+            code=code,
+            package_id=voucher_data.package_id,
+            hotspot_id=voucher_data.hotspot_id,
+            owner_id=hotspot["owner_id"],
+            username=username,
+            password=password,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30)  # Voucher validity
+        )
+        
+        voucher_dict = voucher.model_dump()
+        voucher_dict["created_at"] = voucher_dict["created_at"].isoformat()
+        voucher_dict["expires_at"] = voucher_dict["expires_at"].isoformat()
+        
+        await db.vouchers.insert_one(voucher_dict)
+        vouchers.append(voucher)
+    
+    return vouchers
+
+@vouchers_router.get("/")
+async def get_vouchers(
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER])),
+    hotspot_id: Optional[str] = None,
+    unused_only: bool = False
+):
+    """Get vouchers"""
     query = {}
-    if user["role"] == UserRole.ADVERTISER.value:
-        query["advertiser_id"] = user["id"]
-    if status:
-        query["status"] = status.value
     
-    campaigns = await db.campaigns.find(query, {"_id": 0}).to_list(1000)
-    return campaigns
-
-@campaigns_router.post("/", response_model=Campaign)
-async def create_campaign(
-    campaign_data: CampaignCreate,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.ADVERTISER]))
-):
-    campaign = Campaign(**campaign_data.model_dump(), advertiser_id=user["id"])
-    campaign_dict = campaign.model_dump()
-    campaign_dict["created_at"] = campaign_dict["created_at"].isoformat()
-    campaign_dict["start_date"] = campaign_dict["start_date"].isoformat()
-    campaign_dict["end_date"] = campaign_dict["end_date"].isoformat()
-    await db.campaigns.insert_one(campaign_dict)
-    return campaign
-
-@campaigns_router.put("/{campaign_id}/status", response_model=Campaign)
-async def update_campaign_status(
-    campaign_id: str,
-    status: CampaignStatus,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.ADVERTISER]))
-):
-    query = {"id": campaign_id}
-    if user["role"] == UserRole.ADVERTISER.value:
-        query["advertiser_id"] = user["id"]
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        query["owner_id"] = user["id"]
+    elif hotspot_id:
+        query["hotspot_id"] = hotspot_id
     
-    result = await db.campaigns.find_one_and_update(
-        query,
-        {"$set": {"status": status.value}},
-        return_document=True
+    if unused_only:
+        query["is_used"] = False
+    
+    vouchers = await db.vouchers.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return vouchers
+
+@vouchers_router.post("/redeem/{code}")
+async def redeem_voucher(code: str, hotspot_id: str, user_mac: Optional[str] = None):
+    """Redeem a voucher"""
+    voucher = await db.vouchers.find_one(
+        {"code": code.upper(), "is_used": False},
+        {"_id": 0}
     )
-    if not result:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    result.pop("_id", None)
-    return result
+    
+    if not voucher:
+        raise HTTPException(status_code=404, detail="Invalid or already used voucher")
+    
+    if voucher["hotspot_id"] != hotspot_id:
+        raise HTTPException(status_code=400, detail="Voucher not valid for this hotspot")
+    
+    # Check expiry
+    if datetime.fromisoformat(voucher["expires_at"]) < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Voucher has expired")
+    
+    package = await db.packages.find_one({"id": voucher["package_id"]}, {"_id": 0})
+    
+    # Create session
+    session = Session(
+        package_id=voucher["package_id"],
+        hotspot_id=hotspot_id,
+        user_mac=user_mac,
+        username=voucher["username"],
+        password=voucher["password"],
+        voucher_code=code,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
+    )
+    
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session_dict["started_at"].isoformat()
+    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+    
+    await db.sessions.insert_one(session_dict)
+    
+    # Mark voucher as used
+    await db.vouchers.update_one(
+        {"code": code.upper()},
+        {
+            "$set": {
+                "is_used": True,
+                "used_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+    )
+    
+    # Update hotspot stats
+    await db.hotspots.update_one(
+        {"id": hotspot_id},
+        {"$inc": {"total_sessions": 1}}
+    )
+    
+    return {
+        "session_id": session.id,
+        "username": session.username,
+        "password": session.password,
+        "expires_at": session.expires_at.isoformat(),
+        "duration_minutes": package["duration_minutes"]
+    }
+
+# ==================== Sessions Routes ====================
+
+@sessions_router.get("/active")
+async def get_active_sessions(
+    user: dict = Depends(get_current_user),
+    hotspot_id: Optional[str] = None
+):
+    query = {"status": SessionStatus.ACTIVE.value}
+    
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"id": 1}).to_list(100)
+        hotspot_ids = [h["id"] for h in hotspots]
+        query["hotspot_id"] = {"$in": hotspot_ids}
+    elif hotspot_id:
+        query["hotspot_id"] = hotspot_id
+    
+    sessions = await db.sessions.find(query, {"_id": 0}).to_list(1000)
+    return sessions
+
+@sessions_router.get("/{session_id}")
+async def get_session(session_id: str):
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+@sessions_router.post("/{session_id}/extend")
+async def extend_session(
+    session_id: str,
+    minutes: int,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
+):
+    """Extend session duration (compensation feature)"""
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Check ownership
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        hotspot = await db.hotspots.find_one({"id": session["hotspot_id"]}, {"_id": 0})
+        if hotspot["owner_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    current_expiry = datetime.fromisoformat(session["expires_at"])
+    new_expiry = current_expiry + timedelta(minutes=minutes)
+    
+    await db.sessions.update_one(
+        {"id": session_id},
+        {"$set": {"expires_at": new_expiry.isoformat()}}
+    )
+    
+    return {"message": f"Session extended by {minutes} minutes", "new_expires_at": new_expiry.isoformat()}
 
 # ==================== Analytics Routes ====================
 
-@analytics_router.get("/dashboard", response_model=DashboardStats)
+@analytics_router.get("/dashboard")
 async def get_dashboard_stats(user: dict = Depends(get_current_user)):
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"_id": 0}).to_list(1000)
@@ -690,20 +1507,25 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
         total_revenue = sum(h.get("total_revenue", 0) for h in hotspots)
         total_sessions = sum(h.get("total_sessions", 0) for h in hotspots)
         
-        return DashboardStats(
-            total_hotspots=len(hotspots),
-            active_hotspots=len([h for h in hotspots if h.get("is_active")]),
-            total_users=0,
-            total_revenue=total_revenue,
-            total_sessions=total_sessions,
-            active_campaigns=0
-        )
+        # Get active sessions count
+        active_sessions = await db.sessions.count_documents({
+            "hotspot_id": {"$in": hotspot_ids},
+            "status": SessionStatus.ACTIVE.value
+        })
+        
+        return {
+            "total_hotspots": len(hotspots),
+            "active_hotspots": len([h for h in hotspots if h.get("status") == HotspotStatus.ACTIVE.value]),
+            "total_revenue": total_revenue,
+            "total_sessions": total_sessions,
+            "active_sessions": active_sessions,
+            "pending_withdrawals": 0
+        }
     else:
         # Admin view
         total_hotspots = await db.hotspots.count_documents({})
-        active_hotspots = await db.hotspots.count_documents({"is_active": True})
+        active_hotspots = await db.hotspots.count_documents({"status": HotspotStatus.ACTIVE.value})
         total_users = await db.users.count_documents({})
-        active_campaigns = await db.campaigns.count_documents({"status": CampaignStatus.ACTIVE.value})
         
         pipeline = [{"$group": {"_id": None, "total": {"$sum": "$total_revenue"}}}]
         result = await db.hotspots.aggregate(pipeline).to_list(1)
@@ -713,17 +1535,21 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
         result = await db.hotspots.aggregate(pipeline).to_list(1)
         total_sessions = result[0]["total"] if result else 0
         
-        return DashboardStats(
-            total_hotspots=total_hotspots,
-            active_hotspots=active_hotspots,
-            total_users=total_users,
-            total_revenue=total_revenue,
-            total_sessions=total_sessions,
-            active_campaigns=active_campaigns
-        )
+        pending_ads = await db.ads.count_documents({"status": AdStatus.PENDING.value})
+        active_ads = await db.ads.count_documents({"status": AdStatus.APPROVED.value, "is_active": True})
+        
+        return {
+            "total_hotspots": total_hotspots,
+            "active_hotspots": active_hotspots,
+            "total_users": total_users,
+            "total_revenue": total_revenue,
+            "total_sessions": total_sessions,
+            "pending_ads": pending_ads,
+            "active_ads": active_ads
+        }
 
-@analytics_router.get("/revenue/{hotspot_id}", response_model=RevenueStats)
-async def get_revenue_stats(
+@analytics_router.get("/revenue/{hotspot_id}")
+async def get_hotspot_revenue(
     hotspot_id: str,
     user: dict = Depends(get_current_user)
 ):
@@ -734,45 +1560,94 @@ async def get_revenue_stats(
     if user["role"] == UserRole.HOTSPOT_OWNER.value and hotspot["owner_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    total_revenue = hotspot.get("total_revenue", 0)
-    owner_share = total_revenue * 0.7  # 70% to owner
-    platform_share = total_revenue * 0.3  # 30% to platform
+    # Get completed payments
+    payments = await db.payments.find(
+        {"hotspot_id": hotspot_id, "status": PaymentStatus.COMPLETED.value},
+        {"_id": 0}
+    ).to_list(1000)
     
-    active_sessions = await db.sessions.count_documents({
-        "hotspot_id": hotspot_id,
-        "status": SessionStatus.ACTIVE.value
-    })
+    total_revenue = sum(p.get("amount", 0) for p in payments)
+    owner_share = sum(p.get("owner_share", 0) for p in payments)
+    platform_share = sum(p.get("platform_share", 0) for p in payments)
     
-    return RevenueStats(
-        total_revenue=total_revenue,
-        owner_share=owner_share,
-        platform_share=platform_share,
-        total_sessions=hotspot.get("total_sessions", 0),
-        active_users=active_sessions
+    return {
+        "total_revenue": total_revenue,
+        "owner_share": owner_share,
+        "platform_share": platform_share,
+        "total_sessions": hotspot.get("total_sessions", 0),
+        "total_payments": len(payments)
+    }
+
+# ==================== Settings Routes ====================
+
+@settings_router.get("/")
+async def get_settings(user: dict = Depends(require_admin)):
+    """Get system settings"""
+    settings = await db.settings.find_one({"type": "system"}, {"_id": 0})
+    if not settings:
+        settings = SystemSettings().model_dump()
+    return settings.get("config", settings)
+
+@settings_router.put("/")
+async def update_settings(
+    settings: SystemSettings,
+    user: dict = Depends(require_admin)
+):
+    """Update system settings"""
+    await db.settings.update_one(
+        {"type": "system"},
+        {"$set": {"config": settings.model_dump()}},
+        upsert=True
     )
+    return {"message": "Settings updated"}
 
-# ==================== Locations Routes ====================
+@settings_router.get("/mpesa")
+async def get_mpesa_settings(user: dict = Depends(require_admin)):
+    """Get M-Pesa configuration status"""
+    return {
+        "configured": mpesa_service.is_configured(),
+        "environment": MPESA_ENV,
+        "shortcode_configured": bool(MPESA_SHORTCODE),
+        "callback_url": MPESA_CALLBACK_URL or "Not configured"
+    }
 
-@locations_router.get("/counties")
-async def get_counties():
-    counties = await db.locations.find({"type": "county"}, {"_id": 0}).to_list(100)
-    return counties
+@settings_router.get("/sms")
+async def get_sms_settings(user: dict = Depends(require_admin)):
+    """Get SMS configuration status"""
+    return {
+        "configured": sms_service.is_configured(),
+        "provider": SMS_PROVIDER,
+        "sender_id": SMS_SENDER_ID
+    }
 
-@locations_router.get("/constituencies")
-async def get_constituencies(county_id: Optional[str] = None):
-    query = {"type": "constituency"}
-    if county_id:
-        query["parent_id"] = county_id
-    constituencies = await db.locations.find(query, {"_id": 0}).to_list(500)
-    return constituencies
+@settings_router.get("/whatsapp")
+async def get_whatsapp_settings(user: dict = Depends(require_admin)):
+    """Get WhatsApp configuration status"""
+    return {
+        "configured": whatsapp_service.is_configured(),
+        "number_configured": bool(TWILIO_WHATSAPP_NUMBER)
+    }
 
-@locations_router.get("/wards")
-async def get_wards(constituency_id: Optional[str] = None):
-    query = {"type": "ward"}
-    if constituency_id:
-        query["parent_id"] = constituency_id
-    wards = await db.locations.find(query, {"_id": 0}).to_list(2000)
-    return wards
+@settings_router.get("/revenue-config")
+async def get_revenue_config(user: dict = Depends(require_admin)):
+    """Get revenue sharing configuration"""
+    config = await db.settings.find_one({"type": "revenue_config"}, {"_id": 0})
+    if not config:
+        config = {"config": RevenueConfig().model_dump()}
+    return config.get("config", RevenueConfig().model_dump())
+
+@settings_router.put("/revenue-config")
+async def update_revenue_config(
+    config: RevenueConfig,
+    user: dict = Depends(require_admin)
+):
+    """Update revenue sharing configuration"""
+    await db.settings.update_one(
+        {"type": "revenue_config"},
+        {"$set": {"config": config.model_dump()}},
+        upsert=True
+    )
+    return {"message": "Revenue configuration updated"}
 
 # ==================== Captive Portal Routes ====================
 
@@ -780,33 +1655,88 @@ async def get_wards(constituency_id: Optional[str] = None):
 async def get_portal_data(hotspot_id: str):
     """Get data for captive portal display"""
     hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
-    if not hotspot:
+    
+    # Allow demo hotspot
+    if hotspot_id == "demo":
+        hotspot = {
+            "id": "demo",
+            "name": "CAITECH Demo Hotspot",
+            "ssid": "Cainet-Demo_FREE WIFI",
+            "location_name": "Demo Location",
+            "status": HotspotStatus.ACTIVE.value
+        }
+    elif not hotspot:
         raise HTTPException(status_code=404, detail="Hotspot not found")
     
-    packages = await db.packages.find({"is_active": True}, {"_id": 0}).to_list(20)
+    # Get enabled packages or all active packages
+    enabled_packages = hotspot.get("enabled_packages", [])
+    if enabled_packages:
+        packages = await db.packages.find(
+            {"id": {"$in": enabled_packages}, "is_active": True},
+            {"_id": 0}
+        ).sort("price", 1).to_list(20)
+    else:
+        packages = await db.packages.find({"is_active": True}, {"_id": 0}).sort("price", 1).to_list(20)
     
-    # Get active ads for this location
-    ads = await db.ads.find({"is_active": True}, {"_id": 0}).to_list(10)
+    # Get approved ads targeting this location
+    ads_query = {
+        "status": AdStatus.APPROVED.value,
+        "is_active": True,
+        "$or": [
+            {"targeting.is_global": True},
+            {"targeting.hotspot_ids": hotspot_id},
+            {"targeting.wards": hotspot.get("ward")},
+            {"targeting.constituencies": hotspot.get("constituency")},
+            {"targeting.counties": hotspot.get("county")}
+        ]
+    }
+    ads = await db.ads.find(ads_query, {"_id": 0}).to_list(10)
     
     return {
         "hotspot": hotspot,
         "packages": packages,
-        "ads": ads
+        "ads": ads,
+        "mpesa_enabled": mpesa_service.is_configured()
     }
 
 @api_router.post("/portal/free-session")
-async def create_free_session(hotspot_id: str, ad_id: str, user_mac: Optional[str] = None):
+async def create_free_session(
+    hotspot_id: str,
+    ad_id: str,
+    user_mac: Optional[str] = None
+):
     """Create a free session after watching an ad"""
-    # Record ad impression
+    # Verify ad is approved
+    ad = await db.ads.find_one(
+        {"id": ad_id, "status": AdStatus.APPROVED.value},
+        {"_id": 0}
+    )
+    if not ad:
+        raise HTTPException(status_code=400, detail="Invalid ad")
+    
+    # Record impression
     await db.ads.update_one({"id": ad_id}, {"$inc": {"impressions": 1}})
     
-    # Create 15-minute free session
+    if hotspot_id != "demo":
+        await db.hotspots.update_one(
+            {"id": hotspot_id},
+            {"$inc": {"ad_impressions_delivered": 1}}
+        )
+    
+    hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
+    username, password = generate_radius_credentials(
+        hotspot.get("username_prefix", "") if hotspot else ""
+    )
+    
+    # Create 30-minute free session
     session = Session(
         package_id="free",
         hotspot_id=hotspot_id,
         user_mac=user_mac,
+        username=username,
+        password=password,
         is_free=True,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30)
     )
     
     session_dict = session.model_dump()
@@ -817,31 +1747,58 @@ async def create_free_session(hotspot_id: str, ad_id: str, user_mac: Optional[st
     
     return {
         "session_id": session.id,
+        "username": session.username,
+        "password": session.password,
         "expires_at": session.expires_at.isoformat(),
-        "duration_minutes": 15
+        "duration_minutes": 30
     }
+
+# ==================== Marketplace Routes ====================
+
+@marketplace_router.get("/")
+async def get_marketplace_items(category: Optional[str] = None):
+    """Get marketplace items"""
+    query = {"is_active": True}
+    if category:
+        query["category"] = category
+    
+    items = await db.marketplace.find(query, {"_id": 0}).to_list(100)
+    return items
+
+@marketplace_router.post("/")
+async def add_marketplace_item(
+    item: MarketplaceItem,
+    user: dict = Depends(require_admin)
+):
+    """Admin only - add marketplace item"""
+    item_dict = item.model_dump()
+    await db.marketplace.insert_one(item_dict)
+    return item
 
 # ==================== Seed Data Route ====================
 
 @api_router.post("/seed")
 async def seed_data():
     """Seed initial packages and demo data"""
-    # Default packages
+    # UPDATED PACKAGES - as per spec
     default_packages = [
-        {"name": "Quick Access", "price": 5, "duration_minutes": 15, "speed_mbps": 5, "description": "15 minutes quick access"},
-        {"name": "Half Hour", "price": 10, "duration_minutes": 30, "speed_mbps": 10, "description": "30 minutes browsing"},
-        {"name": "One Hour", "price": 20, "duration_minutes": 60, "speed_mbps": 10, "description": "1 hour unlimited browsing"},
-        {"name": "Half Day", "price": 50, "duration_minutes": 360, "speed_mbps": 15, "description": "6 hours premium access"},
-        {"name": "Full Day", "price": 100, "duration_minutes": 1440, "speed_mbps": 20, "description": "24 hours unlimited access"},
+        {"name": "30 Minutes", "price": 5, "duration_minutes": 30, "speed_mbps": 5, "description": "Quick browsing session"},
+        {"name": "4 Hours", "price": 15, "duration_minutes": 240, "speed_mbps": 10, "description": "Half-day access"},
+        {"name": "8 Hours", "price": 25, "duration_minutes": 480, "speed_mbps": 10, "description": "Work day access"},
+        {"name": "12 Hours", "price": 30, "duration_minutes": 720, "speed_mbps": 10, "description": "Extended access"},
+        {"name": "24 Hours", "price": 35, "duration_minutes": 1440, "speed_mbps": 15, "description": "Full day unlimited"},
+        {"name": "1 Week", "price": 200, "duration_minutes": 10080, "speed_mbps": 15, "description": "Weekly unlimited access"},
+        {"name": "1 Month", "price": 600, "duration_minutes": 43200, "speed_mbps": 20, "description": "Monthly unlimited access"},
     ]
     
+    # Clear existing packages and insert new ones
+    await db.packages.delete_many({})
+    
     for pkg_data in default_packages:
-        existing = await db.packages.find_one({"name": pkg_data["name"]})
-        if not existing:
-            package = Package(**pkg_data, is_active=True)
-            pkg_dict = package.model_dump()
-            pkg_dict["created_at"] = pkg_dict["created_at"].isoformat()
-            await db.packages.insert_one(pkg_dict)
+        package = Package(**pkg_data, is_active=True)
+        pkg_dict = package.model_dump()
+        pkg_dict["created_at"] = pkg_dict["created_at"].isoformat()
+        await db.packages.insert_one(pkg_dict)
     
     # Create super admin if not exists
     admin_email = "admin@caitech.com"
@@ -849,7 +1806,7 @@ async def seed_data():
     if not existing_admin:
         admin = User(
             email=admin_email,
-            name="Super Admin",
+            name="CAITECH Admin",
             role=UserRole.SUPER_ADMIN,
             phone="+254700000000"
         )
@@ -858,16 +1815,64 @@ async def seed_data():
         admin_dict["created_at"] = admin_dict["created_at"].isoformat()
         await db.users.insert_one(admin_dict)
     
-    return {"message": "Seed data created successfully"}
+    # Create default revenue config
+    await db.settings.update_one(
+        {"type": "revenue_config"},
+        {"$set": {"config": RevenueConfig().model_dump()}},
+        upsert=True
+    )
+    
+    # Add sample marketplace items
+    marketplace_items = [
+        {
+            "name": "MikroTik hAP ac²",
+            "description": "Dual-band wireless access point with 5 Gigabit ports",
+            "category": "router",
+            "price": 8500,
+            "image_url": "https://img.routerboard.com/mimg/1455_m.png"
+        },
+        {
+            "name": "MikroTik RB750Gr3",
+            "description": "5-port Gigabit router, perfect for small hotspots",
+            "category": "router",
+            "price": 5500,
+            "image_url": "https://img.routerboard.com/mimg/1451_m.png"
+        },
+        {
+            "name": "Ubiquiti UniFi AP AC LR",
+            "description": "Long-range access point for large coverage",
+            "category": "access_point",
+            "price": 12000,
+            "image_url": None
+        }
+    ]
+    
+    for item_data in marketplace_items:
+        existing = await db.marketplace.find_one({"name": item_data["name"]})
+        if not existing:
+            item = MarketplaceItem(**item_data)
+            await db.marketplace.insert_one(item.model_dump())
+    
+    return {"message": "Seed data created successfully - packages updated to new pricing"}
 
 # Root endpoint
 @api_router.get("/")
 async def root():
-    return {"message": "CAITECH Wi-Fi Hotspot Billing Platform API", "version": "1.0.0"}
+    return {
+        "message": "CAITECH Wi-Fi Hotspot Billing Platform API",
+        "version": "2.0.0",
+        "powered_by": "CAITECH © 2026"
+    }
 
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mpesa_configured": mpesa_service.is_configured(),
+        "sms_configured": sms_service.is_configured(),
+        "whatsapp_configured": whatsapp_service.is_configured()
+    }
 
 # Include all routers
 api_router.include_router(auth_router)
@@ -875,10 +1880,16 @@ api_router.include_router(packages_router)
 api_router.include_router(hotspots_router)
 api_router.include_router(sessions_router)
 api_router.include_router(payments_router)
+api_router.include_router(mpesa_router)
 api_router.include_router(ads_router)
 api_router.include_router(campaigns_router)
 api_router.include_router(analytics_router)
 api_router.include_router(locations_router)
+api_router.include_router(radius_router)
+api_router.include_router(notifications_router)
+api_router.include_router(settings_router)
+api_router.include_router(vouchers_router)
+api_router.include_router(marketplace_router)
 
 app.include_router(api_router)
 
