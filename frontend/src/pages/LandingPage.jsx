@@ -40,9 +40,7 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center gap-2" data-testid="logo">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Wifi className="w-5 h-5 text-white" strokeWidth={1.5} />
-              </div>
+              <CaitechLogo size={32} />
               <span className="font-semibold text-xl tracking-tight">CAITECH</span>
             </Link>
 
