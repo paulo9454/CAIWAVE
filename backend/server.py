@@ -915,6 +915,7 @@ async def create_hotspot(
         hotspot_data.owner_id = user["id"]
     
     hotspot = Hotspot(**hotspot_data.model_dump())
+    hotspot.status = HotspotStatus.ACTIVE  # Default to active for new hotspots
     hotspot_dict = hotspot.model_dump()
     hotspot_dict["created_at"] = hotspot_dict["created_at"].isoformat()
     if hotspot_dict.get("last_seen"):
