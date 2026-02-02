@@ -497,10 +497,11 @@ const LandingPage = () => {
             </div>
             
             <div>
-              <h4 className="font-semibold mb-4">Contact</h4>
+              <h4 className="font-semibold mb-4">Support</h4>
               <ul className="space-y-2 text-neutral-400 text-sm">
-                <li>support@caitech.com</li>
-                <li>+254 700 000 000</li>
+                <li><a href="tel:0738570630" className="hover:text-white transition-colors">Contact Support</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">Help Center</a></li>
+                <li><a href="#" className="hover:text-white transition-colors">FAQ</a></li>
               </ul>
             </div>
           </div>
