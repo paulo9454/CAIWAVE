@@ -1118,7 +1118,7 @@ async def initiate_payment(payment_data: PaymentCreate):
     if not hotspot:
         raise HTTPException(status_code=404, detail="Hotspot not found")
     
-    if hotspot.get("status") != HotspotStatus.ACTIVE.value:
+    if hotspot.get("status") not in [HotspotStatus.ACTIVE.value, None, "pending_setup"]:
         raise HTTPException(status_code=400, detail="Hotspot is not active")
     
     # Create payment record
