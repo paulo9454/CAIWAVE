@@ -84,14 +84,18 @@ Production-ready Wi-Fi hotspot billing platform with integrated advertising engi
 
 ### Dynamic Revenue Formula
 ```
-Owner % = Base + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus
+Partner % = Base + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus
 ```
-- Base: 60% (configurable)
-- Coverage: +0.5% per 100 sqm
-- Clients: +0.5% per 10 daily clients
-- Ads: +1% per 1000 impressions delivered
+- **Base: 30%** (configurable)
+- Coverage: +0.5% per 100 sqm (max +5%)
+- Clients: +0.5% per 10 daily clients (max +5%)
+- Ads: +1% per 1000 impressions delivered (max +5%)
 - Uptime: +2% if ≥99% uptime
-- Max cap: 80% (configurable)
+- **Max cap: 50%** (configurable)
+
+**Revenue Split:**
+- Partner receives: 30% - 50% (depending on bonuses)
+- CAITECH receives: 50% - 70%
 
 ---
 
