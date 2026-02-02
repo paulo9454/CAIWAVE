@@ -1,92 +1,164 @@
-# CAITECH Wi-Fi Hotspot Billing Platform - PRD
+# CAITECH Wi-Fi Hotspot Billing Platform - PRD v2.0
 
 ## Project Overview
-Production-ready Wi-Fi hotspot billing platform with integrated advertising engine managed by CAITECH.
+Production-ready Wi-Fi hotspot billing platform with integrated advertising engine, managed exclusively by CAITECH as Super Admin. Features real M-Pesa integration, FreeRADIUS support, and dynamic revenue sharing.
+
+## Branding (LOCKED)
+- **Logo**: Blue (#0032FA) background with white WiFi signal icon
+- **Mandatory Footer**: "Powered by CAITECH © 2026. All Rights Reserved."
+- Partners cannot remove or modify branding
 
 ## Target Users
-1. **Super Admin (CAITECH)** - Platform management, packages, campaigns
-2. **Hotspot Owner (Partner)** - ISP dashboard, revenue tracking, hotspot management
-3. **Advertiser** - Ad creation, campaign targeting, performance tracking
+1. **Super Admin (CAITECH)** - Full platform control, ad approval, revenue settings
+2. **Hotspot Owner (Partner)** - ISP dashboard, assisted setup, no monthly fees
+3. **Advertiser** - Ad submission (requires admin approval)
 4. **End User** - WiFi purchase via captive portal
 
 ## Core Requirements (Static)
-- Paid internet access from KES 5
-- Free WiFi sponsored by ads
-- Location-based advertising engine
-- MikroTik router integration (RADIUS)
-- M-Pesa payment integration
-- No monthly subscription for hotspot owners
-- 70/30 revenue sharing model
+- Package pricing is PREDEFINED (no custom pricing)
+- All ads MUST be approved by CAITECH admin
+- Dynamic revenue sharing (NOT fixed 70/30)
+- Real M-Pesa Daraja integration (sandbox-ready)
+- Real FreeRADIUS structure (MikroTik-compatible)
+- SMS/WhatsApp notification support
+
+## Package Pricing (FIXED)
+| Duration | Price (KES) |
+|----------|-------------|
+| 30 min   | 5           |
+| 4 hours  | 15          |
+| 8 hours  | 25          |
+| 12 hours | 30          |
+| 24 hours | 35          |
+| 1 week   | 200         |
+| 1 month  | 600         |
 
 ## Tech Stack
 - **Backend**: FastAPI + Python
 - **Frontend**: React + TailwindCSS
 - **Database**: MongoDB
 - **Auth**: JWT-based multi-role
-- **Payments**: M-Pesa (Mock/Sandbox)
-- **Router**: MikroTik (Mock RADIUS)
+- **Payments**: M-Pesa Daraja API (real)
+- **Router**: MikroTik via FreeRADIUS
+- **SMS**: Africa's Talking / Centipid
+- **WhatsApp**: Twilio
 
 ---
 
-## What's Been Implemented (v1.0 - Feb 2026)
+## What's Been Implemented (v2.0 - Feb 2026)
 
-### Backend API Endpoints
-- [x] Authentication (register, login, JWT)
-- [x] Packages CRUD (5 default tiers: KES 5-100)
-- [x] Hotspots management
-- [x] Sessions tracking
-- [x] Payments (Mock M-Pesa STK Push)
-- [x] Ads CRUD
-- [x] Campaigns with targeting
-- [x] Analytics dashboard
-- [x] Captive portal data endpoint
-- [x] Free WiFi via ads endpoint
-- [x] Seed data initialization
+### Backend Features
+- [x] Multi-role authentication (JWT)
+- [x] New package pricing (KES 5-600)
+- [x] Dynamic revenue sharing formula
+- [x] Ad approval workflow (pending → approved/rejected)
+- [x] Real M-Pesa Daraja STK Push integration structure
+- [x] M-Pesa callback handling
+- [x] SMS service (Africa's Talking / Centipid)
+- [x] WhatsApp service (Twilio)
+- [x] Voucher generation and redemption
+- [x] RADIUS credential generation
+- [x] Session management with expiry
+- [x] Hotspot status management (admin can suspend)
+- [x] Revenue configuration API
+- [x] Integration status endpoints
 
-### Frontend Pages
-- [x] Landing page (marketing)
-- [x] Login/Register (multi-role)
-- [x] Captive Portal (mobile-first)
-- [x] Admin Dashboard (overview, packages, hotspots, campaigns, users)
-- [x] Hotspot Owner Dashboard (overview, hotspots, payments)
-- [x] Advertiser Dashboard (overview, ads, campaigns)
+### Frontend Features
+- [x] Landing page with new pricing
+- [x] Captive portal (mobile-first)
+- [x] Admin Dashboard with:
+  - Ad Approval workflow
+  - Revenue Settings configuration
+  - Integration status monitoring
+  - Hotspot suspension controls
+- [x] Owner Dashboard
+- [x] Advertiser Dashboard
+- [x] Mandatory CAITECH branding/footer
 
-### Features
-- [x] Multi-role JWT authentication
-- [x] ISP-style package dropdown
-- [x] Revenue analytics with charts
-- [x] Location-based ad targeting (global/local)
-- [x] Dark theme UI
-- [x] Mock payment confirmation
+### Ad Approval Workflow
+1. Advertiser creates ad → Status: PENDING
+2. Admin reviews in Ad Approval page
+3. Admin approves → Status: APPROVED, is_active: true
+4. OR Admin rejects → Status: REJECTED with reason
+5. Admin can later suspend approved ads
+
+### Dynamic Revenue Formula
+```
+Owner % = Base + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus
+```
+- Base: 60% (configurable)
+- Coverage: +0.5% per 100 sqm
+- Clients: +0.5% per 10 daily clients
+- Ads: +1% per 1000 impressions delivered
+- Uptime: +2% if ≥99% uptime
+- Max cap: 80% (configurable)
+
+---
+
+## Integration Setup Instructions
+
+### M-Pesa Daraja API
+1. Register at https://developer.safaricom.co.ke/
+2. Create sandbox app
+3. Add to backend/.env:
+```
+MPESA_CONSUMER_KEY=your_key
+MPESA_CONSUMER_SECRET=your_secret
+MPESA_SHORTCODE=your_shortcode
+MPESA_PASSKEY=your_passkey
+MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback
+```
+
+### SMS (Africa's Talking)
+1. Register at https://account.africastalking.com/
+2. Add to backend/.env:
+```
+SMS_PROVIDER=africas_talking
+SMS_API_KEY=your_api_key
+SMS_USERNAME=your_username
+SMS_SENDER_ID=CAITECH
+```
+
+### WhatsApp (Twilio)
+1. Get credentials from https://www.twilio.com/console
+2. Enable WhatsApp sandbox
+3. Add to backend/.env:
+```
+TWILIO_ACCOUNT_SID=your_account_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_NUMBER=+14155238886
+```
 
 ---
 
 ## Prioritized Backlog
 
 ### P0 - Critical (Next Sprint)
-- [ ] Real M-Pesa Daraja API integration
-- [ ] Actual MikroTik RADIUS implementation
-- [ ] Session enforcement (auto-disconnect)
+- [ ] Add M-Pesa production credentials
+- [ ] FreeRADIUS server deployment
+- [ ] MikroTik router connection testing
 
 ### P1 - Important
-- [ ] Withdrawal system for owners
-- [ ] SMS notifications
-- [ ] Ad upload with file storage
-- [ ] Campaign approval workflow
-- [ ] Revenue reports export
+- [ ] Withdrawal system for partners
+- [ ] Ad file upload (images/videos)
+- [ ] SMS balance tracking
+- [ ] Voucher printing UI
+- [ ] Equipment marketplace management
 
 ### P2 - Nice to Have
-- [ ] Equipment shop integration
-- [ ] Documentation pages
-- [ ] Support ticket system
-- [ ] Mobile app (React Native)
 - [ ] Real-time session monitoring
+- [ ] Revenue reports export
+- [ ] Mobile app (React Native)
+- [ ] Email notifications
 
 ---
 
+## Credentials
+- **Admin**: admin@caitech.com / admin123
+
 ## Next Tasks
-1. Integrate real M-Pesa Daraja API
-2. Implement MikroTik RADIUS server connection
-3. Add withdrawal/payout functionality
-4. Build ad file upload system
-5. Create admin campaign approval flow
+1. Add real M-Pesa Daraja credentials
+2. Deploy FreeRADIUS server
+3. Test with MikroTik router
+4. Configure SMS gateway
+5. Add Twilio WhatsApp credentials
