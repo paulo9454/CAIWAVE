@@ -119,7 +119,7 @@ const AdminOverview = () => {
           </div>
           <p className="text-green-400 text-sm mt-3 flex items-center gap-1">
             <TrendingUp className="w-4 h-4" />
-            Dynamic revenue sharing active
+            Partner: 30-50% | CAITECH: 50-70%
           </p>
         </div>
 
