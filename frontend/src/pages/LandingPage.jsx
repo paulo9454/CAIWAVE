@@ -467,9 +467,7 @@ const LandingPage = () => {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Wifi className="w-5 h-5 text-white" strokeWidth={1.5} />
-                </div>
+                <CaitechLogo size={32} />
                 <span className="font-semibold text-lg">CAITECH</span>
               </div>
               <p className="text-neutral-500 text-sm">
