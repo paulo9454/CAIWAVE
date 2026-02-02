@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { isAuthenticated, getUser, getDashboardPath } from "../lib/auth";
+import { CaitechLogo } from "../components/CaitechLogo";
 import {
   Wifi,
   TrendingUp,
