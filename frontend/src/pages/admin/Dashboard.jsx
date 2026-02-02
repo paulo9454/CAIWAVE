@@ -605,13 +605,13 @@ const PackagesPage = () => {
 // Revenue Settings Page
 const RevenueSettingsPage = () => {
   const [config, setConfig] = useState({
-    base_owner_percentage: 60,
+    base_owner_percentage: 30,
     coverage_bonus_per_100sqm: 0.5,
     client_bonus_per_10: 0.5,
     ad_impression_bonus_per_1000: 1.0,
     uptime_bonus_threshold: 99,
     uptime_bonus_percentage: 2.0,
-    max_owner_percentage: 80,
+    max_owner_percentage: 50,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -643,6 +643,28 @@ const RevenueSettingsPage = () => {
     }
   };
 
+  // Calculate example with new values
+  const calculateExample = () => {
+    const base = config.base_owner_percentage;
+    const coverage = Math.min((200 / 100) * config.coverage_bonus_per_100sqm, 5);
+    const clients = Math.min((50 / 10) * config.client_bonus_per_10, 5);
+    const ads = Math.min((5000 / 1000) * config.ad_impression_bonus_per_1000, 5);
+    const uptime = config.uptime_bonus_percentage;
+    const total = base + coverage + clients + ads + uptime;
+    const capped = total > config.max_owner_percentage;
+    return {
+      base,
+      coverage: coverage.toFixed(1),
+      clients: clients.toFixed(1),
+      ads: ads.toFixed(1),
+      uptime,
+      total: Math.min(total, config.max_owner_percentage).toFixed(1),
+      capped
+    };
+  };
+
+  const example = calculateExample();
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -664,7 +686,10 @@ const RevenueSettingsPage = () => {
         <div>
           <p className="text-purple-400 font-medium">Dynamic Revenue Formula</p>
           <p className="text-neutral-400 text-sm mt-1">
-            Owner percentage = Base + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus (capped at max)
+            Partner % = Base ({config.base_owner_percentage}%) + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus
+          </p>
+          <p className="text-yellow-400 text-sm mt-1">
+            ⚠️ Total partner share is capped at {config.max_owner_percentage}% maximum
           </p>
         </div>
       </div>
@@ -672,7 +697,7 @@ const RevenueSettingsPage = () => {
       <div className="dashboard-card p-6 space-y-6">
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <label className="text-sm text-neutral-400">Base Owner Percentage</label>
+            <label className="text-sm text-neutral-400">Base Partner Percentage</label>
             <input
               type="number"
               value={config.base_owner_percentage}
@@ -681,11 +706,11 @@ const RevenueSettingsPage = () => {
               min="0"
               max="100"
             />
-            <p className="text-xs text-neutral-500 mt-1">Starting percentage for all partners</p>
+            <p className="text-xs text-neutral-500 mt-1">Starting percentage for all partners (default: 30%)</p>
           </div>
 
           <div>
-            <label className="text-sm text-neutral-400">Max Owner Percentage</label>
+            <label className="text-sm text-neutral-400">Max Partner Percentage (Cap)</label>
             <input
               type="number"
               value={config.max_owner_percentage}
@@ -694,7 +719,7 @@ const RevenueSettingsPage = () => {
               min="0"
               max="100"
             />
-            <p className="text-xs text-neutral-500 mt-1">Maximum percentage cap</p>
+            <p className="text-xs text-neutral-500 mt-1">Maximum cap regardless of bonuses (default: 50%)</p>
           </div>
 
           <div>
@@ -706,6 +731,7 @@ const RevenueSettingsPage = () => {
               className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
               step="0.1"
             />
+            <p className="text-xs text-neutral-500 mt-1">Bonus % per 100 sqm coverage area (max +5%)</p>
           </div>
 
           <div>
@@ -717,6 +743,7 @@ const RevenueSettingsPage = () => {
               className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
               step="0.1"
             />
+            <p className="text-xs text-neutral-500 mt-1">Bonus % per 10 average daily clients (max +5%)</p>
           </div>
 
           <div>
@@ -728,6 +755,7 @@ const RevenueSettingsPage = () => {
               className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
               step="0.1"
             />
+            <p className="text-xs text-neutral-500 mt-1">Bonus % per 1000 ad impressions delivered (max +5%)</p>
           </div>
 
           <div>
@@ -762,21 +790,34 @@ const RevenueSettingsPage = () => {
         <div className="space-y-2 text-sm">
           <p className="text-neutral-400">For a hotspot with 200sqm coverage, 50 daily clients, 5000 ad impressions, 99.5% uptime:</p>
           <div className="bg-neutral-900 rounded-lg p-4 font-mono text-xs">
-            <p>Base: {config.base_owner_percentage}%</p>
-            <p>+ Coverage (200/100 × {config.coverage_bonus_per_100sqm}): {(200/100 * config.coverage_bonus_per_100sqm).toFixed(1)}%</p>
-            <p>+ Clients (50/10 × {config.client_bonus_per_10}): {(50/10 * config.client_bonus_per_10).toFixed(1)}%</p>
-            <p>+ Ad Impressions (5000/1000 × {config.ad_impression_bonus_per_1000}): {(5000/1000 * config.ad_impression_bonus_per_1000).toFixed(1)}%</p>
-            <p>+ Uptime Bonus: {config.uptime_bonus_percentage}%</p>
+            <p>Base: {example.base}%</p>
+            <p>+ Coverage (200/100 × {config.coverage_bonus_per_100sqm}): {example.coverage}%</p>
+            <p>+ Clients (50/10 × {config.client_bonus_per_10}): {example.clients}%</p>
+            <p>+ Ad Impressions (5000/1000 × {config.ad_impression_bonus_per_1000}): {example.ads}%</p>
+            <p>+ Uptime Bonus: {example.uptime}%</p>
             <p className="border-t border-neutral-700 pt-2 mt-2 text-green-400">
-              Total: {Math.min(
-                config.base_owner_percentage +
-                (200/100 * config.coverage_bonus_per_100sqm) +
-                (50/10 * config.client_bonus_per_10) +
-                (5000/1000 * config.ad_impression_bonus_per_1000) +
-                config.uptime_bonus_percentage,
-                config.max_owner_percentage
-              ).toFixed(1)}% (capped at {config.max_owner_percentage}%)
+              Total: {example.total}% {example.capped && <span className="text-yellow-400">(capped at {config.max_owner_percentage}%)</span>}
             </p>
+            <p className="text-blue-400 mt-2">
+              CAITECH receives: {(100 - parseFloat(example.total)).toFixed(1)}%
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Revenue Split Summary */}
+      <div className="dashboard-card p-6">
+        <h3 className="font-semibold mb-4">Revenue Split Summary</h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+            <p className="text-green-400 text-sm">Partner Share</p>
+            <p className="text-2xl font-bold text-green-400">{config.base_owner_percentage}% - {config.max_owner_percentage}%</p>
+            <p className="text-neutral-500 text-xs mt-1">Base + bonuses (capped)</p>
+          </div>
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <p className="text-blue-400 text-sm">CAITECH Share</p>
+            <p className="text-2xl font-bold text-blue-400">{100 - config.max_owner_percentage}% - {100 - config.base_owner_percentage}%</p>
+            <p className="text-neutral-500 text-xs mt-1">Platform revenue</p>
           </div>
         </div>
       </div>
