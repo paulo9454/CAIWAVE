@@ -442,13 +442,14 @@ async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRe
     """Calculate dynamic revenue sharing based on hotspot metrics"""
     hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
     if not hotspot:
-        # Default split if hotspot not found
+        # Default split if hotspot not found (30% to owner)
         return DynamicRevenue(
             total_amount=amount,
-            owner_share=amount * 0.6,
-            platform_share=amount * 0.4,
-            owner_percentage=60.0,
-            breakdown={"base": 60.0}
+            owner_share=amount * 0.3,
+            platform_share=amount * 0.7,
+            owner_percentage=30.0,
+            breakdown={"base": 30.0},
+            capped=False
         )
     
     # Get revenue config
@@ -459,8 +460,8 @@ async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRe
         config = config.get("config", RevenueConfig().model_dump())
     
     # Calculate dynamic percentage
-    breakdown = {"base": config.get("base_owner_percentage", 60.0)}
-    owner_percentage = config.get("base_owner_percentage", 60.0)
+    breakdown = {"base": config.get("base_owner_percentage", 30.0)}
+    owner_percentage = config.get("base_owner_percentage", 30.0)
     
     # Coverage bonus
     coverage_area = hotspot.get("coverage_area_sqm", 100)
@@ -486,8 +487,9 @@ async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRe
         breakdown["uptime_bonus"] = config.get("uptime_bonus_percentage", 2.0)
         owner_percentage += breakdown["uptime_bonus"]
     
-    # Cap at maximum
-    max_percentage = config.get("max_owner_percentage", 80.0)
+    # Check if cap needs to be applied
+    max_percentage = config.get("max_owner_percentage", 50.0)
+    capped = owner_percentage > max_percentage
     owner_percentage = min(owner_percentage, max_percentage)
     
     owner_share = amount * (owner_percentage / 100)
@@ -498,7 +500,8 @@ async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRe
         owner_share=round(owner_share, 2),
         platform_share=round(platform_share, 2),
         owner_percentage=round(owner_percentage, 2),
-        breakdown=breakdown
+        breakdown=breakdown,
+        capped=capped
     )
 
 # ==================== M-Pesa Daraja Integration ====================
