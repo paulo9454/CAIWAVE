@@ -339,17 +339,19 @@ const LandingPage = () => {
               <span className="gradient-text">Every User</span>
             </h2>
             <p className="text-neutral-400">
-              Pre-configured pricing from KES 5 to KES 100
+              Pre-configured pricing from KES 5 to KES 600
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
             {[
-              { price: 5, duration: "15 min", popular: false },
-              { price: 10, duration: "30 min", popular: false },
-              { price: 20, duration: "1 hour", popular: true },
-              { price: 50, duration: "6 hours", popular: false },
-              { price: 100, duration: "24 hours", popular: false },
+              { price: 5, duration: "30 min", popular: false },
+              { price: 15, duration: "4 hours", popular: false },
+              { price: 25, duration: "8 hours", popular: true },
+              { price: 30, duration: "12 hours", popular: false },
+              { price: 35, duration: "24 hours", popular: false },
+              { price: 200, duration: "1 week", popular: false },
+              { price: 600, duration: "1 month", popular: false },
             ].map((pkg, index) => (
               <div
                 key={index}
@@ -362,7 +364,7 @@ const LandingPage = () => {
                   </div>
                 )}
                 <div className="text-center">
-                  <div className="text-3xl font-bold mb-1">KES {pkg.price}</div>
+                  <div className="text-2xl font-bold mb-1">KES {pkg.price}</div>
                   <div className="text-neutral-400 text-sm">{pkg.duration}</div>
                 </div>
               </div>
