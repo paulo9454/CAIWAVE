@@ -1,0 +1,163 @@
+<analysis>**original_problem_statement**: The user wants to build a production-ready, ISP-grade Wi-Fi hotspot billing and advertising platform named CAITECH.
+
+**PRODUCT REQUIREMENTS (abridged, full version in )**:
+- **Platform Control**: CAITECH is the sole Super Admin with full control over ads, revenue logic, and branding.
+- **User Roles**: Super Admin, Hotspot Owner (Partner), Advertiser, and Wi-Fi End User.
+- **Core Integrations (Real, NO MOCKS)**:
+    - **Payments**: M-Pesa Daraja API for payments.
+    - **Routers**: MikroTik integration via FreeRADIUS.
+    - **Notifications**: SMS (Africa's Talking) and WhatsApp (Twilio).
+- **Key Features**:
+    - **Data Packages**: A fixed list of predefined packages (e.g., 30 mins for KES 5, 1 week for KES 200).
+    - **Dynamic Revenue Sharing**: A formula-based system (Base + Bonuses) controlled by the admin, currently set to 30% Base and 50% Max cap.
+    - **Advertising Engine**: Advertisers upload ads, but the CAITECH admin must approve them before they go live. Location-based targeting is required.
+    - **Locked Branding**: The CAITECH logo and Powered by CAITECH © 2026 footer are mandatory on all pages and cannot be removed.
+- **Recent Requests**:
+    - Add a support phone number () under a Contact Support link in the footer.
+    - Generate a specific flat, modern logo with a blue background () and a white Wi-Fi icon.
+
+**User's preferred language**: English
+
+**what currently exists?**
+A full-stack web application has been developed using React, Node.js, and MongoDB. The platform features a dark theme, user authentication (JWT), and distinct dashboards for Admin, Hotspot Owners, and Advertisers. The core UI for the landing page, captive portal, and login is complete. The backend includes API endpoints for managing packages, revenue settings, and an ad approval workflow. The database is seeded with initial data. The latest user requirements, including the updated revenue share logic (30% base, 50% max), mandatory footer, support contact, and the new logo file, have been implemented.
+
+**Last working item**:
+- **Last item agent was working**: Integrating the new CAITECH logo across the entire platform. The agent successfully generated the  file, created a reusable  React component, and updated the  (for the favicon) and the main . The next step was to replace the old text-based logos in the other dashboards and pages with this new component.
+- **Status**: IN PROGRESS
+- **Agent Testing Done**: N
+- **Which testing method agent to use?**: screenshot tool
+- **User Testing Done**: N
+
+**All Pending/In progress Issue list**:
+There are no pending issues or bugs. The current work is a feature implementation task.
+
+**In progress Task List**:
+- **Task 1: Complete Logo Integration** (P0)
+    - **Where to resume**: Import and use the existing  component in the navigation bars/headers of the remaining pages.
+        - 
+        - 
+        - 
+        - 
+        -  (and any other authentication-related pages)
+    - **What will be achieved with this?** The entire platform will feature the official, consistent CAITECH logo, completing the user's branding request.
+    - **Status**: IN PROGRESS
+    - **Should Test frontend/backend/both after fix?** Frontend
+    - **Blocked on something**: No.
+
+**Upcoming and Future Tasks**
+- **Upcoming Tasks**:
+    - **P0: Real M-Pesa Daraja Integration**: Implement the backend structure for the Daraja STK Push API. Use the Safaricom sandbox environment and provide clear instructions in the admin panel for the user to input their live credentials (Consumer Key/Secret, Shortcode, Passkey) later.
+    - **P1: Real MikroTik RADIUS Integration**: Implement a production-ready integration with FreeRADIUS to allow real MikroTik routers to connect and authenticate users.
+    - **P1: SMS & WhatsApp Notification Integration**: Build the backend services to send notifications via SMS (with a flexible gateway structure) and WhatsApp (via Twilio). The admin panel should have fields for API key entry.
+    - **P1: Partner Onboarding Wizard**: Create a guided setup flow for new Hotspot Owners to configure their MikroTik routers and settings, as suggested by the user to reduce support load.
+- **Future Tasks**:
+    - **Voucher Printing System**: Allow Hotspot Owners to generate and print pre-paid Wi-Fi access vouchers.
+    - **Equipment Marketplace UI**: Develop the Shop Equipment section where partners can view recommended hardware.
+    - **System Audit Logs**: Implement comprehensive logging for all critical admin and user actions.
+    - **Two-Factor Authentication (2FA)**: Enhance security by adding a 2FA option for logins.
+
+**Completed work in this session**
+- **Platform Foundation**: Built a full-stack application with Node.js, Express, React, and MongoDB, including a Docker setup.
+- **UI/UX Development**:
+    - Implemented a site-wide dark theme and created layouts for the landing page, captive portal, and user dashboards.
+    - Fixed initial CSS rendering issues.
+- **Core Features**:
+    - **Dynamic Revenue Sharing**: Implemented the admin UI and backend logic, updating it to the user's specified **30% Base / 50% Max** configuration. (Files: , ).
+    - **Package Management**: Updated all frontend and backend systems to use the user's final list of data packages.
+    - **Ad Approval Workflow**: Created the UI in the admin dashboard for approving or rejecting ads submitted by advertisers.
+- **Branding and Customization**:
+    - **Logo**: Generated the official logo as  and created a reusable  component.
+    - **Footer**: Added the mandatory Powered by CAITECH © 2026 footer and a Contact Support link that initiates a phone call. (File: ).
+- **Testing**:
+    - Ran the testing agent to validate core functionality after major updates, fixing two minor bugs related to hotspot status and payments.
+    - Manually verified key user flows (login, captive portal, admin pages) via screenshots.
+
+**Earlier issues found/mentioned but not fixed**
+None. All identified issues were resolved during the session.
+
+**Known issue recurrence from previous fork**
+N/A
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Frontend**: React, Tailwind CSS, Shadcn UI
+- **Backend**: Node.js, Express.js
+- **Database**: MongoDB (with Mongoose)
+- **Authentication**: JSON Web Tokens (JWT)
+- **Architecture**: MERN-like (MongoDB, Express, React, Node)
+
+**key DB schema**
+- **User**: 
+- **Package**: 
+- **Settings**: 
+- **Ad**: 
+
+**changes in tech stack**
+None.
+
+**All files of reference**
+- **Created/Updated:**
+    - : The official SVG logo file, created per user specifications.
+    - : A reusable React component to display the logo consistently.
+    - : Updated to include the mandatory branding and support contact link.
+    - : Logic updated for the 30%/50% revenue share.
+    - : Default schema values updated for the new revenue share.
+    - : UI updated for Ad Approval and new Revenue Settings.
+    - : Updated to use  as the favicon.
+    - : The main source of truth for project requirements.
+- **Other important files:**
+    - : Defines the application's services.
+    - : Essential for initializing the database with correct data.
+
+**Areas that need refactoring**:
+None at present.
+
+**key api endpoints**
+- 
+- 
+- 
+- 
+- 
+
+**Critical Info for New Agent**
+- **Adhere to the PRD**: The project scope is defined in . This is the source of truth, superseding earlier, simpler requests.
+- **NO MOCKS**: The user strictly requires real integration structures. Implement the scaffolding for M-Pesa, MikroTik, and notification services using sandbox environments where possible, and provide clear instructions for the user to add live API keys later.
+- **Follow Priority Order**: The user has set a strict implementation order: 1) Finish Packages/Revenue/Ads (mostly done), 2) M-Pesa, 3) MikroTik RADIUS, 4) Notifications. Please follow this sequence.
+- **Branding is Locked**: The CAITECH logo and Powered by CAITECH footer are mandatory and must not be configurable by partners.
+
+**documents and test reports created in this job**
+- 
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User**: Provided a detailed prompt to generate the official CAITECH logo. **Status**: Completed (logo generated, integration in progress).
+2.  **User**: Requested to add the support phone number under a Contact Support link. **Status**: Completed.
+3.  **User**: Confirmed satisfaction with the dynamic revenue calculation and cap logic. **Status**: Acknowledged.
+4.  **User**: Changed the revenue share to **Base 30% / Max 50%** and suggested a partner onboarding wizard. **Status**: Completed (revenue updated), wizard added to upcoming tasks.
+5.  **User**: Provided strict priorities and confirmed that real integrations (M-Pesa, MikroTik) must be built without live credentials for now. **Status**: Acknowledged, priorities are guiding the plan.
+6.  **User**: Submitted a very detailed Product Requirements Document (PRD) for the entire platform. **Status**: Acknowledged, this is now the guiding document.
+7.  **User**: Gave initial tech stack and feature choices for an MVP. **Status**: Superseded by the detailed PRD.
+8.  **User**: Start the task now. **Status**: Completed.
+
+**Project Health Check:**
+- **Broken**: None.
+- **Mocked**: None. Per user instructions, the architecture is being built with placeholders for real integration credentials, not mock logic.
+
+**3rd Party Integrations**
+- **M-Pesa Daraja (Payments)**: To be implemented. Will require a User API Key.
+- **MikroTik (RADIUS via FreeRADIUS)**: To be implemented. Will require router connection details.
+- **Twilio (WhatsApp Notifications)**: To be implemented. Will require a User API Key.
+- **SMS Gateways (e.g., Africa's Talking)**: To be implemented. Will require a User API Key.
+
+**Testing status**
+- **Testing agent used after significant changes**: YES
+- **Troubleshoot agent used after agent stuck in loop**: NO
+- **Test files created**: None.
+- **Known regressions**: None.
+
+**Credentials to test flow:**
+- **Admin**:  / 
+
+**What agent forgot to execute**
+The agent was mid-task. It did not forget anything, but the **logo integration is incomplete**. The next agent must finish applying the  component to all dashboards and pages to complete the branding update.</analysis>
