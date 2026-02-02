@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { getUser, logout } from "../../lib/auth";
 import { API_URL, formatCurrency } from "../../lib/utils";
@@ -24,6 +24,14 @@ import {
   BarChart3,
   Target,
   Globe,
+  Check,
+  X,
+  Clock,
+  Eye,
+  AlertCircle,
+  ShoppingBag,
+  Sliders,
+  Bell,
 } from "lucide-react";
 import {
   AreaChart,
@@ -71,11 +79,13 @@ const AdminOverview = () => {
   ];
 
   const packageData = [
-    { name: "KES 5", value: 35, color: "#2563eb" },
-    { name: "KES 10", value: 28, color: "#7c3aed" },
-    { name: "KES 20", value: 22, color: "#10b981" },
-    { name: "KES 50", value: 10, color: "#f59e0b" },
-    { name: "KES 100", value: 5, color: "#ef4444" },
+    { name: "KES 5", value: 25, color: "#2563eb" },
+    { name: "KES 15", value: 22, color: "#7c3aed" },
+    { name: "KES 25", value: 20, color: "#10b981" },
+    { name: "KES 30", value: 12, color: "#f59e0b" },
+    { name: "KES 35", value: 15, color: "#ef4444" },
+    { name: "KES 200", value: 4, color: "#06b6d4" },
+    { name: "KES 600", value: 2, color: "#ec4899" },
   ];
 
   if (loading) {
@@ -100,7 +110,7 @@ const AdminOverview = () => {
             <div>
               <p className="text-neutral-400 text-sm">Total Revenue</p>
               <p className="text-2xl font-bold mt-1">
-                {formatCurrency(stats?.total_revenue || 47900)}
+                {formatCurrency(stats?.total_revenue || 0)}
               </p>
             </div>
             <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center">
@@ -109,7 +119,7 @@ const AdminOverview = () => {
           </div>
           <p className="text-green-400 text-sm mt-3 flex items-center gap-1">
             <TrendingUp className="w-4 h-4" />
-            +18.2% this month
+            Dynamic revenue sharing active
           </p>
         </div>
 
@@ -131,20 +141,23 @@ const AdminOverview = () => {
         <div className="stat-card stat-card-warning">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-neutral-400 text-sm">Registered Users</p>
-              <p className="text-2xl font-bold mt-1">{stats?.total_users || 0}</p>
+              <p className="text-neutral-400 text-sm">Pending Ads</p>
+              <p className="text-2xl font-bold mt-1">{stats?.pending_ads || 0}</p>
             </div>
             <div className="w-12 h-12 bg-yellow-500/10 rounded-lg flex items-center justify-center">
-              <Users className="w-6 h-6 text-yellow-500" strokeWidth={1.5} />
+              <Clock className="w-6 h-6 text-yellow-500" strokeWidth={1.5} />
             </div>
           </div>
+          <Link to="/admin/ads" className="text-yellow-400 text-sm mt-3 flex items-center gap-1 hover:underline">
+            Review pending ads →
+          </Link>
         </div>
 
         <div className="stat-card">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-neutral-400 text-sm">Active Campaigns</p>
-              <p className="text-2xl font-bold mt-1">{stats?.active_campaigns || 0}</p>
+              <p className="text-neutral-400 text-sm">Active Ads</p>
+              <p className="text-2xl font-bold mt-1">{stats?.active_ads || 0}</p>
             </div>
             <div className="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center">
               <Megaphone className="w-6 h-6 text-purple-500" strokeWidth={1.5} />
@@ -218,7 +231,7 @@ const AdminOverview = () => {
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-2 gap-2 mt-4">
-            {packageData.map((item) => (
+            {packageData.slice(0, 4).map((item) => (
               <div key={item.name} className="flex items-center gap-2">
                 <div
                   className="w-3 h-3 rounded-full"
@@ -236,19 +249,255 @@ const AdminOverview = () => {
   );
 };
 
-// Packages Management Component
+// Ad Approval Page - CRITICAL FOR CAITECH ADMIN
+const AdApprovalPage = () => {
+  const [pendingAds, setPendingAds] = useState([]);
+  const [allAds, setAllAds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("pending");
+
+  useEffect(() => {
+    fetchAds();
+  }, []);
+
+  const fetchAds = async () => {
+    try {
+      const [pendingRes, allRes] = await Promise.all([
+        axios.get(`${API_URL}/ads/pending`),
+        axios.get(`${API_URL}/ads`),
+      ]);
+      setPendingAds(pendingRes.data);
+      setAllAds(allRes.data);
+    } catch (error) {
+      console.error("Failed to fetch ads:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async (adId) => {
+    try {
+      await axios.post(`${API_URL}/ads/${adId}/approve`, { approved: true });
+      toast.success("Ad approved successfully");
+      fetchAds();
+    } catch (error) {
+      toast.error("Failed to approve ad");
+    }
+  };
+
+  const handleReject = async (adId, reason = "Does not meet guidelines") => {
+    try {
+      await axios.post(`${API_URL}/ads/${adId}/approve`, {
+        approved: false,
+        rejection_reason: reason,
+      });
+      toast.success("Ad rejected");
+      fetchAds();
+    } catch (error) {
+      toast.error("Failed to reject ad");
+    }
+  };
+
+  const handleSuspend = async (adId) => {
+    try {
+      await axios.post(`${API_URL}/ads/${adId}/suspend`);
+      toast.success("Ad suspended");
+      fetchAds();
+    } catch (error) {
+      toast.error("Failed to suspend ad");
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      pending: "badge-pending",
+      approved: "badge-active",
+      rejected: "badge-inactive",
+      suspended: "badge-inactive",
+    };
+    return badges[status] || "badge-inactive";
+  };
+
+  return (
+    <div className="space-y-6" data-testid="ad-approval-page">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Ad Management</h1>
+          <p className="text-neutral-400 mt-1">Review and approve advertiser submissions</p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <AlertCircle className="w-5 h-5 text-yellow-500" />
+          <span className="text-yellow-400 text-sm font-medium">
+            {pendingAds.length} pending review
+          </span>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-neutral-800 pb-2">
+        <button
+          onClick={() => setActiveTab("pending")}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            activeTab === "pending"
+              ? "bg-yellow-500/10 text-yellow-400"
+              : "text-neutral-400 hover:text-white"
+          }`}
+        >
+          Pending ({pendingAds.length})
+        </button>
+        <button
+          onClick={() => setActiveTab("all")}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            activeTab === "all"
+              ? "bg-blue-500/10 text-blue-400"
+              : "text-neutral-400 hover:text-white"
+          }`}
+        >
+          All Ads ({allAds.length})
+        </button>
+      </div>
+
+      {/* Pending Ads */}
+      {activeTab === "pending" && (
+        <div className="space-y-4">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : pendingAds.length === 0 ? (
+            <div className="dashboard-card p-12 text-center">
+              <Check className="w-12 h-12 text-green-500 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">All caught up!</h3>
+              <p className="text-neutral-400 text-sm">No ads pending review</p>
+            </div>
+          ) : (
+            pendingAds.map((ad) => (
+              <div key={ad.id} className="dashboard-card p-6">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="font-semibold text-lg">{ad.title}</h3>
+                      <span className="px-2 py-1 bg-neutral-800 rounded text-xs uppercase">
+                        {ad.ad_type}
+                      </span>
+                    </div>
+                    {ad.text_content && (
+                      <p className="text-neutral-400 mb-4">{ad.text_content}</p>
+                    )}
+                    {ad.content_url && (
+                      <p className="text-neutral-500 text-sm mb-4">
+                        Content URL: {ad.content_url}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <div>
+                        <span className="text-neutral-500">Targeting:</span>{" "}
+                        {ad.targeting?.is_global ? (
+                          <span className="text-blue-400">Global</span>
+                        ) : (
+                          <span className="text-purple-400">Local</span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-neutral-500">Duration:</span>{" "}
+                        {ad.duration_seconds}s
+                      </div>
+                      <div>
+                        <span className="text-neutral-500">Submitted:</span>{" "}
+                        {new Date(ad.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6 pt-4 border-t border-neutral-800">
+                  <Button
+                    onClick={() => handleApprove(ad.id)}
+                    className="bg-green-600 hover:bg-green-700 flex-1"
+                  >
+                    <Check className="w-4 h-4 mr-2" />
+                    Approve
+                  </Button>
+                  <Button
+                    onClick={() => handleReject(ad.id)}
+                    variant="outline"
+                    className="border-red-700 text-red-400 hover:bg-red-900/20 flex-1"
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* All Ads */}
+      {activeTab === "all" && (
+        <div className="dashboard-card overflow-hidden">
+          {loading ? (
+            <div className="p-8 text-center">
+              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            </div>
+          ) : allAds.length === 0 ? (
+            <div className="p-8 text-center">
+              <Megaphone className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+              <h3 className="font-semibold mb-2">No ads yet</h3>
+              <p className="text-neutral-400 text-sm">
+                Ads will appear here when advertisers create them
+              </p>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Impressions</th>
+                  <th>Clicks</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allAds.map((ad) => (
+                  <tr key={ad.id}>
+                    <td className="font-medium">{ad.title}</td>
+                    <td className="uppercase text-xs">{ad.ad_type}</td>
+                    <td>
+                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(ad.status)}`}>
+                        {ad.status}
+                      </span>
+                    </td>
+                    <td>{ad.impressions || 0}</td>
+                    <td>{ad.clicks || 0}</td>
+                    <td>
+                      {ad.status === "approved" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleSuspend(ad.id)}
+                          className="border-red-700 text-red-400"
+                        >
+                          Suspend
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Packages Management Component - Updated with new pricing
 const PackagesPage = () => {
   const [packages, setPackages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editingPackage, setEditingPackage] = useState(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    price: "",
-    duration_minutes: "",
-    speed_mbps: "10",
-    description: "",
-  });
 
   useEffect(() => {
     fetchPackages();
@@ -265,319 +514,415 @@ const PackagesPage = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const data = {
-        ...formData,
-        price: parseFloat(formData.price),
-        duration_minutes: parseInt(formData.duration_minutes),
-        speed_mbps: parseFloat(formData.speed_mbps),
-        is_active: true,
-      };
-
-      if (editingPackage) {
-        await axios.put(`${API_URL}/packages/${editingPackage.id}`, data);
-        toast.success("Package updated");
-      } else {
-        await axios.post(`${API_URL}/packages`, data);
-        toast.success("Package created");
-      }
-
-      setShowForm(false);
-      setEditingPackage(null);
-      setFormData({
-        name: "",
-        price: "",
-        duration_minutes: "",
-        speed_mbps: "10",
-        description: "",
-      });
-      fetchPackages();
-    } catch (error) {
-      toast.error("Failed to save package");
-    }
-  };
-
-  const handleEdit = (pkg) => {
-    setEditingPackage(pkg);
-    setFormData({
-      name: pkg.name,
-      price: pkg.price.toString(),
-      duration_minutes: pkg.duration_minutes.toString(),
-      speed_mbps: pkg.speed_mbps.toString(),
-      description: pkg.description || "",
-    });
-    setShowForm(true);
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this package?")) return;
-    try {
-      await axios.delete(`${API_URL}/packages/${id}`);
-      toast.success("Package deleted");
-      fetchPackages();
-    } catch (error) {
-      toast.error("Failed to delete package");
-    }
-  };
-
   return (
     <div className="space-y-6" data-testid="packages-page">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Internet Packages</h1>
-          <p className="text-neutral-400 mt-1">Manage pricing and duration options</p>
+          <p className="text-neutral-400 mt-1">Predefined pricing tiers (Partners select from dropdown)</p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingPackage(null);
-            setFormData({
-              name: "",
-              price: "",
-              duration_minutes: "",
-              speed_mbps: "10",
-              description: "",
-            });
-            setShowForm(!showForm);
-          }}
-          className="bg-blue-600 hover:bg-blue-700"
-          data-testid="add-package-btn"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Package
-        </Button>
       </div>
 
-      {/* Package Form */}
-      {showForm && (
-        <form
-          onSubmit={handleSubmit}
-          className="dashboard-card p-6 space-y-4"
-          data-testid="package-form"
-        >
-          <h3 className="font-semibold">
-            {editingPackage ? "Edit Package" : "New Package"}
-          </h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm text-neutral-400">Package Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="e.g., Quick Access"
-                required
-              />
-            </div>
-            <div>
-              <label className="text-sm text-neutral-400">Price (KES)</label>
-              <input
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="5"
-                required
-              />
-            </div>
-            <div>
-              <label className="text-sm text-neutral-400">Duration (minutes)</label>
-              <input
-                type="number"
-                value={formData.duration_minutes}
-                onChange={(e) =>
-                  setFormData({ ...formData, duration_minutes: e.target.value })
-                }
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="15"
-                required
-              />
-            </div>
-            <div>
-              <label className="text-sm text-neutral-400">Speed (Mbps)</label>
-              <input
-                type="number"
-                value={formData.speed_mbps}
-                onChange={(e) =>
-                  setFormData({ ...formData, speed_mbps: e.target.value })
-                }
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="10"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-sm text-neutral-400">Description</label>
-              <input
-                type="text"
-                value={formData.description}
-                onChange={(e) =>
-                  setFormData({ ...formData, description: e.target.value })
-                }
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="Brief description"
-              />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-              {editingPackage ? "Update Package" : "Create Package"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setShowForm(false);
-                setEditingPackage(null);
-              }}
-              className="border-neutral-700"
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      )}
+      {/* Info Banner */}
+      <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
+        <div>
+          <p className="text-blue-400 font-medium">Fixed Package Pricing</p>
+          <p className="text-neutral-400 text-sm mt-1">
+            Packages are predefined by CAITECH. Hotspot owners can only enable/disable packages for their locations - they cannot modify pricing or create new packages.
+          </p>
+        </div>
+      </div>
 
       {/* Packages Grid */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {packages.map((pkg) => (
-          <div key={pkg.id} className="dashboard-card p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="font-semibold">{pkg.name}</h3>
-                <p className="text-sm text-neutral-400">{pkg.description}</p>
-              </div>
-              <span
-                className={`px-2 py-1 rounded-full text-xs ${
-                  pkg.is_active ? "badge-active" : "badge-inactive"
-                }`}
-              >
-                {pkg.is_active ? "Active" : "Inactive"}
-              </span>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Price</span>
-                <span className="font-bold">{formatCurrency(pkg.price)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Duration</span>
-                <span>{pkg.duration_minutes} min</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-400">Speed</span>
-                <span>{pkg.speed_mbps} Mbps</span>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-800">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 border-neutral-700"
-                onClick={() => handleEdit(pkg)}
-              >
-                <Edit className="w-4 h-4 mr-1" />
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-red-700 text-red-400 hover:bg-red-900/20"
-                onClick={() => handleDelete(pkg.id)}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading ? (
+          <div className="col-span-full flex justify-center py-12">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           </div>
-        ))}
+        ) : (
+          packages.map((pkg) => (
+            <div key={pkg.id} className="dashboard-card p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold">{pkg.name}</h3>
+                  <p className="text-sm text-neutral-400">{pkg.description}</p>
+                </div>
+                <span
+                  className={`px-2 py-1 rounded-full text-xs ${
+                    pkg.is_active ? "badge-active" : "badge-inactive"
+                  }`}
+                >
+                  {pkg.is_active ? "Active" : "Inactive"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">Price</span>
+                  <span className="font-bold text-xl">{formatCurrency(pkg.price)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">Duration</span>
+                  <span>{pkg.duration_minutes} min</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-400">Speed</span>
+                  <span>{pkg.speed_mbps} Mbps</span>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Seed Button */}
       <div className="dashboard-card p-6">
-        <h3 className="font-semibold mb-2">Initialize Default Packages</h3>
+        <h3 className="font-semibold mb-2">Reset to Default Packages</h3>
         <p className="text-neutral-400 text-sm mb-4">
-          Create the standard package tiers (KES 5, 10, 20, 50, 100)
+          Reset packages to: KES 5 (30min), KES 15 (4hr), KES 25 (8hr), KES 30 (12hr), KES 35 (24hr), KES 200 (1wk), KES 600 (1mo)
         </p>
         <Button
           onClick={async () => {
             try {
               await axios.post(`${API_URL}/seed`);
-              toast.success("Default packages created");
+              toast.success("Packages reset to defaults");
               fetchPackages();
             } catch (error) {
-              toast.error("Failed to seed data");
+              toast.error("Failed to reset packages");
             }
           }}
           variant="outline"
           className="border-neutral-700"
         >
           <Package className="w-4 h-4 mr-2" />
-          Seed Default Packages
+          Reset Default Packages
         </Button>
       </div>
     </div>
   );
 };
 
-// Users Management Component
-const UsersPage = () => {
-  const [users, setUsers] = useState([]);
+// Revenue Settings Page
+const RevenueSettingsPage = () => {
+  const [config, setConfig] = useState({
+    base_owner_percentage: 60,
+    coverage_bonus_per_100sqm: 0.5,
+    client_bonus_per_10: 0.5,
+    ad_impression_bonus_per_1000: 1.0,
+    uptime_bonus_threshold: 99,
+    uptime_bonus_percentage: 2.0,
+    max_owner_percentage: 80,
+  });
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  // Mock users data for now
   useEffect(() => {
-    setUsers([
-      { id: "1", name: "Admin User", email: "admin@caitech.com", role: "super_admin", is_active: true },
-    ]);
-    setLoading(false);
+    fetchConfig();
   }, []);
 
+  const fetchConfig = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/settings/revenue-config`);
+      setConfig(response.data);
+    } catch (error) {
+      console.error("Failed to fetch config:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await axios.put(`${API_URL}/settings/revenue-config`, config);
+      toast.success("Revenue configuration saved");
+    } catch (error) {
+      toast.error("Failed to save configuration");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6" data-testid="users-page">
+    <div className="space-y-6" data-testid="revenue-settings">
       <div>
-        <h1 className="text-2xl font-bold">User Management</h1>
-        <p className="text-neutral-400 mt-1">Manage platform users and permissions</p>
+        <h1 className="text-2xl font-bold">Dynamic Revenue Sharing</h1>
+        <p className="text-neutral-400 mt-1">Configure how revenue is split between CAITECH and partners</p>
       </div>
 
-      <div className="dashboard-card overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+      {/* Info Banner */}
+      <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg flex items-start gap-3">
+        <Sliders className="w-5 h-5 text-purple-400 mt-0.5" />
+        <div>
+          <p className="text-purple-400 font-medium">Dynamic Revenue Formula</p>
+          <p className="text-neutral-400 text-sm mt-1">
+            Owner percentage = Base + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus (capped at max)
+          </p>
+        </div>
+      </div>
+
+      <div className="dashboard-card p-6 space-y-6">
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <label className="text-sm text-neutral-400">Base Owner Percentage</label>
+            <input
+              type="number"
+              value={config.base_owner_percentage}
+              onChange={(e) => setConfig({ ...config, base_owner_percentage: parseFloat(e.target.value) })}
+              className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
+              min="0"
+              max="100"
+            />
+            <p className="text-xs text-neutral-500 mt-1">Starting percentage for all partners</p>
+          </div>
+
+          <div>
+            <label className="text-sm text-neutral-400">Max Owner Percentage</label>
+            <input
+              type="number"
+              value={config.max_owner_percentage}
+              onChange={(e) => setConfig({ ...config, max_owner_percentage: parseFloat(e.target.value) })}
+              className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
+              min="0"
+              max="100"
+            />
+            <p className="text-xs text-neutral-500 mt-1">Maximum percentage cap</p>
+          </div>
+
+          <div>
+            <label className="text-sm text-neutral-400">Coverage Bonus (per 100 sqm)</label>
+            <input
+              type="number"
+              value={config.coverage_bonus_per_100sqm}
+              onChange={(e) => setConfig({ ...config, coverage_bonus_per_100sqm: parseFloat(e.target.value) })}
+              className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
+              step="0.1"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-neutral-400">Client Bonus (per 10 daily clients)</label>
+            <input
+              type="number"
+              value={config.client_bonus_per_10}
+              onChange={(e) => setConfig({ ...config, client_bonus_per_10: parseFloat(e.target.value) })}
+              className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
+              step="0.1"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-neutral-400">Ad Impression Bonus (per 1000 impressions)</label>
+            <input
+              type="number"
+              value={config.ad_impression_bonus_per_1000}
+              onChange={(e) => setConfig({ ...config, ad_impression_bonus_per_1000: parseFloat(e.target.value) })}
+              className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
+              step="0.1"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-neutral-400">Uptime Bonus Percentage</label>
+            <input
+              type="number"
+              value={config.uptime_bonus_percentage}
+              onChange={(e) => setConfig({ ...config, uptime_bonus_percentage: parseFloat(e.target.value) })}
+              className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
+              step="0.1"
+            />
+            <p className="text-xs text-neutral-500 mt-1">
+              Bonus when uptime ≥ {config.uptime_bonus_threshold}%
+            </p>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-neutral-800">
+          <Button
+            onClick={handleSave}
+            className="bg-blue-600 hover:bg-blue-700"
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save Configuration"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Example Calculation */}
+      <div className="dashboard-card p-6">
+        <h3 className="font-semibold mb-4">Example Calculation</h3>
+        <div className="space-y-2 text-sm">
+          <p className="text-neutral-400">For a hotspot with 200sqm coverage, 50 daily clients, 5000 ad impressions, 99.5% uptime:</p>
+          <div className="bg-neutral-900 rounded-lg p-4 font-mono text-xs">
+            <p>Base: {config.base_owner_percentage}%</p>
+            <p>+ Coverage (200/100 × {config.coverage_bonus_per_100sqm}): {(200/100 * config.coverage_bonus_per_100sqm).toFixed(1)}%</p>
+            <p>+ Clients (50/10 × {config.client_bonus_per_10}): {(50/10 * config.client_bonus_per_10).toFixed(1)}%</p>
+            <p>+ Ad Impressions (5000/1000 × {config.ad_impression_bonus_per_1000}): {(5000/1000 * config.ad_impression_bonus_per_1000).toFixed(1)}%</p>
+            <p>+ Uptime Bonus: {config.uptime_bonus_percentage}%</p>
+            <p className="border-t border-neutral-700 pt-2 mt-2 text-green-400">
+              Total: {Math.min(
+                config.base_owner_percentage +
+                (200/100 * config.coverage_bonus_per_100sqm) +
+                (50/10 * config.client_bonus_per_10) +
+                (5000/1000 * config.ad_impression_bonus_per_1000) +
+                config.uptime_bonus_percentage,
+                config.max_owner_percentage
+              ).toFixed(1)}% (capped at {config.max_owner_percentage}%)
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Integration Settings Page
+const IntegrationSettingsPage = () => {
+  const [mpesaStatus, setMpesaStatus] = useState(null);
+  const [smsStatus, setSmsStatus] = useState(null);
+  const [whatsappStatus, setWhatsappStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStatuses();
+  }, []);
+
+  const fetchStatuses = async () => {
+    try {
+      const [mpesa, sms, whatsapp] = await Promise.all([
+        axios.get(`${API_URL}/settings/mpesa`),
+        axios.get(`${API_URL}/settings/sms`),
+        axios.get(`${API_URL}/settings/whatsapp`),
+      ]);
+      setMpesaStatus(mpesa.data);
+      setSmsStatus(sms.data);
+      setWhatsappStatus(whatsapp.data);
+    } catch (error) {
+      console.error("Failed to fetch statuses:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="integration-settings">
+      <div>
+        <h1 className="text-2xl font-bold">Integration Settings</h1>
+        <p className="text-neutral-400 mt-1">Configure payment and notification integrations</p>
+      </div>
+
+      {/* M-Pesa */}
+      <div className="dashboard-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-green-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold">M-Pesa Daraja API</h3>
+              <p className="text-neutral-400 text-sm">Safaricom mobile payments</p>
+            </div>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-sm ${mpesaStatus?.configured ? "badge-active" : "badge-pending"}`}>
+            {mpesaStatus?.configured ? "Configured" : "Not Configured"}
+          </span>
+        </div>
+        {mpesaStatus?.configured ? (
+          <div className="bg-neutral-900 rounded-lg p-4 space-y-2 text-sm">
+            <p><span className="text-neutral-400">Environment:</span> {mpesaStatus.environment}</p>
+            <p><span className="text-neutral-400">Shortcode:</span> {mpesaStatus.shortcode_configured ? "✓ Set" : "✗ Not set"}</p>
+            <p><span className="text-neutral-400">Callback URL:</span> {mpesaStatus.callback_url}</p>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td className="font-medium">{user.name}</td>
-                  <td className="text-neutral-400">{user.email}</td>
-                  <td>
-                    <span className="px-2 py-1 bg-neutral-800 rounded-md text-xs">
-                      {user.role.replace("_", " ")}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-                        user.is_active ? "badge-active" : "badge-inactive"
-                      }`}
-                    >
-                      {user.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <p className="text-yellow-400 text-sm">
+              Add M-Pesa credentials to backend/.env file:
+            </p>
+            <pre className="mt-2 text-xs text-neutral-400 font-mono">
+{`MPESA_CONSUMER_KEY=your_key
+MPESA_CONSUMER_SECRET=your_secret
+MPESA_SHORTCODE=your_shortcode
+MPESA_PASSKEY=your_passkey
+MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback`}
+            </pre>
+          </div>
+        )}
+      </div>
+
+      {/* SMS */}
+      <div className="dashboard-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+              <Bell className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold">SMS Gateway</h3>
+              <p className="text-neutral-400 text-sm">Africa's Talking / Centipid</p>
+            </div>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-sm ${smsStatus?.configured ? "badge-active" : "badge-pending"}`}>
+            {smsStatus?.configured ? "Configured" : "Not Configured"}
+          </span>
+        </div>
+        {!smsStatus?.configured && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <p className="text-yellow-400 text-sm">
+              Add SMS credentials to backend/.env file:
+            </p>
+            <pre className="mt-2 text-xs text-neutral-400 font-mono">
+{`SMS_PROVIDER=africas_talking
+SMS_API_KEY=your_api_key
+SMS_USERNAME=your_username
+SMS_SENDER_ID=CAITECH`}
+            </pre>
+          </div>
+        )}
+      </div>
+
+      {/* WhatsApp */}
+      <div className="dashboard-card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
+              <Bell className="w-5 h-5 text-green-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold">WhatsApp (Twilio)</h3>
+              <p className="text-neutral-400 text-sm">WhatsApp Business notifications</p>
+            </div>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-sm ${whatsappStatus?.configured ? "badge-active" : "badge-pending"}`}>
+            {whatsappStatus?.configured ? "Configured" : "Not Configured"}
+          </span>
+        </div>
+        {!whatsappStatus?.configured && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <p className="text-yellow-400 text-sm">
+              Add Twilio credentials to backend/.env file:
+            </p>
+            <pre className="mt-2 text-xs text-neutral-400 font-mono">
+{`TWILIO_ACCOUNT_SID=your_account_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_NUMBER=+14155238886`}
+            </pre>
+          </div>
         )}
       </div>
     </div>
@@ -601,6 +946,16 @@ const AllHotspotsPage = () => {
       console.error("Failed to fetch hotspots:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (hotspotId, status) => {
+    try {
+      await axios.put(`${API_URL}/hotspots/${hotspotId}/status?status=${status}`);
+      toast.success(`Hotspot ${status}`);
+      fetchHotspots();
+    } catch (error) {
+      toast.error("Failed to update status");
     }
   };
 
@@ -631,9 +986,9 @@ const AllHotspotsPage = () => {
                 <th>Name</th>
                 <th>SSID</th>
                 <th>Location</th>
-                <th>Owner</th>
                 <th>Status</th>
                 <th>Revenue</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -642,18 +997,40 @@ const AllHotspotsPage = () => {
                   <td className="font-medium">{hotspot.name}</td>
                   <td className="font-mono text-sm text-neutral-400">{hotspot.ssid}</td>
                   <td>{hotspot.location_name}</td>
-                  <td className="text-neutral-400">{hotspot.owner_id.slice(0, 8)}...</td>
                   <td>
                     <span
                       className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-                        hotspot.is_active ? "badge-active" : "badge-inactive"
+                        hotspot.status === "active" ? "badge-active" :
+                        hotspot.status === "suspended" ? "bg-red-500/10 text-red-400 border border-red-500/30" :
+                        "badge-pending"
                       }`}
                     >
-                      {hotspot.is_active ? "Active" : "Inactive"}
+                      {hotspot.status}
                     </span>
                   </td>
                   <td className="font-medium">
                     {formatCurrency(hotspot.total_revenue || 0)}
+                  </td>
+                  <td>
+                    {hotspot.status === "active" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-700 text-red-400"
+                        onClick={() => handleStatusChange(hotspot.id, "suspended")}
+                      >
+                        Suspend
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-green-700 text-green-400"
+                        onClick={() => handleStatusChange(hotspot.id, "active")}
+                      >
+                        Activate
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -665,99 +1042,55 @@ const AllHotspotsPage = () => {
   );
 };
 
-// Campaigns Management Component
-const CampaignsPage = () => {
-  const [campaigns, setCampaigns] = useState([]);
+// Users Management Component
+const UsersPage = () => {
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchCampaigns();
+    // For now, show current admin
+    setUsers([
+      { id: "1", name: "CAITECH Admin", email: "admin@caitech.com", role: "super_admin", is_active: true },
+    ]);
+    setLoading(false);
   }, []);
 
-  const fetchCampaigns = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/campaigns`);
-      setCampaigns(response.data);
-    } catch (error) {
-      console.error("Failed to fetch campaigns:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="space-y-6" data-testid="campaigns-page">
+    <div className="space-y-6" data-testid="users-page">
       <div>
-        <h1 className="text-2xl font-bold">Ad Campaigns</h1>
-        <p className="text-neutral-400 mt-1">Manage advertising campaigns</p>
+        <h1 className="text-2xl font-bold">User Management</h1>
+        <p className="text-neutral-400 mt-1">Manage platform users and permissions</p>
       </div>
 
       <div className="dashboard-card overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          </div>
-        ) : campaigns.length === 0 ? (
-          <div className="p-8 text-center">
-            <Megaphone className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
-            <h3 className="font-semibold mb-2">No campaigns yet</h3>
-            <p className="text-neutral-400 text-sm">
-              Campaigns will appear here when advertisers create them
-            </p>
-          </div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Campaign</th>
-                <th>Budget</th>
-                <th>Duration</th>
-                <th>Target</th>
-                <th>Status</th>
-                <th>Impressions</th>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((user) => (
+              <tr key={user.id}>
+                <td className="font-medium">{user.name}</td>
+                <td className="text-neutral-400">{user.email}</td>
+                <td>
+                  <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded-md text-xs">
+                    {user.role.replace("_", " ")}
+                  </span>
+                </td>
+                <td>
+                  <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${user.is_active ? "badge-active" : "badge-inactive"}`}>
+                    {user.is_active ? "Active" : "Inactive"}
+                  </span>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {campaigns.map((campaign) => (
-                <tr key={campaign.id}>
-                  <td className="font-medium">{campaign.name}</td>
-                  <td>{formatCurrency(campaign.budget)}</td>
-                  <td className="text-sm text-neutral-400">
-                    {new Date(campaign.start_date).toLocaleDateString()} -{" "}
-                    {new Date(campaign.end_date).toLocaleDateString()}
-                  </td>
-                  <td>
-                    {campaign.target_global ? (
-                      <span className="flex items-center gap-1">
-                        <Globe className="w-4 h-4 text-blue-400" />
-                        Global
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1">
-                        <Target className="w-4 h-4 text-purple-400" />
-                        Local
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs ${
-                        campaign.status === "active"
-                          ? "badge-active"
-                          : campaign.status === "pending"
-                          ? "badge-pending"
-                          : "badge-inactive"
-                      }`}
-                    >
-                      {campaign.status}
-                    </span>
-                  </td>
-                  <td>{campaign.total_impressions || 0}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -771,21 +1104,23 @@ const AdminDashboard = () => {
 
   const navigation = [
     { name: "Overview", href: "/admin", icon: LayoutDashboard },
+    { name: "Ad Approval", href: "/admin/ads", icon: Megaphone, badge: true },
     { name: "Hotspots", href: "/admin/hotspots", icon: Radio },
     { name: "Packages", href: "/admin/packages", icon: Package },
-    { name: "Campaigns", href: "/admin/campaigns", icon: Megaphone },
     { name: "Users", href: "/admin/users", icon: Users },
-    { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-    { name: "Settings", href: "/admin/settings", icon: Settings },
+    { name: "Revenue Settings", href: "/admin/revenue", icon: Sliders },
+    { name: "Integrations", href: "/admin/integrations", icon: Settings },
+    { name: "Marketplace", href: "/admin/marketplace", icon: ShoppingBag },
   ];
 
   return (
-    <div className="min-h-screen bg-[#050505] flex">
+    <div className="min-h-screen flex" style={{ backgroundColor: '#050505' }}>
       {/* Sidebar */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 w-64 sidebar transform transition-transform duration-200 lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ backgroundColor: '#0a0a0a', borderRight: '1px solid rgba(255,255,255,0.05)' }}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
@@ -802,7 +1137,7 @@ const AdminDashboard = () => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1">
+          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.map((item) => {
               const isActive =
                 location.pathname === item.href ||
@@ -820,6 +1155,9 @@ const AdminDashboard = () => {
                 >
                   <item.icon className="w-5 h-5" strokeWidth={1.5} />
                   {item.name}
+                  {item.badge && item.name === "Ad Approval" && (
+                    <span className="ml-auto w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                  )}
                 </Link>
               );
             })}
@@ -861,7 +1199,7 @@ const AdminDashboard = () => {
       {/* Main Content */}
       <div className="flex-1 lg:pl-64">
         {/* Top Bar */}
-        <header className="h-16 border-b border-neutral-800 flex items-center justify-between px-6">
+        <header className="h-16 border-b border-neutral-800 flex items-center justify-between px-6" style={{ backgroundColor: '#050505' }}>
           <button
             className="lg:hidden p-2 -ml-2"
             onClick={() => setSidebarOpen(true)}
@@ -882,32 +1220,31 @@ const AdminDashboard = () => {
         <main className="p-6 lg:p-8">
           <Routes>
             <Route index element={<AdminOverview />} />
+            <Route path="ads" element={<AdApprovalPage />} />
             <Route path="hotspots" element={<AllHotspotsPage />} />
             <Route path="packages" element={<PackagesPage />} />
-            <Route path="campaigns" element={<CampaignsPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="revenue" element={<RevenueSettingsPage />} />
+            <Route path="integrations" element={<IntegrationSettingsPage />} />
             <Route
-              path="analytics"
+              path="marketplace"
               element={
                 <div className="text-center py-12">
-                  <BarChart3 className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Platform Analytics</h2>
-                  <p className="text-neutral-400">Advanced analytics coming soon</p>
-                </div>
-              }
-            />
-            <Route
-              path="settings"
-              element={
-                <div className="text-center py-12">
-                  <Settings className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Platform Settings</h2>
-                  <p className="text-neutral-400">Settings coming soon</p>
+                  <ShoppingBag className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Equipment Marketplace</h2>
+                  <p className="text-neutral-400">Manage marketplace items coming soon</p>
                 </div>
               }
             />
           </Routes>
         </main>
+
+        {/* Mandatory Footer */}
+        <footer className="p-4 text-center border-t border-neutral-800">
+          <p className="text-neutral-500 text-xs">
+            Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+          </p>
+        </footer>
       </div>
     </div>
   );
