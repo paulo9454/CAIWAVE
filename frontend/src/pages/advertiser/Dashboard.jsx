@@ -874,6 +874,15 @@ const AdvertiserDashboard = () => {
             />
           </Routes>
         </main>
+        
+        {/* Footer */}
+        <footer className="p-4 text-center border-t border-neutral-800">
+          <p className="text-neutral-500 text-xs">
+            Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+            <span className="mx-2">|</span>
+            <a href="tel:0738570630" className="text-neutral-500 hover:text-blue-400 transition-colors">Support</a>
+          </p>
+        </footer>
       </div>
     </div>
   );
