@@ -350,13 +350,13 @@ class NotificationRequest(BaseModel):
 
 # Revenue Sharing Models
 class RevenueConfig(BaseModel):
-    base_owner_percentage: float = 60.0  # Base percentage
+    base_owner_percentage: float = 30.0  # Base percentage for partners
     coverage_bonus_per_100sqm: float = 0.5
     client_bonus_per_10: float = 0.5
     ad_impression_bonus_per_1000: float = 1.0
     uptime_bonus_threshold: float = 99.0
     uptime_bonus_percentage: float = 2.0
-    max_owner_percentage: float = 80.0
+    max_owner_percentage: float = 50.0  # Maximum cap for partner share
 
 class DynamicRevenue(BaseModel):
     total_amount: float
@@ -364,6 +364,7 @@ class DynamicRevenue(BaseModel):
     platform_share: float
     owner_percentage: float
     breakdown: Dict[str, float]
+    capped: bool = False  # Indicates if cap was applied
 
 # Settings Models
 class SystemSettings(BaseModel):
