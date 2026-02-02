@@ -6,7 +6,6 @@ import { API_URL, formatCurrency, formatDuration } from "../lib/utils";
 import { toast } from "sonner";
 import axios from "axios";
 import {
-  Wifi,
   Clock,
   CreditCard,
   Play,
@@ -16,6 +15,7 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-react";
+import { CaitechLogo } from "../components/CaitechLogo";
 
 const CaptivePortal = () => {
   const { hotspotId } = useParams();

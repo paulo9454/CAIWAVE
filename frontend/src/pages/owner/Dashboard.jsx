@@ -6,7 +6,6 @@ import { API_URL, formatCurrency } from "../../lib/utils";
 import axios from "axios";
 import { toast } from "sonner";
 import {
-  Wifi,
   LayoutDashboard,
   Radio,
   CreditCard,
@@ -22,6 +21,7 @@ import {
   Plus,
   BarChart3,
 } from "lucide-react";
+import { CaitechLogo } from "../../components/CaitechLogo";
 import {
   AreaChart,
   Area,

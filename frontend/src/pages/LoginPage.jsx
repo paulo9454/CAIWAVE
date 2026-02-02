@@ -5,7 +5,8 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { login, getDashboardPath } from "../lib/auth";
 import { toast } from "sonner";
-import { Wifi, ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { CaitechLogo } from "../components/CaitechLogo";
 
 const LoginPage = () => {
   const navigate = useNavigate();
