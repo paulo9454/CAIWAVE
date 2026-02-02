@@ -461,7 +461,7 @@ const LandingPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-6 lg:px-12 border-t border-neutral-800">
+      <footer className="py-12 px-6 lg:px-12 border-t border-neutral-800" style={{ backgroundColor: '#0a0a0a' }}>
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8">
             <div>
@@ -503,8 +503,10 @@ const LandingPage = () => {
             </div>
           </div>
           
-          <div className="mt-12 pt-8 border-t border-neutral-800 text-center text-neutral-500 text-sm">
-            © 2024 CAITECH. All rights reserved.
+          <div className="mt-12 pt-8 border-t border-neutral-800 text-center">
+            <p className="text-neutral-500 text-sm">
+              Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+            </p>
           </div>
         </div>
       </footer>
