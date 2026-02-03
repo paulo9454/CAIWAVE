@@ -127,6 +127,25 @@ class NotificationType(str, Enum):
     WHATSAPP = "whatsapp"
     EMAIL = "email"
 
+class CampaignStatus(str, Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+
+class StreamAccessType(str, Enum):
+    FREE = "free"
+    DISCOUNTED = "discounted"
+    SPONSORED = "sponsored"
+    PAID = "paid"
+
+class SubsidizedUptimeStatus(str, Enum):
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    ACTIVE = "active"
+    EXPIRED = "expired"
+
 # ==================== Models ====================
 
 # User Models
