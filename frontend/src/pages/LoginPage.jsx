@@ -37,10 +37,8 @@ const LoginPage = () => {
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#0a0a0a] border-r border-neutral-800 flex-col justify-between p-12">
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Wifi className="w-6 h-6 text-white" strokeWidth={1.5} />
-          </div>
-          <span className="font-semibold text-2xl">CAITECH</span>
+          <CaiwaveLogo size={40} />
+          <span className="font-semibold text-2xl">CAIWAVE</span>
         </Link>
 
         <div className="space-y-6">
@@ -55,7 +53,7 @@ const LoginPage = () => {
         </div>
 
         <div className="text-neutral-500 text-sm">
-          © 2024 CAITECH. All rights reserved.
+          © 2026 CAIWAVE. All rights reserved.
         </div>
       </div>
 
@@ -76,10 +74,8 @@ const LoginPage = () => {
             {/* Mobile Logo */}
             <div className="lg:hidden flex justify-center">
               <Link to="/" className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Wifi className="w-6 h-6 text-white" strokeWidth={1.5} />
-                </div>
-                <span className="font-semibold text-2xl">CAITECH</span>
+                <CaiwaveLogo size={40} />
+                <span className="font-semibold text-2xl">CAIWAVE</span>
               </Link>
             </div>
 
