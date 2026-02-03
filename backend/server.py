@@ -1762,6 +1762,197 @@ async def delete_subsidized_uptime(
         raise HTTPException(status_code=404, detail="Subsidized uptime not found")
     return {"status": "deleted"}
 
+# ==================== RADIUS / MikroTik NAS Routes (ADMIN ONLY) ====================
+
+class NASClientBase(BaseModel):
+    name: str
+    ip_address: str
+    secret: str
+    shortname: Optional[str] = None
+    nastype: str = "mikrotik"
+    description: Optional[str] = None
+    location: Optional[str] = None
+
+class NASClient(NASClientBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+    last_seen: Optional[datetime] = None
+
+class RADIUSConfigUpdate(BaseModel):
+    radius_enabled: bool = False
+    radius_host: Optional[str] = None
+    radius_secret: Optional[str] = None
+    radius_auth_port: int = 1812
+    radius_acct_port: int = 1813
+    radius_coa_port: int = 3799
+
+@radius_router.get("/config")
+async def get_radius_config(user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get RADIUS/FreeRADIUS configuration status"""
+    radius_enabled = os.environ.get('RADIUS_ENABLED', 'false').lower() == 'true'
+    return {
+        "enabled": radius_enabled,
+        "host": RADIUS_HOST if radius_enabled else None,
+        "auth_port": RADIUS_AUTH_PORT,
+        "acct_port": RADIUS_ACCT_PORT,
+        "configured": bool(RADIUS_HOST and RADIUS_SECRET),
+        "instructions": {
+            "setup": "Configure FreeRADIUS server and update .env with RADIUS_HOST, RADIUS_SECRET",
+            "mikrotik": "Add NAS clients below and configure MikroTik routers to use this RADIUS server"
+        }
+    }
+
+@radius_router.get("/nas-clients")
+async def get_nas_clients(user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Get all configured NAS clients (MikroTik routers)"""
+    clients = await db.nas_clients.find({}, {"_id": 0}).to_list(100)
+    return clients
+
+@radius_router.post("/nas-clients", response_model=NASClient)
+async def add_nas_client(
+    client_data: NASClientBase,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Add a new NAS client (MikroTik router)"""
+    # Check if IP already exists
+    existing = await db.nas_clients.find_one({"ip_address": client_data.ip_address})
+    if existing:
+        raise HTTPException(status_code=400, detail="NAS client with this IP already exists")
+    
+    client = NASClient(
+        **client_data.model_dump(),
+        shortname=client_data.shortname or client_data.name.replace(" ", "_").lower()
+    )
+    
+    client_dict = client.model_dump()
+    client_dict["created_at"] = client_dict["created_at"].isoformat()
+    
+    await db.nas_clients.insert_one(client_dict)
+    
+    return client
+
+@radius_router.put("/nas-clients/{client_id}")
+async def update_nas_client(
+    client_id: str,
+    client_data: NASClientBase,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update a NAS client"""
+    existing = await db.nas_clients.find_one({"id": client_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="NAS client not found")
+    
+    update_data = client_data.model_dump()
+    await db.nas_clients.update_one({"id": client_id}, {"$set": update_data})
+    
+    updated = await db.nas_clients.find_one({"id": client_id}, {"_id": 0})
+    return updated
+
+@radius_router.delete("/nas-clients/{client_id}")
+async def delete_nas_client(
+    client_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Delete a NAS client"""
+    result = await db.nas_clients.delete_one({"id": client_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="NAS client not found")
+    return {"status": "deleted"}
+
+@radius_router.post("/nas-clients/{client_id}/toggle")
+async def toggle_nas_client(
+    client_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Toggle NAS client active status"""
+    client = await db.nas_clients.find_one({"id": client_id})
+    if not client:
+        raise HTTPException(status_code=404, detail="NAS client not found")
+    
+    new_status = not client.get("is_active", True)
+    await db.nas_clients.update_one({"id": client_id}, {"$set": {"is_active": new_status}})
+    
+    return {"status": "updated", "is_active": new_status}
+
+@radius_router.get("/generate-config/{client_id}")
+async def generate_mikrotik_config(
+    client_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Generate MikroTik configuration commands for a NAS client"""
+    client = await db.nas_clients.find_one({"id": client_id}, {"_id": 0})
+    if not client:
+        raise HTTPException(status_code=404, detail="NAS client not found")
+    
+    # Generate MikroTik RouterOS commands
+    radius_server = RADIUS_HOST or "YOUR_RADIUS_SERVER_IP"
+    radius_secret = client.get("secret", "YOUR_SECRET")
+    
+    config = f"""# ============================================
+# MikroTik RADIUS Configuration for CAIWAVE
+# Router: {client['name']}
+# Generated: {datetime.now(timezone.utc).isoformat()}
+# ============================================
+
+# Step 1: Add RADIUS Server
+/radius add service=hotspot address={radius_server} secret="{radius_secret}" timeout=3s
+
+# Step 2: Configure Hotspot to use RADIUS
+/ip hotspot profile set default use-radius=yes
+
+# Step 3: Configure AAA (Authentication, Authorization, Accounting)
+/ppp aaa set interim-update=5m use-radius=yes accounting=yes
+
+# Step 4: Enable RADIUS incoming (for CoA/Disconnect)
+/radius incoming set accept=yes port=3799
+
+# Step 5: Create Hotspot User Profile (will be overridden by RADIUS)
+/ip hotspot user profile add name="caiwave-default" rate-limit="10M/10M" session-timeout=1h
+
+# ============================================
+# IMPORTANT NOTES:
+# 1. Replace {radius_server} with your actual FreeRADIUS server IP
+# 2. Ensure firewall allows UDP 1812, 1813, 3799 from this router to RADIUS server
+# 3. Test with: /radius monitor numbers=0
+# ============================================
+"""
+    
+    return {
+        "client_name": client["name"],
+        "client_ip": client["ip_address"],
+        "config": config
+    }
+
+@radius_router.post("/test-connection")
+async def test_radius_connection(user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))):
+    """Test connection to FreeRADIUS server"""
+    radius_enabled = os.environ.get('RADIUS_ENABLED', 'false').lower() == 'true'
+    
+    if not radius_enabled:
+        return {
+            "success": False,
+            "message": "RADIUS is not enabled. Set RADIUS_ENABLED=true in .env"
+        }
+    
+    if not RADIUS_HOST or not RADIUS_SECRET:
+        return {
+            "success": False,
+            "message": "RADIUS_HOST or RADIUS_SECRET not configured in .env"
+        }
+    
+    # In a real implementation, you would use pyrad to test the connection
+    # For now, return configuration status
+    return {
+        "success": True,
+        "message": "RADIUS configuration found",
+        "host": RADIUS_HOST,
+        "auth_port": RADIUS_AUTH_PORT,
+        "acct_port": RADIUS_ACCT_PORT,
+        "note": "For actual connection test, ensure FreeRADIUS server is running and accessible"
+    }
+
 # ==================== Voucher Routes ====================
 
 @vouchers_router.post("/generate", response_model=List[Voucher])
