@@ -158,7 +158,7 @@ class CaitechAPITester:
             
         hotspot_data = {
             "name": "Test Hotspot",
-            "ssid": "CAITECH-TEST",
+            "ssid": "CAIWAVE-TEST",
             "location_name": "Test Location",
             "ward": "Test Ward", 
             "constituency": "Test Constituency",
@@ -220,7 +220,7 @@ class CaitechAPITester:
 
     def run_all_tests(self):
         """Run all API tests"""
-        self.log("🚀 Starting CAITECH API Testing")
+        self.log("🚀 Starting CAIWAVE API Testing")
         self.log(f"🌐 Base URL: {self.base_url}")
         
         # Basic health and setup tests

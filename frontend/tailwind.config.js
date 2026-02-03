@@ -53,7 +53,7 @@ module.exports = {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))'
         },
-        // Custom CAITECH dark theme colors
+        // Custom CAIWAVE dark theme colors
         'dark-bg': '#050505',
         'dark-100': '#0a0a0a',
         'dark-200': '#121212',
