@@ -758,11 +758,9 @@ const AdvertiserDashboard = () => {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="h-16 flex items-center gap-2 px-6 border-b border-neutral-800">
-            <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-              <Wifi className="w-5 h-5 text-white" strokeWidth={1.5} />
-            </div>
+            <CaiwaveLogo size={32} />
             <div>
-              <span className="font-semibold">CAITECH</span>
+              <span className="font-semibold">CAIWAVE</span>
               <span className="ml-2 text-xs px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded">
                 Ads
               </span>
@@ -878,7 +876,7 @@ const AdvertiserDashboard = () => {
         {/* Footer */}
         <footer className="p-4 text-center border-t border-neutral-800">
           <p className="text-neutral-500 text-xs">
-            Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+            Powered by <span className="text-blue-400 font-medium">CAIWAVE WiFi</span> © 2026. All Rights Reserved.
             <span className="mx-2">|</span>
             <a href="tel:0738570630" className="text-neutral-500 hover:text-blue-400 transition-colors">Support</a>
           </p>
