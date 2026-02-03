@@ -249,7 +249,7 @@ const AdminOverview = () => {
   );
 };
 
-// Ad Approval Page - CRITICAL FOR CAITECH ADMIN
+// Ad Approval Page - CRITICAL FOR CAIWAVE ADMIN
 const AdApprovalPage = () => {
   const [pendingAds, setPendingAds] = useState([]);
   const [allAds, setAllAds] = useState([]);
@@ -529,7 +529,7 @@ const PackagesPage = () => {
         <div>
           <p className="text-blue-400 font-medium">Fixed Package Pricing</p>
           <p className="text-neutral-400 text-sm mt-1">
-            Packages are predefined by CAITECH. Hotspot owners can only enable/disable packages for their locations - they cannot modify pricing or create new packages.
+            Packages are predefined by CAIWAVE. Hotspot owners can only enable/disable packages for their locations - they cannot modify pricing or create new packages.
           </p>
         </div>
       </div>
@@ -677,7 +677,7 @@ const RevenueSettingsPage = () => {
     <div className="space-y-6" data-testid="revenue-settings">
       <div>
         <h1 className="text-2xl font-bold">Dynamic Revenue Sharing</h1>
-        <p className="text-neutral-400 mt-1">Configure how revenue is split between CAITECH and partners</p>
+        <p className="text-neutral-400 mt-1">Configure how revenue is split between CAIWAVE and partners</p>
       </div>
 
       {/* Info Banner */}
@@ -931,7 +931,7 @@ MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback`}
 {`SMS_PROVIDER=africas_talking
 SMS_API_KEY=your_api_key
 SMS_USERNAME=your_username
-SMS_SENDER_ID=CAITECH`}
+SMS_SENDER_ID=CAIWAVE`}
             </pre>
           </div>
         )}
@@ -1091,7 +1091,7 @@ const UsersPage = () => {
   useEffect(() => {
     // For now, show current admin
     setUsers([
-      { id: "1", name: "CAITECH Admin", email: "admin@caitech.com", role: "super_admin", is_active: true },
+      { id: "1", name: "CAIWAVE Admin", email: "admin@caiwave.com", role: "super_admin", is_active: true },
     ]);
     setLoading(false);
   }, []);
