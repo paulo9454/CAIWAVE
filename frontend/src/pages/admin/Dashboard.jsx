@@ -1169,7 +1169,7 @@ const CampaignsPage = () => {
   const fetchCampaigns = async () => {
     try {
       const response = await axios.get(`${API_URL}/campaigns/`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       setCampaigns(response.data);
     } catch (error) {
@@ -1182,7 +1182,7 @@ const CampaignsPage = () => {
   const fetchApprovedAds = async () => {
     try {
       const response = await axios.get(`${API_URL}/ads/?status=approved`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       setAvailableAds(response.data);
     } catch (error) {
@@ -1201,12 +1201,12 @@ const CampaignsPage = () => {
       
       if (editingCampaign) {
         await axios.put(`${API_URL}/campaigns/${editingCampaign.id}`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
         });
         toast.success("Campaign updated");
       } else {
         await axios.post(`${API_URL}/campaigns/`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
         });
         toast.success("Campaign created");
       }
@@ -1223,7 +1223,7 @@ const CampaignsPage = () => {
   const handleStatusChange = async (campaignId, newStatus) => {
     try {
       await axios.post(`${API_URL}/campaigns/${campaignId}/status?status=${newStatus}`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       toast.success(`Campaign ${newStatus}`);
       fetchCampaigns();
@@ -1236,7 +1236,7 @@ const CampaignsPage = () => {
     if (!window.confirm("Are you sure you want to delete this campaign?")) return;
     try {
       await axios.delete(`${API_URL}/campaigns/${campaignId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       toast.success("Campaign deleted");
       fetchCampaigns();
@@ -1423,7 +1423,7 @@ const CaiwaveTVPage = () => {
   const fetchStreams = async () => {
     try {
       const response = await axios.get(`${API_URL}/streams/`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       setStreams(response.data);
     } catch (error) {
@@ -1447,12 +1447,12 @@ const CaiwaveTVPage = () => {
       
       if (editingStream) {
         await axios.put(`${API_URL}/streams/${editingStream.id}`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
         });
         toast.success("Stream updated");
       } else {
         await axios.post(`${API_URL}/streams/`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
         });
         toast.success("Stream created");
       }
@@ -1469,7 +1469,7 @@ const CaiwaveTVPage = () => {
   const handleToggle = async (streamId) => {
     try {
       await axios.post(`${API_URL}/streams/${streamId}/toggle`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       toast.success("Stream status updated");
       fetchStreams();
@@ -1482,7 +1482,7 @@ const CaiwaveTVPage = () => {
     if (!window.confirm("Are you sure you want to delete this stream?")) return;
     try {
       await axios.delete(`${API_URL}/streams/${streamId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       toast.success("Stream deleted");
       fetchStreams();
@@ -1690,7 +1690,7 @@ const SubsidizedUptimePage = () => {
   const fetchUptimes = async () => {
     try {
       const response = await axios.get(`${API_URL}/subsidized-uptime/`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       setUptimes(response.data);
     } catch (error) {
@@ -1716,12 +1716,12 @@ const SubsidizedUptimePage = () => {
       
       if (editingUptime) {
         await axios.put(`${API_URL}/subsidized-uptime/${editingUptime.id}`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
         });
         toast.success("Subsidized uptime updated");
       } else {
         await axios.post(`${API_URL}/subsidized-uptime/`, payload, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
         });
         toast.success("Subsidized uptime created");
       }
@@ -1738,7 +1738,7 @@ const SubsidizedUptimePage = () => {
   const handleStatusChange = async (uptimeId, newStatus) => {
     try {
       await axios.post(`${API_URL}/subsidized-uptime/${uptimeId}/status?status=${newStatus}`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       toast.success(`Status updated to ${newStatus}`);
       fetchUptimes();
@@ -1751,7 +1751,7 @@ const SubsidizedUptimePage = () => {
     if (!window.confirm("Are you sure you want to delete this offer?")) return;
     try {
       await axios.delete(`${API_URL}/subsidized-uptime/${uptimeId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
       toast.success("Deleted successfully");
       fetchUptimes();
