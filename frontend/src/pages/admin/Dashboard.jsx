@@ -119,7 +119,7 @@ const AdminOverview = () => {
           </div>
           <p className="text-green-400 text-sm mt-3 flex items-center gap-1">
             <TrendingUp className="w-4 h-4" />
-            Partner: 30-50% | CAITECH: 50-70%
+            Partner: 30-50% | CAIWAVE: 50-70%
           </p>
         </div>
 
@@ -799,7 +799,7 @@ const RevenueSettingsPage = () => {
               Total: {example.total}% {example.capped && <span className="text-yellow-400">(capped at {config.max_owner_percentage}%)</span>}
             </p>
             <p className="text-blue-400 mt-2">
-              CAITECH receives: {(100 - parseFloat(example.total)).toFixed(1)}%
+              CAIWAVE receives: {(100 - parseFloat(example.total)).toFixed(1)}%
             </p>
           </div>
         </div>
@@ -815,7 +815,7 @@ const RevenueSettingsPage = () => {
             <p className="text-neutral-500 text-xs mt-1">Base + bonuses (capped)</p>
           </div>
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
-            <p className="text-blue-400 text-sm">CAITECH Share</p>
+            <p className="text-blue-400 text-sm">CAIWAVE Share</p>
             <p className="text-2xl font-bold text-blue-400">{100 - config.max_owner_percentage}% - {100 - config.base_owner_percentage}%</p>
             <p className="text-neutral-500 text-xs mt-1">Platform revenue</p>
           </div>
@@ -1166,11 +1166,9 @@ const AdminDashboard = () => {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="h-16 flex items-center gap-2 px-6 border-b border-neutral-800">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-              <Wifi className="w-5 h-5 text-white" strokeWidth={1.5} />
-            </div>
+            <CaiwaveLogo size={32} />
             <div>
-              <span className="font-semibold">CAITECH</span>
+              <span className="font-semibold">CAIWAVE</span>
               <span className="ml-2 text-xs px-2 py-0.5 bg-purple-600/20 text-purple-400 rounded">
                 Admin
               </span>
@@ -1283,7 +1281,7 @@ const AdminDashboard = () => {
         {/* Mandatory Footer */}
         <footer className="p-4 text-center border-t border-neutral-800">
           <p className="text-neutral-500 text-xs">
-            Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+            Powered by <span className="text-blue-400 font-medium">CAIWAVE WiFi</span> © 2026. All Rights Reserved.
             <span className="mx-2">|</span>
             <a href="tel:0738570630" className="text-neutral-500 hover:text-blue-400 transition-colors">Support</a>
           </p>
