@@ -1426,6 +1426,342 @@ async def record_click(ad_id: str):
         raise HTTPException(status_code=404, detail="Ad not found or not approved")
     return {"status": "recorded"}
 
+# ==================== Campaign Routes (ADMIN ONLY) ====================
+
+@campaigns_router.get("/")
+async def get_campaigns(
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN])),
+    status: Optional[CampaignStatus] = None
+):
+    """Get all campaigns - Admin only"""
+    query = {}
+    if status:
+        query["status"] = status.value
+    
+    campaigns = await db.campaigns.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return campaigns
+
+@campaigns_router.get("/{campaign_id}")
+async def get_campaign(
+    campaign_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Get a specific campaign - Admin only"""
+    campaign = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return campaign
+
+@campaigns_router.post("/", response_model=Campaign)
+async def create_campaign(
+    campaign_data: CampaignCreate,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a new campaign - Admin only"""
+    campaign = Campaign(
+        **campaign_data.model_dump(),
+        created_by=user["id"]
+    )
+    
+    campaign_dict = campaign.model_dump()
+    campaign_dict["start_date"] = campaign_dict["start_date"].isoformat()
+    campaign_dict["end_date"] = campaign_dict["end_date"].isoformat()
+    campaign_dict["created_at"] = campaign_dict["created_at"].isoformat()
+    campaign_dict["updated_at"] = campaign_dict["updated_at"].isoformat()
+    
+    await db.campaigns.insert_one(campaign_dict)
+    return campaign
+
+@campaigns_router.put("/{campaign_id}")
+async def update_campaign(
+    campaign_id: str,
+    campaign_data: CampaignCreate,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update a campaign - Admin only"""
+    existing = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    update_data = campaign_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_data["start_date"] = update_data["start_date"].isoformat()
+    update_data["end_date"] = update_data["end_date"].isoformat()
+    
+    await db.campaigns.update_one({"id": campaign_id}, {"$set": update_data})
+    
+    updated = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    return updated
+
+@campaigns_router.post("/{campaign_id}/status")
+async def update_campaign_status(
+    campaign_id: str,
+    status: CampaignStatus,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update campaign status - Admin only"""
+    result = await db.campaigns.update_one(
+        {"id": campaign_id},
+        {"$set": {"status": status.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return {"status": "updated", "new_status": status.value}
+
+@campaigns_router.delete("/{campaign_id}")
+async def delete_campaign(
+    campaign_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Delete a campaign - Admin only"""
+    result = await db.campaigns.delete_one({"id": campaign_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return {"status": "deleted"}
+
+# ==================== CAIWAVE TV Stream Routes (ADMIN ONLY) ====================
+
+@streams_router.get("/")
+async def get_streams(
+    user: dict = Depends(get_current_user),
+    active_only: bool = False
+):
+    """Get all streams - Available to all users, admin sees all"""
+    query = {}
+    if active_only or user["role"] != UserRole.SUPER_ADMIN.value:
+        query["is_active"] = True
+    
+    streams = await db.streams.find(query, {"_id": 0}).sort("start_time", -1).to_list(100)
+    return streams
+
+@streams_router.get("/live")
+async def get_live_streams():
+    """Get currently live streams - Public endpoint for captive portal"""
+    now = datetime.now(timezone.utc).isoformat()
+    streams = await db.streams.find({
+        "is_active": True,
+        "start_time": {"$lte": now},
+        "end_time": {"$gte": now}
+    }, {"_id": 0}).to_list(50)
+    return streams
+
+@streams_router.get("/{stream_id}")
+async def get_stream(stream_id: str, user: dict = Depends(get_current_user)):
+    """Get a specific stream"""
+    stream = await db.streams.find_one({"id": stream_id}, {"_id": 0})
+    if not stream:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    return stream
+
+@streams_router.post("/", response_model=Stream)
+async def create_stream(
+    stream_data: StreamCreate,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a new stream - Admin only"""
+    stream = Stream(
+        **stream_data.model_dump(),
+        created_by=user["id"]
+    )
+    
+    stream_dict = stream.model_dump()
+    stream_dict["start_time"] = stream_dict["start_time"].isoformat()
+    stream_dict["end_time"] = stream_dict["end_time"].isoformat()
+    stream_dict["created_at"] = stream_dict["created_at"].isoformat()
+    stream_dict["updated_at"] = stream_dict["updated_at"].isoformat()
+    
+    await db.streams.insert_one(stream_dict)
+    return stream
+
+@streams_router.put("/{stream_id}")
+async def update_stream(
+    stream_id: str,
+    stream_data: StreamCreate,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update a stream - Admin only"""
+    existing = await db.streams.find_one({"id": stream_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    
+    update_data = stream_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_data["start_time"] = update_data["start_time"].isoformat()
+    update_data["end_time"] = update_data["end_time"].isoformat()
+    
+    await db.streams.update_one({"id": stream_id}, {"$set": update_data})
+    
+    updated = await db.streams.find_one({"id": stream_id}, {"_id": 0})
+    return updated
+
+@streams_router.post("/{stream_id}/toggle")
+async def toggle_stream(
+    stream_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Toggle stream active status - Admin only"""
+    stream = await db.streams.find_one({"id": stream_id}, {"_id": 0})
+    if not stream:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    
+    new_status = not stream.get("is_active", True)
+    await db.streams.update_one(
+        {"id": stream_id},
+        {"$set": {"is_active": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"status": "updated", "is_active": new_status}
+
+@streams_router.post("/{stream_id}/view")
+async def record_stream_view(stream_id: str):
+    """Record a stream view - Public for analytics"""
+    result = await db.streams.update_one(
+        {"id": stream_id, "is_active": True},
+        {"$inc": {"total_views": 1}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Stream not found or not active")
+    return {"status": "recorded"}
+
+@streams_router.delete("/{stream_id}")
+async def delete_stream(
+    stream_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Delete a stream - Admin only"""
+    result = await db.streams.delete_one({"id": stream_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Stream not found")
+    return {"status": "deleted"}
+
+# ==================== Subsidized Uptime Routes (ADMIN ONLY) ====================
+
+@subsidized_router.get("/")
+async def get_subsidized_uptimes(
+    user: dict = Depends(get_current_user),
+    active_only: bool = False
+):
+    """Get all subsidized uptime offers"""
+    query = {}
+    if active_only or user["role"] != UserRole.SUPER_ADMIN.value:
+        query["status"] = SubsidizedUptimeStatus.ACTIVE.value
+    
+    uptimes = await db.subsidized_uptime.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return uptimes
+
+@subsidized_router.get("/active")
+async def get_active_subsidized_uptimes(hotspot_id: Optional[str] = None):
+    """Get currently active subsidized offers - Public for captive portal"""
+    now = datetime.now(timezone.utc).isoformat()
+    query = {
+        "status": SubsidizedUptimeStatus.ACTIVE.value,
+        "start_date": {"$lte": now},
+        "end_date": {"$gte": now}
+    }
+    
+    if hotspot_id:
+        query["$or"] = [
+            {"allowed_hotspot_ids": {"$size": 0}},  # Empty = all hotspots
+            {"allowed_hotspot_ids": hotspot_id}
+        ]
+    
+    uptimes = await db.subsidized_uptime.find(query, {"_id": 0}).to_list(50)
+    return uptimes
+
+@subsidized_router.get("/{uptime_id}")
+async def get_subsidized_uptime(
+    uptime_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Get a specific subsidized uptime offer"""
+    uptime = await db.subsidized_uptime.find_one({"id": uptime_id}, {"_id": 0})
+    if not uptime:
+        raise HTTPException(status_code=404, detail="Subsidized uptime not found")
+    return uptime
+
+@subsidized_router.post("/", response_model=SubsidizedUptime)
+async def create_subsidized_uptime(
+    uptime_data: SubsidizedUptimeCreate,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Create a new subsidized uptime offer - Admin only"""
+    uptime = SubsidizedUptime(
+        **uptime_data.model_dump(),
+        created_by=user["id"]
+    )
+    
+    uptime_dict = uptime.model_dump()
+    uptime_dict["start_date"] = uptime_dict["start_date"].isoformat()
+    uptime_dict["end_date"] = uptime_dict["end_date"].isoformat()
+    uptime_dict["created_at"] = uptime_dict["created_at"].isoformat()
+    uptime_dict["updated_at"] = uptime_dict["updated_at"].isoformat()
+    
+    await db.subsidized_uptime.insert_one(uptime_dict)
+    return uptime
+
+@subsidized_router.put("/{uptime_id}")
+async def update_subsidized_uptime(
+    uptime_id: str,
+    uptime_data: SubsidizedUptimeCreate,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update a subsidized uptime offer - Admin only"""
+    existing = await db.subsidized_uptime.find_one({"id": uptime_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Subsidized uptime not found")
+    
+    update_data = uptime_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_data["start_date"] = update_data["start_date"].isoformat()
+    update_data["end_date"] = update_data["end_date"].isoformat()
+    
+    await db.subsidized_uptime.update_one({"id": uptime_id}, {"$set": update_data})
+    
+    updated = await db.subsidized_uptime.find_one({"id": uptime_id}, {"_id": 0})
+    return updated
+
+@subsidized_router.post("/{uptime_id}/status")
+async def update_subsidized_uptime_status(
+    uptime_id: str,
+    status: SubsidizedUptimeStatus,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Update subsidized uptime status - Admin only"""
+    result = await db.subsidized_uptime.update_one(
+        {"id": uptime_id},
+        {"$set": {"status": status.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Subsidized uptime not found")
+    return {"status": "updated", "new_status": status.value}
+
+@subsidized_router.post("/{uptime_id}/use")
+async def record_subsidized_uptime_use(uptime_id: str):
+    """Record usage of subsidized uptime - For tracking"""
+    uptime = await db.subsidized_uptime.find_one({"id": uptime_id}, {"_id": 0})
+    if not uptime:
+        raise HTTPException(status_code=404, detail="Subsidized uptime not found")
+    
+    # Check max uses
+    if uptime.get("max_uses") and uptime.get("total_uses", 0) >= uptime["max_uses"]:
+        raise HTTPException(status_code=400, detail="Maximum uses reached for this offer")
+    
+    await db.subsidized_uptime.update_one(
+        {"id": uptime_id},
+        {"$inc": {"total_uses": 1}}
+    )
+    return {"status": "recorded"}
+
+@subsidized_router.delete("/{uptime_id}")
+async def delete_subsidized_uptime(
+    uptime_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Delete a subsidized uptime offer - Admin only"""
+    result = await db.subsidized_uptime.delete_one({"id": uptime_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Subsidized uptime not found")
+    return {"status": "deleted"}
+
 # ==================== Voucher Routes ====================
 
 @vouchers_router.post("/generate", response_model=List[Voucher])
