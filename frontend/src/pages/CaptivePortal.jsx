@@ -15,7 +15,7 @@ import {
   ArrowRight,
   AlertCircle,
 } from "lucide-react";
-import { CaitechLogo } from "../components/CaitechLogo";
+import { CaiwaveLogo } from "../components/CaiwaveLogo";
 
 const CaptivePortal = () => {
   const { hotspotId } = useParams();

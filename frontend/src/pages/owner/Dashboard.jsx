@@ -21,7 +21,7 @@ import {
   Plus,
   BarChart3,
 } from "lucide-react";
-import { CaitechLogo } from "../../components/CaitechLogo";
+import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
   AreaChart,
   Area,

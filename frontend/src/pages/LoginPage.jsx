@@ -6,7 +6,7 @@ import { Label } from "../components/ui/label";
 import { login, getDashboardPath } from "../lib/auth";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { CaitechLogo } from "../components/CaitechLogo";
+import { CaiwaveLogo } from "../components/CaiwaveLogo";
 
 const LoginPage = () => {
   const navigate = useNavigate();
