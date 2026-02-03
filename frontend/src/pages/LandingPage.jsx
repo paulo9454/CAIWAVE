@@ -377,6 +377,71 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* CAIWAVE TV Section */}
+      <section id="caiwave-tv" className="py-24 px-6 lg:px-12" style={{ background: 'linear-gradient(180deg, rgba(0,50,250,0.05) 0%, transparent 100%)' }}>
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-600/20 rounded-full text-blue-400 text-sm mb-6">
+              <Tv className="w-4 h-4" strokeWidth={1.5} />
+              Premium Live Access
+            </div>
+            
+            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+              CAIWAVE TV
+            </h2>
+            <p className="text-neutral-400 max-w-2xl mx-auto">
+              A premium live access service powered by CAIWAVE WiFi. Stream live events, political broadcasts, 
+              church services, and more directly through WiFi hotspots.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 mb-12">
+            {[
+              {
+                icon: Play,
+                title: "Live Events",
+                description: "Stream live football matches, concerts, community events directly to WiFi users",
+              },
+              {
+                icon: Target,
+                title: "Targeted Access",
+                description: "Control which regions and hotspots can access specific streams",
+              },
+              {
+                icon: Zap,
+                title: "Subsidized Access",
+                description: "Offer discounted rates for event streaming - KES 15 for 25 hours",
+              },
+            ].map((item, index) => (
+              <div key={index} className="dashboard-card text-center">
+                <div className="w-12 h-12 bg-blue-600/10 rounded-xl flex items-center justify-center mx-auto mb-4">
+                  <item.icon className="w-6 h-6 text-blue-400" strokeWidth={1.5} />
+                </div>
+                <h3 className="font-semibold mb-2">{item.title}</h3>
+                <p className="text-neutral-400 text-sm">{item.description}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="dashboard-card bg-gradient-to-r from-blue-600/10 to-purple-600/10 border-blue-600/20">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div>
+                <h3 className="text-xl font-semibold mb-2">Want to broadcast your event?</h3>
+                <p className="text-neutral-400">
+                  Political campaigns, church services, community announcements - reach thousands of WiFi users.
+                </p>
+              </div>
+              <Button
+                onClick={() => navigate("/register")}
+                className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+              >
+                Contact CAIWAVE
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Advertisers Section */}
       <section id="advertisers" className="py-24 px-6 lg:px-12">
         <div className="max-w-7xl mx-auto">
