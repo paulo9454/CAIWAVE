@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { isAuthenticated, getUser, getDashboardPath } from "../lib/auth";
-import { CaitechLogo } from "../components/CaitechLogo";
+import { CaiwaveLogo } from "../components/CaiwaveLogo";
 import {
   Wifi,
   TrendingUp,
@@ -40,8 +40,8 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center gap-2" data-testid="logo">
-              <CaitechLogo size={32} />
-              <span className="font-semibold text-xl tracking-tight">CAITECH</span>
+              <CaiwaveLogo size={32} />
+              <span className="font-semibold text-xl tracking-tight">CAIWAVE</span>
             </Link>
 
             {/* Desktop Navigation */}
@@ -467,11 +467,11 @@ const LandingPage = () => {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <CaitechLogo size={32} />
-                <span className="font-semibold text-lg">CAITECH</span>
+                <CaiwaveLogo size={32} />
+                <span className="font-semibold text-lg">CAIWAVE</span>
               </div>
               <p className="text-neutral-500 text-sm">
-                The complete WiFi hotspot billing and advertising platform.
+                The complete WiFi hotspot billing, advertising, and premium live access platform.
               </p>
             </div>
             
@@ -505,7 +505,7 @@ const LandingPage = () => {
           
           <div className="mt-12 pt-8 border-t border-neutral-800 text-center">
             <p className="text-neutral-500 text-sm">
-              Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+              Powered by <span className="text-blue-400 font-medium">CAIWAVE WiFi</span> © 2026. All Rights Reserved.
             </p>
           </div>
         </div>
