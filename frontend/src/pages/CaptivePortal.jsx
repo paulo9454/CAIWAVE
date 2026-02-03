@@ -48,8 +48,8 @@ const CaptivePortal = () => {
       // Set demo fallback data
       setHotspot({
         id: hotspotId,
-        name: "CAITECH Hotspot",
-        ssid: "Cainet_FREE WIFI",
+        name: "CAIWAVE Hotspot",
+        ssid: "CAIWAVE_FREE WIFI",
         location_name: "Location",
       });
       setPackages([
