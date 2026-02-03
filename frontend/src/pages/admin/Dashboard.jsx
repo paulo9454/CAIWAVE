@@ -833,30 +833,120 @@ const RevenueSettingsPage = () => {
 
 // Integration Settings Page
 const IntegrationSettingsPage = () => {
+  const [activeTab, setActiveTab] = useState("mpesa");
   const [mpesaStatus, setMpesaStatus] = useState(null);
-  const [smsStatus, setSmsStatus] = useState(null);
-  const [whatsappStatus, setWhatsappStatus] = useState(null);
+  const [radiusConfig, setRadiusConfig] = useState(null);
+  const [nasClients, setNasClients] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAddNAS, setShowAddNAS] = useState(false);
+  const [editingNAS, setEditingNAS] = useState(null);
+  const [nasForm, setNasForm] = useState({
+    name: "",
+    ip_address: "",
+    secret: "",
+    nastype: "mikrotik",
+    location: "",
+    description: "",
+  });
+  const [generatedConfig, setGeneratedConfig] = useState(null);
 
   useEffect(() => {
-    fetchStatuses();
+    fetchAllConfigs();
   }, []);
 
-  const fetchStatuses = async () => {
+  const fetchAllConfigs = async () => {
     try {
-      const [mpesa, sms, whatsapp] = await Promise.all([
-        axios.get(`${API_URL}/settings/mpesa`),
-        axios.get(`${API_URL}/settings/sms`),
-        axios.get(`${API_URL}/settings/whatsapp`),
+      const [mpesa, radius, nas] = await Promise.all([
+        axios.get(`${API_URL}/mpesa/config-status`, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        }).catch(() => ({ data: { configured: false } })),
+        axios.get(`${API_URL}/radius/config`, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        }).catch(() => ({ data: { enabled: false } })),
+        axios.get(`${API_URL}/radius/nas-clients`, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        }).catch(() => ({ data: [] })),
       ]);
       setMpesaStatus(mpesa.data);
-      setSmsStatus(sms.data);
-      setWhatsappStatus(whatsapp.data);
+      setRadiusConfig(radius.data);
+      setNasClients(nas.data);
     } catch (error) {
-      console.error("Failed to fetch statuses:", error);
+      console.error("Failed to fetch configs:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddNAS = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingNAS) {
+        await axios.put(`${API_URL}/radius/nas-clients/${editingNAS.id}`, nasForm, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        });
+        toast.success("NAS client updated");
+      } else {
+        await axios.post(`${API_URL}/radius/nas-clients`, nasForm, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        });
+        toast.success("NAS client added");
+      }
+      setShowAddNAS(false);
+      setEditingNAS(null);
+      setNasForm({ name: "", ip_address: "", secret: "", nastype: "mikrotik", location: "", description: "" });
+      fetchAllConfigs();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save NAS client");
+    }
+  };
+
+  const handleDeleteNAS = async (clientId) => {
+    if (!window.confirm("Delete this NAS client?")) return;
+    try {
+      await axios.delete(`${API_URL}/radius/nas-clients/${clientId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      toast.success("NAS client deleted");
+      fetchAllConfigs();
+    } catch (error) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const handleToggleNAS = async (clientId) => {
+    try {
+      await axios.post(`${API_URL}/radius/nas-clients/${clientId}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      toast.success("Status updated");
+      fetchAllConfigs();
+    } catch (error) {
+      toast.error("Failed to toggle");
+    }
+  };
+
+  const handleGenerateConfig = async (clientId) => {
+    try {
+      const response = await axios.get(`${API_URL}/radius/generate-config/${clientId}`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      setGeneratedConfig(response.data);
+    } catch (error) {
+      toast.error("Failed to generate config");
+    }
+  };
+
+  const openEditNAS = (client) => {
+    setEditingNAS(client);
+    setNasForm({
+      name: client.name,
+      ip_address: client.ip_address,
+      secret: client.secret,
+      nastype: client.nastype || "mikrotik",
+      location: client.location || "",
+      description: client.description || "",
+    });
+    setShowAddNAS(true);
   };
 
   if (loading) {
@@ -871,107 +961,342 @@ const IntegrationSettingsPage = () => {
     <div className="space-y-6" data-testid="integration-settings">
       <div>
         <h1 className="text-2xl font-bold">Integration Settings</h1>
-        <p className="text-neutral-400 mt-1">Configure payment and notification integrations</p>
+        <p className="text-neutral-400 mt-1">Configure payments, RADIUS, and notifications</p>
       </div>
 
-      {/* M-Pesa */}
-      <div className="dashboard-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
-              <DollarSign className="w-5 h-5 text-green-500" />
+      {/* Tabs */}
+      <div className="flex gap-2 border-b border-neutral-800 pb-2">
+        {[
+          { id: "mpesa", label: "M-Pesa Daraja", icon: DollarSign },
+          { id: "radius", label: "MikroTik / RADIUS", icon: Radio },
+          { id: "sms", label: "SMS Gateway", icon: Bell },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              activeTab === tab.id
+                ? "bg-blue-600 text-white"
+                : "text-neutral-400 hover:bg-neutral-800"
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* M-Pesa Tab */}
+      {activeTab === "mpesa" && (
+        <div className="space-y-6">
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center">
+                  <DollarSign className="w-6 h-6 text-green-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">M-Pesa Daraja API</h3>
+                  <p className="text-neutral-400 text-sm">Safaricom STK Push for mobile payments</p>
+                </div>
+              </div>
+              <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                mpesaStatus?.configured 
+                  ? "bg-green-500/10 text-green-400 border border-green-500/30" 
+                  : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"
+              }`}>
+                {mpesaStatus?.configured ? "✓ Configured" : "⚠ Not Configured"}
+              </span>
             </div>
-            <div>
-              <h3 className="font-semibold">M-Pesa Daraja API</h3>
-              <p className="text-neutral-400 text-sm">Safaricom mobile payments</p>
-            </div>
-          </div>
-          <span className={`px-3 py-1 rounded-full text-sm ${mpesaStatus?.configured ? "badge-active" : "badge-pending"}`}>
-            {mpesaStatus?.configured ? "Configured" : "Not Configured"}
-          </span>
-        </div>
-        {mpesaStatus?.configured ? (
-          <div className="bg-neutral-900 rounded-lg p-4 space-y-2 text-sm">
-            <p><span className="text-neutral-400">Environment:</span> {mpesaStatus.environment}</p>
-            <p><span className="text-neutral-400">Shortcode:</span> {mpesaStatus.shortcode_configured ? "✓ Set" : "✗ Not set"}</p>
-            <p><span className="text-neutral-400">Callback URL:</span> {mpesaStatus.callback_url}</p>
-          </div>
-        ) : (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-            <p className="text-yellow-400 text-sm">
-              Add M-Pesa credentials to backend/.env file:
-            </p>
-            <pre className="mt-2 text-xs text-neutral-400 font-mono">
-{`MPESA_CONSUMER_KEY=your_key
-MPESA_CONSUMER_SECRET=your_secret
-MPESA_SHORTCODE=your_shortcode
+
+            {mpesaStatus?.configured ? (
+              <div className="bg-neutral-900 rounded-lg p-4 space-y-3">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-neutral-500 text-sm">Environment</span>
+                    <p className="font-medium">{mpesaStatus.environment || "sandbox"}</p>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 text-sm">Shortcode</span>
+                    <p className="font-medium">{mpesaStatus.shortcode || "Not set"}</p>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-neutral-800">
+                  <span className="text-green-400 text-sm">✓ Ready to accept payments</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-400 mb-2">Setup Instructions</h4>
+                  <ol className="text-sm text-neutral-400 space-y-2 list-decimal list-inside">
+                    <li>Go to <a href="https://developer.safaricom.co.ke" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Safaricom Daraja Portal</a></li>
+                    <li>Create an app to get Consumer Key & Secret</li>
+                    <li>Get Lipa Na M-Pesa credentials (Shortcode & Passkey)</li>
+                    <li>Add credentials to <code className="bg-neutral-800 px-1 rounded">backend/.env</code></li>
+                  </ol>
+                </div>
+
+                <div className="bg-neutral-900 rounded-lg p-4">
+                  <p className="text-neutral-400 text-sm mb-2">Required environment variables:</p>
+                  <pre className="text-xs text-green-400 font-mono bg-neutral-950 p-3 rounded overflow-x-auto">
+{`# M-Pesa Daraja Configuration
+MPESA_ENV=sandbox
+MPESA_CONSUMER_KEY=your_consumer_key
+MPESA_CONSUMER_SECRET=your_consumer_secret
+MPESA_SHORTCODE=174379
 MPESA_PASSKEY=your_passkey
-MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback`}
-            </pre>
-          </div>
-        )}
-      </div>
+MPESA_CALLBACK_URL=https://your-domain.com/api/mpesa/callback`}
+                  </pre>
+                </div>
 
-      {/* SMS */}
-      <div className="dashboard-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
-              <Bell className="w-5 h-5 text-blue-500" />
-            </div>
-            <div>
-              <h3 className="font-semibold">SMS Gateway</h3>
-              <p className="text-neutral-400 text-sm">Africa's Talking / Centipid</p>
-            </div>
+                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
+                  <p className="text-yellow-400 text-sm">
+                    <strong>Note:</strong> For testing, use ngrok to create a public HTTPS callback URL:
+                    <code className="ml-2 bg-neutral-800 px-2 py-0.5 rounded">ngrok http 8001</code>
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm ${smsStatus?.configured ? "badge-active" : "badge-pending"}`}>
-            {smsStatus?.configured ? "Configured" : "Not Configured"}
-          </span>
         </div>
-        {!smsStatus?.configured && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-            <p className="text-yellow-400 text-sm">
-              Add SMS credentials to backend/.env file:
-            </p>
-            <pre className="mt-2 text-xs text-neutral-400 font-mono">
-{`SMS_PROVIDER=africas_talking
-SMS_API_KEY=your_api_key
-SMS_USERNAME=your_username
-SMS_SENDER_ID=CAIWAVE`}
-            </pre>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* WhatsApp */}
-      <div className="dashboard-card p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
-              <Bell className="w-5 h-5 text-green-500" />
+      {/* RADIUS / MikroTik Tab */}
+      {activeTab === "radius" && (
+        <div className="space-y-6">
+          {/* RADIUS Status */}
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center">
+                  <Radio className="w-6 h-6 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">FreeRADIUS Server</h3>
+                  <p className="text-neutral-400 text-sm">Authentication & session management</p>
+                </div>
+              </div>
+              <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                radiusConfig?.enabled 
+                  ? "bg-green-500/10 text-green-400 border border-green-500/30" 
+                  : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"
+              }`}>
+                {radiusConfig?.enabled ? "✓ Enabled" : "⚠ Not Enabled"}
+              </span>
             </div>
-            <div>
-              <h3 className="font-semibold">WhatsApp (Twilio)</h3>
-              <p className="text-neutral-400 text-sm">WhatsApp Business notifications</p>
+
+            {radiusConfig?.enabled ? (
+              <div className="bg-neutral-900 rounded-lg p-4 space-y-3">
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <span className="text-neutral-500 text-sm">Server Host</span>
+                    <p className="font-medium">{radiusConfig.host}</p>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 text-sm">Auth Port</span>
+                    <p className="font-medium">{radiusConfig.auth_port}</p>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 text-sm">Acct Port</span>
+                    <p className="font-medium">{radiusConfig.acct_port}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-neutral-900 rounded-lg p-4">
+                <p className="text-neutral-400 text-sm mb-2">Configure in <code className="bg-neutral-800 px-1 rounded">backend/.env</code>:</p>
+                <pre className="text-xs text-green-400 font-mono bg-neutral-950 p-3 rounded">
+{`RADIUS_ENABLED=true
+RADIUS_HOST=your_freeradius_server_ip
+RADIUS_SECRET=your_shared_secret
+RADIUS_AUTH_PORT=1812
+RADIUS_ACCT_PORT=1813`}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          {/* NAS Clients */}
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-semibold text-lg">MikroTik NAS Clients</h3>
+                <p className="text-neutral-400 text-sm">Registered routers that can authenticate with RADIUS</p>
+              </div>
+              <Button onClick={() => { setShowAddNAS(true); setEditingNAS(null); setNasForm({ name: "", ip_address: "", secret: "", nastype: "mikrotik", location: "", description: "" }); }} data-testid="add-nas-btn">
+                <Plus className="w-4 h-4 mr-2" /> Add Router
+              </Button>
+            </div>
+
+            {showAddNAS && (
+              <div className="bg-neutral-900 rounded-lg p-4 mb-4">
+                <h4 className="font-medium mb-4">{editingNAS ? "Edit NAS Client" : "Add New MikroTik Router"}</h4>
+                <form onSubmit={handleAddNAS} className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-neutral-400 mb-1">Router Name*</label>
+                      <input type="text" value={nasForm.name} onChange={(e) => setNasForm({ ...nasForm, name: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="Office Router" />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-neutral-400 mb-1">IP Address*</label>
+                      <input type="text" value={nasForm.ip_address} onChange={(e) => setNasForm({ ...nasForm, ip_address: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="192.168.88.1" />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-neutral-400 mb-1">RADIUS Secret*</label>
+                      <input type="text" value={nasForm.secret} onChange={(e) => setNasForm({ ...nasForm, secret: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="shared_secret" />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-neutral-400 mb-1">Location</label>
+                      <input type="text" value={nasForm.location} onChange={(e) => setNasForm({ ...nasForm, location: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" placeholder="Nairobi CBD" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button type="submit">{editingNAS ? "Update" : "Add Router"}</Button>
+                    <Button type="button" variant="outline" onClick={() => { setShowAddNAS(false); setEditingNAS(null); }}>Cancel</Button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {nasClients.length === 0 ? (
+              <div className="text-center py-8">
+                <Radio className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+                <p className="text-neutral-400">No MikroTik routers registered yet.</p>
+                <p className="text-neutral-500 text-sm mt-1">Add routers to enable RADIUS authentication.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {nasClients.map((client) => (
+                  <div key={client.id} className="bg-neutral-900 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-3 h-3 rounded-full ${client.is_active ? "bg-green-500" : "bg-neutral-500"}`} />
+                        <div>
+                          <h4 className="font-medium">{client.name}</h4>
+                          <p className="text-neutral-400 text-sm">{client.ip_address} • {client.location || "No location"}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => handleGenerateConfig(client.id)} className="text-blue-400 border-blue-400/30">
+                          Generate Config
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleToggleNAS(client.id)} className={client.is_active ? "text-yellow-400 border-yellow-400/30" : "text-green-400 border-green-400/30"}>
+                          {client.is_active ? "Disable" : "Enable"}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => openEditNAS(client)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-red-400" onClick={() => handleDeleteNAS(client.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Generated Config Modal */}
+          {generatedConfig && (
+            <div className="dashboard-card border-blue-500/30">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold">MikroTik Configuration for: {generatedConfig.client_name}</h3>
+                <Button size="sm" variant="ghost" onClick={() => setGeneratedConfig(null)}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="bg-neutral-950 rounded-lg p-4">
+                <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap overflow-x-auto">
+                  {generatedConfig.config}
+                </pre>
+              </div>
+              <div className="mt-4 flex gap-3">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedConfig.config);
+                    toast.success("Config copied to clipboard!");
+                  }}
+                >
+                  Copy to Clipboard
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* SMS Tab */}
+      {activeTab === "sms" && (
+        <div className="space-y-6">
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                  <Bell className="w-6 h-6 text-blue-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">SMS Gateway</h3>
+                  <p className="text-neutral-400 text-sm">Africa's Talking or Centipid</p>
+                </div>
+              </div>
+              <span className="px-4 py-2 rounded-lg text-sm font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                ⚠ Not Configured
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+                <h4 className="font-medium text-blue-400 mb-2">Supported Providers</h4>
+                <ul className="text-sm text-neutral-400 space-y-1">
+                  <li>• <strong>Africa's Talking</strong> - <a href="https://africastalking.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">africastalking.com</a></li>
+                  <li>• <strong>Centipid</strong> - Alternative Kenya SMS provider</li>
+                </ul>
+              </div>
+
+              <div className="bg-neutral-900 rounded-lg p-4">
+                <p className="text-neutral-400 text-sm mb-2">Configure in <code className="bg-neutral-800 px-1 rounded">backend/.env</code>:</p>
+                <pre className="text-xs text-green-400 font-mono bg-neutral-950 p-3 rounded">
+{`# SMS Provider (africas_talking or centipid)
+SMS_PROVIDER=africas_talking
+AT_API_KEY=your_api_key
+AT_USERNAME=your_username
+AT_SENDER_ID=CAIWAVE`}
+                </pre>
+              </div>
             </div>
           </div>
-          <span className={`px-3 py-1 rounded-full text-sm ${whatsappStatus?.configured ? "badge-active" : "badge-pending"}`}>
-            {whatsappStatus?.configured ? "Configured" : "Not Configured"}
-          </span>
-        </div>
-        {!whatsappStatus?.configured && (
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
-            <p className="text-yellow-400 text-sm">
-              Add Twilio credentials to backend/.env file:
-            </p>
-            <pre className="mt-2 text-xs text-neutral-400 font-mono">
+
+          {/* WhatsApp */}
+          <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center">
+                  <Bell className="w-6 h-6 text-green-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg">WhatsApp Business (Twilio)</h3>
+                  <p className="text-neutral-400 text-sm">WhatsApp notifications via Twilio</p>
+                </div>
+              </div>
+              <span className="px-4 py-2 rounded-lg text-sm font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
+                ⚠ Not Configured
+              </span>
+            </div>
+
+            <div className="bg-neutral-900 rounded-lg p-4">
+              <p className="text-neutral-400 text-sm mb-2">Configure in <code className="bg-neutral-800 px-1 rounded">backend/.env</code>:</p>
+              <pre className="text-xs text-green-400 font-mono bg-neutral-950 p-3 rounded">
 {`TWILIO_ACCOUNT_SID=your_account_sid
 TWILIO_AUTH_TOKEN=your_auth_token
 TWILIO_WHATSAPP_NUMBER=+14155238886`}
-            </pre>
+              </pre>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
