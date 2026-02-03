@@ -2088,6 +2088,9 @@ const AdminDashboard = () => {
         <main className="p-6 lg:p-8">
           <Routes>
             <Route index element={<AdminOverview />} />
+            <Route path="campaigns" element={<CampaignsPage />} />
+            <Route path="tv" element={<CaiwaveTVPage />} />
+            <Route path="subsidized" element={<SubsidizedUptimePage />} />
             <Route path="ads" element={<AdApprovalPage />} />
             <Route path="hotspots" element={<AllHotspotsPage />} />
             <Route path="packages" element={<PackagesPage />} />
