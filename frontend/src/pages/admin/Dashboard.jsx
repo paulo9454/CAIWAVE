@@ -1971,6 +1971,9 @@ const AdminDashboard = () => {
 
   const navigation = [
     { name: "Overview", href: "/admin", icon: LayoutDashboard },
+    { name: "Campaigns", href: "/admin/campaigns", icon: Target },
+    { name: "CAIWAVE TV", href: "/admin/tv", icon: Tv },
+    { name: "Subsidized Uptime", href: "/admin/subsidized", icon: Zap },
     { name: "Ad Approval", href: "/admin/ads", icon: Megaphone, badge: true },
     { name: "Hotspots", href: "/admin/hotspots", icon: Radio },
     { name: "Packages", href: "/admin/packages", icon: Package },
