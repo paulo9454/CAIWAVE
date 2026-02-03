@@ -1143,6 +1143,826 @@ const UsersPage = () => {
   );
 };
 
+// Campaigns Management Page (ADMIN ONLY)
+const CampaignsPage = () => {
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    start_date: "",
+    end_date: "",
+    target_regions: [],
+    target_hotspot_ids: [],
+    assigned_ad_ids: [],
+  });
+  const [availableAds, setAvailableAds] = useState([]);
+  const user = getUser();
+
+  useEffect(() => {
+    fetchCampaigns();
+    fetchApprovedAds();
+  }, []);
+
+  const fetchCampaigns = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/campaigns/`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setCampaigns(response.data);
+    } catch (error) {
+      toast.error("Failed to load campaigns");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchApprovedAds = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/ads/?status=approved`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setAvailableAds(response.data);
+    } catch (error) {
+      console.error("Failed to fetch ads");
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...formData,
+        start_date: new Date(formData.start_date).toISOString(),
+        end_date: new Date(formData.end_date).toISOString(),
+      };
+      
+      if (editingCampaign) {
+        await axios.put(`${API_URL}/campaigns/${editingCampaign.id}`, payload, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        toast.success("Campaign updated");
+      } else {
+        await axios.post(`${API_URL}/campaigns/`, payload, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        toast.success("Campaign created");
+      }
+      
+      setShowCreate(false);
+      setEditingCampaign(null);
+      setFormData({ name: "", description: "", start_date: "", end_date: "", target_regions: [], target_hotspot_ids: [], assigned_ad_ids: [] });
+      fetchCampaigns();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save campaign");
+    }
+  };
+
+  const handleStatusChange = async (campaignId, newStatus) => {
+    try {
+      await axios.post(`${API_URL}/campaigns/${campaignId}/status?status=${newStatus}`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      toast.success(`Campaign ${newStatus}`);
+      fetchCampaigns();
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleDelete = async (campaignId) => {
+    if (!window.confirm("Are you sure you want to delete this campaign?")) return;
+    try {
+      await axios.delete(`${API_URL}/campaigns/${campaignId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      toast.success("Campaign deleted");
+      fetchCampaigns();
+    } catch (error) {
+      toast.error("Failed to delete campaign");
+    }
+  };
+
+  const openEdit = (campaign) => {
+    setEditingCampaign(campaign);
+    setFormData({
+      name: campaign.name,
+      description: campaign.description || "",
+      start_date: campaign.start_date?.split("T")[0] || "",
+      end_date: campaign.end_date?.split("T")[0] || "",
+      target_regions: campaign.target_regions || [],
+      target_hotspot_ids: campaign.target_hotspot_ids || [],
+      assigned_ad_ids: campaign.assigned_ad_ids || [],
+    });
+    setShowCreate(true);
+  };
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      draft: "bg-gray-500/10 text-gray-400",
+      scheduled: "bg-blue-500/10 text-blue-400",
+      active: "bg-green-500/10 text-green-400",
+      paused: "bg-yellow-500/10 text-yellow-400",
+      completed: "bg-purple-500/10 text-purple-400",
+    };
+    return badges[status] || badges.draft;
+  };
+
+  return (
+    <div className="space-y-6" data-testid="campaigns-page">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">Campaigns</h1>
+          <p className="text-neutral-400 mt-1">Create and manage advertising campaigns (Admin Only)</p>
+        </div>
+        <Button onClick={() => { setShowCreate(true); setEditingCampaign(null); setFormData({ name: "", description: "", start_date: "", end_date: "", target_regions: [], target_hotspot_ids: [], assigned_ad_ids: [] }); }} data-testid="create-campaign-btn">
+          <Plus className="w-4 h-4 mr-2" /> Create Campaign
+        </Button>
+      </div>
+
+      {showCreate && (
+        <div className="dashboard-card">
+          <h2 className="text-lg font-semibold mb-4">{editingCampaign ? "Edit Campaign" : "Create New Campaign"}</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Campaign Name*</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Description</label>
+                <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Start Date*</label>
+                <input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">End Date*</label>
+                <input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-400 mb-1">Target Regions (comma-separated)</label>
+              <input type="text" value={formData.target_regions.join(", ")} onChange={(e) => setFormData({ ...formData, target_regions: e.target.value.split(",").map(r => r.trim()).filter(Boolean) })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="Nairobi, Mombasa, Kisumu" />
+            </div>
+            <div className="flex gap-3">
+              <Button type="submit">{editingCampaign ? "Update Campaign" : "Create Campaign"}</Button>
+              <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setEditingCampaign(null); }}>Cancel</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="dashboard-card overflow-hidden">
+        {loading ? (
+          <div className="text-center py-8 text-neutral-400">Loading campaigns...</div>
+        ) : campaigns.length === 0 ? (
+          <div className="text-center py-8">
+            <Target className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+            <p className="text-neutral-400">No campaigns yet. Create your first campaign.</p>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Campaign</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Regions</th>
+                <th>Performance</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((campaign) => (
+                <tr key={campaign.id}>
+                  <td>
+                    <div className="font-medium">{campaign.name}</div>
+                    <div className="text-neutral-500 text-xs">{campaign.description}</div>
+                  </td>
+                  <td>
+                    <span className={`px-2 py-1 rounded-md text-xs ${getStatusBadge(campaign.status)}`}>
+                      {campaign.status}
+                    </span>
+                  </td>
+                  <td className="text-neutral-400 text-sm">
+                    {new Date(campaign.start_date).toLocaleDateString()} - {new Date(campaign.end_date).toLocaleDateString()}
+                  </td>
+                  <td className="text-neutral-400 text-sm">
+                    {campaign.target_regions?.join(", ") || "All"}
+                  </td>
+                  <td>
+                    <div className="text-sm">
+                      <span className="text-blue-400">{campaign.total_impressions || 0}</span> views
+                      <span className="mx-2">·</span>
+                      <span className="text-green-400">{campaign.total_clicks || 0}</span> clicks
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex gap-2">
+                      {campaign.status === "draft" && (
+                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(campaign.id, "active")} className="text-green-400 border-green-400/30">
+                          <Play className="w-3 h-3 mr-1" /> Activate
+                        </Button>
+                      )}
+                      {campaign.status === "active" && (
+                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(campaign.id, "paused")} className="text-yellow-400 border-yellow-400/30">
+                          <Pause className="w-3 h-3 mr-1" /> Pause
+                        </Button>
+                      )}
+                      {campaign.status === "paused" && (
+                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(campaign.id, "active")} className="text-green-400 border-green-400/30">
+                          <Play className="w-3 h-3 mr-1" /> Resume
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(campaign)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-red-400" onClick={() => handleDelete(campaign.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// CAIWAVE TV Streams Page (ADMIN ONLY)
+const CaiwaveTVPage = () => {
+  const [streams, setStreams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingStream, setEditingStream] = useState(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    stream_url: "",
+    start_time: "",
+    end_time: "",
+    access_type: "paid",
+    price: 0,
+    allowed_regions: [],
+    thumbnail_url: "",
+  });
+
+  useEffect(() => {
+    fetchStreams();
+  }, []);
+
+  const fetchStreams = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/streams/`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setStreams(response.data);
+    } catch (error) {
+      toast.error("Failed to load streams");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...formData,
+        price: parseFloat(formData.price) || 0,
+        start_time: new Date(formData.start_time).toISOString(),
+        end_time: new Date(formData.end_time).toISOString(),
+        allowed_hotspot_ids: [],
+        pre_roll_ad_ids: [],
+      };
+      
+      if (editingStream) {
+        await axios.put(`${API_URL}/streams/${editingStream.id}`, payload, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        toast.success("Stream updated");
+      } else {
+        await axios.post(`${API_URL}/streams/`, payload, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        toast.success("Stream created");
+      }
+      
+      setShowCreate(false);
+      setEditingStream(null);
+      setFormData({ name: "", description: "", stream_url: "", start_time: "", end_time: "", access_type: "paid", price: 0, allowed_regions: [], thumbnail_url: "" });
+      fetchStreams();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save stream");
+    }
+  };
+
+  const handleToggle = async (streamId) => {
+    try {
+      await axios.post(`${API_URL}/streams/${streamId}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      toast.success("Stream status updated");
+      fetchStreams();
+    } catch (error) {
+      toast.error("Failed to toggle stream");
+    }
+  };
+
+  const handleDelete = async (streamId) => {
+    if (!window.confirm("Are you sure you want to delete this stream?")) return;
+    try {
+      await axios.delete(`${API_URL}/streams/${streamId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      toast.success("Stream deleted");
+      fetchStreams();
+    } catch (error) {
+      toast.error("Failed to delete stream");
+    }
+  };
+
+  const openEdit = (stream) => {
+    setEditingStream(stream);
+    setFormData({
+      name: stream.name,
+      description: stream.description || "",
+      stream_url: stream.stream_url,
+      start_time: stream.start_time?.slice(0, 16) || "",
+      end_time: stream.end_time?.slice(0, 16) || "",
+      access_type: stream.access_type || "paid",
+      price: stream.price || 0,
+      allowed_regions: stream.allowed_regions || [],
+      thumbnail_url: stream.thumbnail_url || "",
+    });
+    setShowCreate(true);
+  };
+
+  const getAccessBadge = (type) => {
+    const badges = {
+      free: "bg-green-500/10 text-green-400",
+      discounted: "bg-yellow-500/10 text-yellow-400",
+      sponsored: "bg-purple-500/10 text-purple-400",
+      paid: "bg-blue-500/10 text-blue-400",
+    };
+    return badges[type] || badges.paid;
+  };
+
+  const isLive = (stream) => {
+    const now = new Date();
+    const start = new Date(stream.start_time);
+    const end = new Date(stream.end_time);
+    return stream.is_active && now >= start && now <= end;
+  };
+
+  return (
+    <div className="space-y-6" data-testid="caiwave-tv-page">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Tv className="w-6 h-6 text-blue-400" /> CAIWAVE TV
+          </h1>
+          <p className="text-neutral-400 mt-1">Premium live access service powered by CAIWAVE WiFi</p>
+        </div>
+        <Button onClick={() => { setShowCreate(true); setEditingStream(null); setFormData({ name: "", description: "", stream_url: "", start_time: "", end_time: "", access_type: "paid", price: 0, allowed_regions: [], thumbnail_url: "" }); }} data-testid="create-stream-btn">
+          <Plus className="w-4 h-4 mr-2" /> Add Stream
+        </Button>
+      </div>
+
+      {showCreate && (
+        <div className="dashboard-card">
+          <h2 className="text-lg font-semibold mb-4">{editingStream ? "Edit Stream" : "Create New Stream"}</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Event Name*</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required placeholder="Live Football Match" />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Stream URL*</label>
+                <input type="url" value={formData.stream_url} onChange={(e) => setFormData({ ...formData, stream_url: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required placeholder="https://stream.caiwave.com/live/..." />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-400 mb-1">Description</label>
+              <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" rows={2} placeholder="Brief description of the stream..." />
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Start Time*</label>
+                <input type="datetime-local" value={formData.start_time} onChange={(e) => setFormData({ ...formData, start_time: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">End Time*</label>
+                <input type="datetime-local" value={formData.end_time} onChange={(e) => setFormData({ ...formData, end_time: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Thumbnail URL</label>
+                <input type="url" value={formData.thumbnail_url} onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="https://..." />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Access Type*</label>
+                <select value={formData.access_type} onChange={(e) => setFormData({ ...formData, access_type: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2">
+                  <option value="free">Free (with ads)</option>
+                  <option value="discounted">Discounted</option>
+                  <option value="sponsored">Sponsored</option>
+                  <option value="paid">Paid</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Price (KES) {formData.access_type === "free" ? "(ignored)" : ""}</label>
+                <input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" disabled={formData.access_type === "free"} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-400 mb-1">Allowed Regions (comma-separated, empty = all)</label>
+              <input type="text" value={formData.allowed_regions.join(", ")} onChange={(e) => setFormData({ ...formData, allowed_regions: e.target.value.split(",").map(r => r.trim()).filter(Boolean) })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="Nairobi, Mombasa (leave empty for all)" />
+            </div>
+            <div className="flex gap-3">
+              <Button type="submit">{editingStream ? "Update Stream" : "Create Stream"}</Button>
+              <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setEditingStream(null); }}>Cancel</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="grid gap-4">
+        {loading ? (
+          <div className="text-center py-8 text-neutral-400">Loading streams...</div>
+        ) : streams.length === 0 ? (
+          <div className="dashboard-card text-center py-8">
+            <Tv className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+            <p className="text-neutral-400">No streams yet. Create your first CAIWAVE TV stream.</p>
+          </div>
+        ) : (
+          streams.map((stream) => (
+            <div key={stream.id} className="dashboard-card">
+              <div className="flex items-start justify-between">
+                <div className="flex gap-4">
+                  <div className="w-32 h-20 bg-neutral-800 rounded-lg flex items-center justify-center overflow-hidden">
+                    {stream.thumbnail_url ? (
+                      <img src={stream.thumbnail_url} alt={stream.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Video className="w-8 h-8 text-neutral-600" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{stream.name}</h3>
+                      {isLive(stream) && (
+                        <span className="px-2 py-0.5 bg-red-500 text-white text-xs rounded animate-pulse">LIVE</span>
+                      )}
+                      <span className={`px-2 py-0.5 rounded text-xs ${getAccessBadge(stream.access_type)}`}>
+                        {stream.access_type}
+                      </span>
+                    </div>
+                    <p className="text-neutral-400 text-sm mt-1">{stream.description}</p>
+                    <div className="flex gap-4 mt-2 text-sm text-neutral-500">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {new Date(stream.start_time).toLocaleString()} - {new Date(stream.end_time).toLocaleString()}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Eye className="w-4 h-4" />
+                        {stream.total_views || 0} views
+                      </span>
+                      {stream.price > 0 && (
+                        <span className="text-green-400">KES {stream.price}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => handleToggle(stream.id)} className={stream.is_active ? "text-yellow-400 border-yellow-400/30" : "text-green-400 border-green-400/30"}>
+                    {stream.is_active ? <><Pause className="w-3 h-3 mr-1" /> Disable</> : <><Play className="w-3 h-3 mr-1" /> Enable</>}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => openEdit(stream)}>
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-red-400" onClick={() => handleDelete(stream.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Subsidized Uptime Page (ADMIN ONLY)
+const SubsidizedUptimePage = () => {
+  const [uptimes, setUptimes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingUptime, setEditingUptime] = useState(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    original_price: 35,
+    discounted_price: 15,
+    duration_hours: 25,
+    start_date: "",
+    end_date: "",
+    daily_start_time: "",
+    daily_end_time: "",
+    allowed_regions: [],
+    max_uses: "",
+  });
+
+  useEffect(() => {
+    fetchUptimes();
+  }, []);
+
+  const fetchUptimes = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/subsidized-uptime/`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setUptimes(response.data);
+    } catch (error) {
+      toast.error("Failed to load subsidized uptimes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        ...formData,
+        original_price: parseFloat(formData.original_price),
+        discounted_price: parseFloat(formData.discounted_price),
+        duration_hours: parseInt(formData.duration_hours),
+        max_uses: formData.max_uses ? parseInt(formData.max_uses) : null,
+        start_date: new Date(formData.start_date).toISOString(),
+        end_date: new Date(formData.end_date).toISOString(),
+        allowed_hotspot_ids: [],
+      };
+      
+      if (editingUptime) {
+        await axios.put(`${API_URL}/subsidized-uptime/${editingUptime.id}`, payload, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        toast.success("Subsidized uptime updated");
+      } else {
+        await axios.post(`${API_URL}/subsidized-uptime/`, payload, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        toast.success("Subsidized uptime created");
+      }
+      
+      setShowCreate(false);
+      setEditingUptime(null);
+      setFormData({ name: "", description: "", original_price: 35, discounted_price: 15, duration_hours: 25, start_date: "", end_date: "", daily_start_time: "", daily_end_time: "", allowed_regions: [], max_uses: "" });
+      fetchUptimes();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to save");
+    }
+  };
+
+  const handleStatusChange = async (uptimeId, newStatus) => {
+    try {
+      await axios.post(`${API_URL}/subsidized-uptime/${uptimeId}/status?status=${newStatus}`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      toast.success(`Status updated to ${newStatus}`);
+      fetchUptimes();
+    } catch (error) {
+      toast.error("Failed to update status");
+    }
+  };
+
+  const handleDelete = async (uptimeId) => {
+    if (!window.confirm("Are you sure you want to delete this offer?")) return;
+    try {
+      await axios.delete(`${API_URL}/subsidized-uptime/${uptimeId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      toast.success("Deleted successfully");
+      fetchUptimes();
+    } catch (error) {
+      toast.error("Failed to delete");
+    }
+  };
+
+  const openEdit = (uptime) => {
+    setEditingUptime(uptime);
+    setFormData({
+      name: uptime.name,
+      description: uptime.description || "",
+      original_price: uptime.original_price,
+      discounted_price: uptime.discounted_price,
+      duration_hours: uptime.duration_hours,
+      start_date: uptime.start_date?.split("T")[0] || "",
+      end_date: uptime.end_date?.split("T")[0] || "",
+      daily_start_time: uptime.daily_start_time || "",
+      daily_end_time: uptime.daily_end_time || "",
+      allowed_regions: uptime.allowed_regions || [],
+      max_uses: uptime.max_uses || "",
+    });
+    setShowCreate(true);
+  };
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      draft: "bg-gray-500/10 text-gray-400",
+      scheduled: "bg-blue-500/10 text-blue-400",
+      active: "bg-green-500/10 text-green-400",
+      expired: "bg-red-500/10 text-red-400",
+    };
+    return badges[status] || badges.draft;
+  };
+
+  return (
+    <div className="space-y-6" data-testid="subsidized-uptime-page">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Zap className="w-6 h-6 text-yellow-400" /> Subsidized Uptime
+          </h1>
+          <p className="text-neutral-400 mt-1">Create discounted/subsidized internet offers for events (Admin Only)</p>
+        </div>
+        <Button onClick={() => { setShowCreate(true); setEditingUptime(null); setFormData({ name: "", description: "", original_price: 35, discounted_price: 15, duration_hours: 25, start_date: "", end_date: "", daily_start_time: "", daily_end_time: "", allowed_regions: [], max_uses: "" }); }} data-testid="create-subsidy-btn">
+          <Plus className="w-4 h-4 mr-2" /> Create Offer
+        </Button>
+      </div>
+
+      <div className="dashboard-card bg-yellow-500/5 border-yellow-500/20">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5" />
+          <div>
+            <p className="font-medium text-yellow-400">Subsidized ≠ Free</p>
+            <p className="text-neutral-400 text-sm mt-1">
+              Subsidized uptime offers cheaper rates (e.g., KES 15 for 25 hours instead of KES 35 for 24 hours).
+              Use for events, political campaigns, church services, or community broadcasts. Users still pay - just less.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {showCreate && (
+        <div className="dashboard-card">
+          <h2 className="text-lg font-semibold mb-4">{editingUptime ? "Edit Offer" : "Create New Subsidized Offer"}</h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Offer Name*</label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required placeholder="Church Service Special" />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Description</label>
+                <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="Special pricing for Sunday services" />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Original Price (KES)</label>
+                <input type="number" value={formData.original_price} onChange={(e) => setFormData({ ...formData, original_price: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Discounted Price (KES)*</label>
+                <input type="number" value={formData.discounted_price} onChange={(e) => setFormData({ ...formData, discounted_price: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Duration (Hours)*</label>
+                <input type="number" value={formData.duration_hours} onChange={(e) => setFormData({ ...formData, duration_hours: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Start Date*</label>
+                <input type="date" value={formData.start_date} onChange={(e) => setFormData({ ...formData, start_date: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">End Date*</label>
+                <input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Daily Start Time (optional)</label>
+                <input type="time" value={formData.daily_start_time} onChange={(e) => setFormData({ ...formData, daily_start_time: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Daily End Time (optional)</label>
+                <input type="time" value={formData.daily_end_time} onChange={(e) => setFormData({ ...formData, daily_end_time: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Max Uses (optional)</label>
+                <input type="number" value={formData.max_uses} onChange={(e) => setFormData({ ...formData, max_uses: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="Unlimited" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm text-neutral-400 mb-1">Allowed Regions (comma-separated, empty = all)</label>
+              <input type="text" value={formData.allowed_regions.join(", ")} onChange={(e) => setFormData({ ...formData, allowed_regions: e.target.value.split(",").map(r => r.trim()).filter(Boolean) })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="Nairobi, Mombasa" />
+            </div>
+            <div className="flex gap-3">
+              <Button type="submit">{editingUptime ? "Update Offer" : "Create Offer"}</Button>
+              <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setEditingUptime(null); }}>Cancel</Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="dashboard-card overflow-hidden">
+        {loading ? (
+          <div className="text-center py-8 text-neutral-400">Loading offers...</div>
+        ) : uptimes.length === 0 ? (
+          <div className="text-center py-8">
+            <Zap className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+            <p className="text-neutral-400">No subsidized offers yet. Create your first offer.</p>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Offer</th>
+                <th>Pricing</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Usage</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {uptimes.map((uptime) => (
+                <tr key={uptime.id}>
+                  <td>
+                    <div className="font-medium">{uptime.name}</div>
+                    <div className="text-neutral-500 text-xs">{uptime.description}</div>
+                  </td>
+                  <td>
+                    <div className="text-sm">
+                      <span className="line-through text-neutral-500">KES {uptime.original_price}</span>
+                      <span className="mx-2">→</span>
+                      <span className="text-green-400 font-medium">KES {uptime.discounted_price}</span>
+                    </div>
+                    <div className="text-xs text-neutral-500">
+                      {Math.round((1 - uptime.discounted_price / uptime.original_price) * 100)}% off
+                    </div>
+                  </td>
+                  <td>
+                    <div className="text-sm">{uptime.duration_hours} hours</div>
+                    <div className="text-xs text-neutral-500">
+                      {new Date(uptime.start_date).toLocaleDateString()} - {new Date(uptime.end_date).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`px-2 py-1 rounded-md text-xs ${getStatusBadge(uptime.status)}`}>
+                      {uptime.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="text-sm">
+                      {uptime.total_uses || 0} uses
+                      {uptime.max_uses && <span className="text-neutral-500"> / {uptime.max_uses}</span>}
+                    </div>
+                  </td>
+                  <td>
+                    <div className="flex gap-2">
+                      {uptime.status === "draft" && (
+                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(uptime.id, "active")} className="text-green-400 border-green-400/30">
+                          Activate
+                        </Button>
+                      )}
+                      {uptime.status === "active" && (
+                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(uptime.id, "expired")} className="text-red-400 border-red-400/30">
+                          Expire
+                        </Button>
+                      )}
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(uptime)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-red-400" onClick={() => handleDelete(uptime.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Main Admin Dashboard Layout
 const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
