@@ -31,6 +31,12 @@ import {
   ShoppingBag,
   Sliders,
   Bell,
+  Tv,
+  Calendar,
+  Zap,
+  Play,
+  Pause,
+  Video,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
