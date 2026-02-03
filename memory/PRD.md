@@ -1,26 +1,37 @@
-# CAITECH Wi-Fi Hotspot Billing Platform - PRD v2.0
+# CAIWAVE Wi-Fi Hotspot Billing Platform - PRD v3.0
 
 ## Project Overview
-Production-ready Wi-Fi hotspot billing platform with integrated advertising engine, managed exclusively by CAITECH as Super Admin. Features real M-Pesa integration, FreeRADIUS support, and dynamic revenue sharing.
+Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, integrated advertising engine, admin-controlled campaigns, and CAIWAVE TV streaming service.
 
-## Branding (LOCKED)
-- **Logo**: Blue (#0032FA) background with white WiFi signal icon
-- **Mandatory Footer**: "Powered by CAITECH © 2026. All Rights Reserved."
+## Branding (LOCKED - Updated Feb 2026)
+- **Brand Name**: CAIWAVE
+- **Logo**: Blue (#0032FA) background with white WiFi signal icon + "C" letter at center
+- **Mandatory Footer**: "Powered by CAIWAVE WiFi © 2026. All Rights Reserved."
 - Partners cannot remove or modify branding
 
 ## Target Users
-1. **Super Admin (CAITECH)** - Full platform control, ad approval, revenue settings
+1. **Super Admin (CAIWAVE)** - Full platform control, ad approval, campaign management, CAIWAVE TV control
 2. **Hotspot Owner (Partner)** - ISP dashboard, assisted setup, no monthly fees
-3. **Advertiser** - Ad submission (requires admin approval)
-4. **End User** - WiFi purchase via captive portal
+3. **Advertiser** - Ad submission only (requires admin approval, NO campaign creation)
+4. **End User** - WiFi purchase via captive portal, stream access
+
+## Core Platform Philosophy
+- Plug-and-play for partners
+- Centralized control by CAIWAVE
+- Verified & trusted advertising
+- No monthly fees
+- No uncontrolled free internet
+- Revenue scales with usage
 
 ## Core Requirements (Static)
 - Package pricing is PREDEFINED (no custom pricing)
-- All ads MUST be approved by CAITECH admin
-- Dynamic revenue sharing (NOT fixed 70/30)
-- Real M-Pesa Daraja integration (sandbox-ready)
+- All ads MUST be approved by CAIWAVE admin
+- Campaigns are ADMIN-ONLY (advertisers create ads, not campaigns)
+- Dynamic revenue sharing (NOT fixed percentages)
+- Real M-Pesa Daraja integration
 - Real FreeRADIUS structure (MikroTik-compatible)
 - SMS/WhatsApp notification support
+- CAIWAVE TV for premium live streaming
 
 ## Package Pricing (FIXED)
 | Duration | Price (KES) |
@@ -35,134 +46,210 @@ Production-ready Wi-Fi hotspot billing platform with integrated advertising engi
 
 ## Tech Stack
 - **Backend**: FastAPI + Python
-- **Frontend**: React + TailwindCSS
+- **Frontend**: React + TailwindCSS + Shadcn UI
 - **Database**: MongoDB
 - **Auth**: JWT-based multi-role
 - **Payments**: M-Pesa Daraja API (real)
 - **Router**: MikroTik via FreeRADIUS
-- **SMS**: Africa's Talking / Centipid
+- **SMS**: Flexible gateway (Africa's Talking / Centipid)
 - **WhatsApp**: Twilio
 
 ---
 
-## What's Been Implemented (v2.0 - Feb 2026)
+## What's Been Implemented (v3.0 - Feb 2026)
+
+### Phase 1: Branding Rebrand ✅ COMPLETE
+- Rebranded from CAITECH to CAIWAVE
+- New logo with WiFi icon + "C" letter center
+- Updated all UI components (LandingPage, LoginPage, RegisterPage, CaptivePortal)
+- Updated Admin, Owner, and Advertiser dashboards
+- Updated footer across all pages
+- Updated backend seed data and SMS messages
+- New admin credentials: admin@caiwave.com / admin123
 
 ### Backend Features
-- [x] Multi-role authentication (JWT)
-- [x] New package pricing (KES 5-600)
-- [x] Dynamic revenue sharing formula
-- [x] Ad approval workflow (pending → approved/rejected)
-- [x] Real M-Pesa Daraja STK Push integration structure
-- [x] M-Pesa callback handling
-- [x] SMS service (Africa's Talking / Centipid)
-- [x] WhatsApp service (Twilio)
-- [x] Voucher generation and redemption
-- [x] RADIUS credential generation
-- [x] Session management with expiry
-- [x] Hotspot status management (admin can suspend)
-- [x] Revenue configuration API
-- [x] Integration status endpoints
+- FastAPI with JWT authentication
+- MongoDB database with Mongoose-like models
+- Package management (7 predefined packages)
+- Dynamic revenue configuration (30% base, 50% max cap)
+- Ad submission and approval workflow
+- Hotspot management
+- Payment tracking
+- Session management structure
 
-### Frontend Features
-- [x] Landing page with new pricing
-- [x] Captive portal (mobile-first)
-- [x] Admin Dashboard with:
-  - Ad Approval workflow
-  - Revenue Settings configuration
-  - Integration status monitoring
-  - Hotspot suspension controls
-- [x] Owner Dashboard
-- [x] Advertiser Dashboard
-- [x] Mandatory CAITECH branding/footer
+### Frontend Features  
+- Dark theme UI with modern design
+- Landing page with all sections
+- Login/Register pages
+- Admin Dashboard with:
+  - Ad Approval section
+  - Package management
+  - Revenue settings (dynamic calculation)
+  - Hotspot management
+  - Integration settings
+- Owner Dashboard with:
+  - Hotspot management
+  - Payment history
+  - Analytics
+- Advertiser Dashboard with:
+  - Ad creation
+  - Campaign management
+  - Performance tracking
+- Captive Portal for end users
 
-### Ad Approval Workflow
-1. Advertiser creates ad → Status: PENDING
-2. Admin reviews in Ad Approval page
-3. Admin approves → Status: APPROVED, is_active: true
-4. OR Admin rejects → Status: REJECTED with reason
-5. Admin can later suspend approved ads
-
-### Dynamic Revenue Formula
-```
-Partner % = Base + Coverage Bonus + Client Bonus + Ad Bonus + Uptime Bonus
-```
-- **Base: 30%** (configurable)
-- Coverage: +0.5% per 100 sqm (max +5%)
-- Clients: +0.5% per 10 daily clients (max +5%)
-- Ads: +1% per 1000 impressions delivered (max +5%)
-- Uptime: +2% if ≥99% uptime
-- **Max cap: 50%** (configurable)
-
-**Revenue Split:**
-- Partner receives: 30% - 50% (depending on bonuses)
-- CAITECH receives: 50% - 70%
+### API Endpoints
+- `POST /api/auth/login` - User login
+- `POST /api/auth/register` - User registration
+- `GET /api/packages` - List packages
+- `GET /api/settings/revenue-config` - Revenue settings
+- `PUT /api/settings/revenue-config` - Update revenue
+- `GET /api/ads/pending` - Pending ads (admin)
+- `POST /api/ads/{id}/approve` - Approve/reject ads
+- `GET /api/hotspots` - List hotspots
+- `POST /api/hotspots` - Create hotspot
+- `GET /api/portal/{hotspot_id}` - Captive portal data
+- `POST /api/seed` - Seed database
 
 ---
 
-## Integration Setup Instructions
+## Upcoming Tasks (Priority Order)
 
-### M-Pesa Daraja API
-1. Register at https://developer.safaricom.co.ke/
-2. Create sandbox app
-3. Add to backend/.env:
-```
-MPESA_CONSUMER_KEY=your_key
-MPESA_CONSUMER_SECRET=your_secret
-MPESA_SHORTCODE=your_shortcode
-MPESA_PASSKEY=your_passkey
-MPESA_CALLBACK_URL=https://your-domain/api/mpesa/callback
-```
+### Phase 2: Core Features (NEXT)
+1. **Admin-Only Campaigns System**
+   - Create Campaign model (admin-only creation)
+   - Campaign controls: dates, regions, assigned ads
+   - Link campaigns to CAIWAVE TV streams
+   - Link campaigns to subsidized uptime
 
-### SMS (Africa's Talking)
-1. Register at https://account.africastalking.com/
-2. Add to backend/.env:
-```
-SMS_PROVIDER=africas_talking
-SMS_API_KEY=your_api_key
-SMS_USERNAME=your_username
-SMS_SENDER_ID=CAITECH
-```
+2. **Ads vs Campaigns Distinction**
+   - Ads: Created by Advertisers → Pending → Approved → Paid → Active
+   - Campaigns: Admin-only containers for approved ads
+   - Payment integration for ad activation
 
-### WhatsApp (Twilio)
-1. Get credentials from https://www.twilio.com/console
-2. Enable WhatsApp sandbox
-3. Add to backend/.env:
-```
-TWILIO_ACCOUNT_SID=your_account_sid
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_WHATSAPP_NUMBER=+14155238886
-```
+3. **CAIWAVE TV Section**
+   - Admin creates/manages streams
+   - Stream config: name, URL, start/end time, access type
+   - Access types: Free, Discounted, Sponsored
+   - Ads display before stream access
+
+4. **Subsidized/Discounted Uptime**
+   - Admin-controlled cheaper rates (e.g., KES 15 → 25 hours)
+   - Time-limited, region-limited
+   - Event-based activation
+
+### Phase 3: Integrations
+1. **M-Pesa Daraja Integration**
+   - STK Push for payments
+   - Callback handling
+   - Payment status tracking
+   - Sandbox environment setup
+
+2. **MikroTik RADIUS Integration**
+   - FreeRADIUS setup
+   - Auto-generated router config
+   - Session control
+   - IP bindings
+
+3. **SMS Gateway Architecture**
+   - Flexible provider selection
+   - Africa's Talking support
+   - Payment confirmations
+   - Session alerts
+
+4. **WhatsApp Notifications (Twilio)**
+   - Business notifications
+   - Session reminders
+
+### Future Tasks (Backlog)
+- Partner Onboarding Wizard
+- Voucher Printing System
+- Equipment Marketplace UI
+- System Audit Logs
+- Two-Factor Authentication (2FA)
+- MikroTik network rules for streaming domains
 
 ---
 
-## Prioritized Backlog
+## Key Database Schemas
 
-### P0 - Critical (Next Sprint)
-- [ ] Add M-Pesa production credentials
-- [ ] FreeRADIUS server deployment
-- [ ] MikroTik router connection testing
+### User
+```javascript
+{
+  name: String,
+  email: String (unique),
+  password: String (hashed),
+  role: ['super_admin', 'hotspot_owner', 'advertiser', 'end_user'],
+  phone: String,
+  is_active: Boolean
+}
+```
 
-### P1 - Important
-- [ ] Withdrawal system for partners
-- [ ] Ad file upload (images/videos)
-- [ ] SMS balance tracking
-- [ ] Voucher printing UI
-- [ ] Equipment marketplace management
+### Package
+```javascript
+{
+  name: String,
+  price: Number,
+  duration_minutes: Number,
+  speed_mbps: Number,
+  is_active: Boolean
+}
+```
 
-### P2 - Nice to Have
-- [ ] Real-time session monitoring
-- [ ] Revenue reports export
-- [ ] Mobile app (React Native)
-- [ ] Email notifications
+### Ad
+```javascript
+{
+  title: String,
+  ad_type: ['image', 'video', 'text', 'link'],
+  content_url: String,
+  text_content: String,
+  status: ['pending', 'approved', 'rejected', 'suspended'],
+  advertiser_id: ObjectId,
+  impressions: Number,
+  clicks: Number
+}
+```
+
+### Campaign (TO BE IMPLEMENTED)
+```javascript
+{
+  name: String,
+  status: ['draft', 'active', 'paused', 'completed'],
+  start_date: Date,
+  end_date: Date,
+  target_regions: [String],
+  target_hotspots: [ObjectId],
+  assigned_ads: [ObjectId],
+  stream_id: ObjectId (optional),
+  subsidized_uptime_id: ObjectId (optional),
+  created_by: ObjectId (admin only)
+}
+```
+
+### Stream (TO BE IMPLEMENTED)
+```javascript
+{
+  name: String,
+  stream_url: String,
+  start_time: Date,
+  end_time: Date,
+  access_type: ['free', 'discounted', 'sponsored'],
+  allowed_hotspots: [ObjectId],
+  pre_roll_ads: [ObjectId],
+  is_active: Boolean
+}
+```
 
 ---
 
 ## Credentials
-- **Admin**: admin@caitech.com / admin123
+- **Admin**: admin@caiwave.com / admin123
+- **Demo Portal**: /portal/demo
 
-## Next Tasks
-1. Add real M-Pesa Daraja credentials
-2. Deploy FreeRADIUS server
-3. Test with MikroTik router
-4. Configure SMS gateway
-5. Add Twilio WhatsApp credentials
+## Files Reference
+- **Logo**: `/app/frontend/public/logo.svg`
+- **Logo Component**: `/app/frontend/src/components/CaiwaveLogo.jsx`
+- **Admin Dashboard**: `/app/frontend/src/pages/admin/Dashboard.jsx`
+- **Owner Dashboard**: `/app/frontend/src/pages/owner/Dashboard.jsx`
+- **Advertiser Dashboard**: `/app/frontend/src/pages/advertiser/Dashboard.jsx`
+- **Captive Portal**: `/app/frontend/src/pages/CaptivePortal.jsx`
+- **Backend Server**: `/app/backend/server.py`
