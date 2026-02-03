@@ -1821,10 +1821,11 @@ async def add_nas_client(
     if existing:
         raise HTTPException(status_code=400, detail="NAS client with this IP already exists")
     
-    client = NASClient(
-        **client_data.model_dump(),
-        shortname=client_data.shortname or client_data.name.replace(" ", "_").lower()
-    )
+    data = client_data.model_dump()
+    if not data.get("shortname"):
+        data["shortname"] = client_data.name.replace(" ", "_").lower()
+    
+    client = NASClient(**data)
     
     client_dict = client.model_dump()
     client_dict["created_at"] = client_dict["created_at"].isoformat()
