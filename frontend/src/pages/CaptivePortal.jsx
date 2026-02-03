@@ -225,10 +225,8 @@ const CaptivePortal = () => {
       {/* Header */}
       <div className="p-6 text-center" style={{ background: 'radial-gradient(ellipse at top, rgba(37,99,235,0.15), transparent 70%)' }}>
         <div className="inline-flex items-center gap-2 mb-2">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Wifi className="w-6 h-6 text-white" strokeWidth={1.5} />
-          </div>
-          <span className="font-semibold text-xl">CAITECH</span>
+          <CaiwaveLogo size={40} />
+          <span className="font-semibold text-xl">CAIWAVE</span>
         </div>
         <h1 className="text-lg font-semibold">{hotspot?.name}</h1>
         <p className="text-neutral-400 text-sm">{hotspot?.location_name}</p>
@@ -486,7 +484,7 @@ const CaptivePortal = () => {
       {/* Mandatory Footer */}
       <div className="p-4 text-center border-t border-neutral-800">
         <p className="text-neutral-500 text-xs">
-          Powered by <span className="text-blue-400 font-medium">CAITECH</span> © 2026. All Rights Reserved.
+          Powered by <span className="text-blue-400 font-medium">CAIWAVE WiFi</span> © 2026. All Rights Reserved.
           <span className="mx-2">|</span>
           <a href="tel:0738570630" className="text-neutral-500 hover:text-blue-400 transition-colors">Support</a>
         </p>
