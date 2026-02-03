@@ -12,7 +12,8 @@ import {
 } from "../components/ui/select";
 import { register, getDashboardPath, ROLES } from "../lib/auth";
 import { toast } from "sonner";
-import { Wifi, ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { CaiwaveLogo } from "../components/CaiwaveLogo";
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -66,10 +67,8 @@ const RegisterPage = () => {
       {/* Left Panel - Branding */}
       <div className="hidden lg:flex lg:w-1/2 bg-[#0a0a0a] border-r border-neutral-800 flex-col justify-between p-12">
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Wifi className="w-6 h-6 text-white" strokeWidth={1.5} />
-          </div>
-          <span className="font-semibold text-2xl">CAITECH</span>
+          <CaiwaveLogo size={40} />
+          <span className="font-semibold text-2xl">CAIWAVE</span>
         </Link>
 
         <div className="space-y-6">
@@ -95,7 +94,7 @@ const RegisterPage = () => {
         </div>
 
         <div className="text-neutral-500 text-sm">
-          © 2024 CAITECH. All rights reserved.
+          © 2026 CAIWAVE. All rights reserved.
         </div>
       </div>
 
@@ -116,16 +115,14 @@ const RegisterPage = () => {
             {/* Mobile Logo */}
             <div className="lg:hidden flex justify-center">
               <Link to="/" className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <Wifi className="w-6 h-6 text-white" strokeWidth={1.5} />
-                </div>
-                <span className="font-semibold text-2xl">CAITECH</span>
+                <CaiwaveLogo size={40} />
+                <span className="font-semibold text-2xl">CAIWAVE</span>
               </Link>
             </div>
 
             <div className="text-center lg:text-left">
               <h2 className="text-2xl font-bold">Create your account</h2>
-              <p className="text-neutral-400 mt-2">Get started with CAITECH today</p>
+              <p className="text-neutral-400 mt-2">Get started with CAIWAVE today</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5" data-testid="register-form">
