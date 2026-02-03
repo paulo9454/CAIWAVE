@@ -42,7 +42,7 @@ MPESA_ENV = os.environ.get('MPESA_ENV', 'sandbox')  # 'sandbox' or 'production'
 SMS_PROVIDER = os.environ.get('SMS_PROVIDER', 'africas_talking')  # 'africas_talking', 'centipid', etc.
 SMS_API_KEY = os.environ.get('SMS_API_KEY', '')
 SMS_USERNAME = os.environ.get('SMS_USERNAME', '')
-SMS_SENDER_ID = os.environ.get('SMS_SENDER_ID', 'CAITECH')
+SMS_SENDER_ID = os.environ.get('SMS_SENDER_ID', 'CAIWAVE')
 
 # Twilio WhatsApp Configuration
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
@@ -56,7 +56,7 @@ RADIUS_AUTH_PORT = int(os.environ.get('RADIUS_AUTH_PORT', '1812'))
 RADIUS_ACCT_PORT = int(os.environ.get('RADIUS_ACCT_PORT', '1813'))
 
 # Create the main app
-app = FastAPI(title="CAITECH Wi-Fi Hotspot Billing Platform", version="2.0.0")
+app = FastAPI(title="CAIWAVE Wi-Fi Hotspot Billing Platform", version="2.0.0")
 
 # Create routers
 api_router = APIRouter(prefix="/api")
@@ -374,7 +374,7 @@ class SystemSettings(BaseModel):
     whatsapp_enabled: bool = False
     email_enabled: bool = False
     voucher_printing_enabled: bool = True
-    auto_approve_ads: bool = False  # Always False for CAITECH
+    auto_approve_ads: bool = False  # Always False for CAIWAVE
 
 # Marketplace Models
 class MarketplaceItem(BaseModel):
@@ -754,7 +754,7 @@ class NotificationService:
     
     async def send_payment_confirmation(self, phone: str, amount: float, duration: str, preferences: dict):
         """Send payment confirmation via preferred channels"""
-        message = f"CAITECH WiFi: Payment of KES {amount} received. Your {duration} session is now active. Enjoy browsing!"
+        message = f"CAIWAVE WiFi: Payment of KES {amount} received. Your {duration} session is now active. Enjoy browsing!"
         
         if preferences.get("sms_enabled", True):
             await sms_service.send_sms(phone, message)
@@ -764,7 +764,7 @@ class NotificationService:
     
     async def send_expiry_reminder(self, phone: str, minutes_left: int, preferences: dict):
         """Send expiry reminder"""
-        message = f"CAITECH WiFi: Your session expires in {minutes_left} minutes. Purchase more time to stay connected!"
+        message = f"CAIWAVE WiFi: Your session expires in {minutes_left} minutes. Purchase more time to stay connected!"
         
         if preferences.get("sms_enabled", True):
             await sms_service.send_sms(phone, message)
@@ -774,7 +774,7 @@ class NotificationService:
     
     async def send_session_expired(self, phone: str, preferences: dict):
         """Send session expired notification"""
-        message = "CAITECH WiFi: Your session has expired. Visit the captive portal to purchase more time."
+        message = "CAIWAVE WiFi: Your session has expired. Visit the captive portal to purchase more time."
         
         if preferences.get("sms_enabled", True):
             await sms_service.send_sms(phone, message)
@@ -1143,7 +1143,7 @@ async def initiate_payment(payment_data: PaymentCreate):
         stk_result = await mpesa_service.stk_push(
             phone_number=payment_data.phone_number,
             amount=package["price"],
-            account_ref=f"CAITECH-{payment.id[:8]}",
+            account_ref=f"CAIWAVE-{payment.id[:8]}",
             description=f"WiFi {package['name']}"
         )
         
@@ -1703,7 +1703,7 @@ async def get_portal_data(hotspot_id: str):
     if hotspot_id == "demo":
         hotspot = {
             "id": "demo",
-            "name": "CAITECH Demo Hotspot",
+            "name": "CAIWAVE Demo Hotspot",
             "ssid": "Cainet-Demo_FREE WIFI",
             "location_name": "Demo Location",
             "status": HotspotStatus.ACTIVE.value
@@ -1849,7 +1849,7 @@ async def seed_data():
     if not existing_admin:
         admin = User(
             email=admin_email,
-            name="CAITECH Admin",
+            name="CAIWAVE Admin",
             role=UserRole.SUPER_ADMIN,
             phone="+254700000000"
         )
@@ -1902,9 +1902,9 @@ async def seed_data():
 @api_router.get("/")
 async def root():
     return {
-        "message": "CAITECH Wi-Fi Hotspot Billing Platform API",
+        "message": "CAIWAVE Wi-Fi Hotspot Billing Platform API",
         "version": "2.0.0",
-        "powered_by": "CAITECH © 2026"
+        "powered_by": "CAIWAVE © 2026"
     }
 
 @api_router.get("/health")
