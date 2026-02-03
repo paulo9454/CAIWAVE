@@ -17,6 +17,8 @@ import {
   DollarSign,
   BarChart3,
   Radio,
+  Tv,
+  Play,
 } from "lucide-react";
 
 const LandingPage = () => {
