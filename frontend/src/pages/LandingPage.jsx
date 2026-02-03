@@ -57,6 +57,9 @@ const LandingPage = () => {
               <a href="#pricing" className="text-neutral-400 hover:text-white transition-colors text-sm">
                 Pricing
               </a>
+              <a href="#caiwave-tv" className="text-neutral-400 hover:text-white transition-colors text-sm">
+                CAIWAVE TV
+              </a>
               <a href="#advertisers" className="text-neutral-400 hover:text-white transition-colors text-sm">
                 For Advertisers
               </a>
