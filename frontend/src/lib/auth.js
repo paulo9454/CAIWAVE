@@ -2,7 +2,7 @@ import { API_URL } from "./utils";
 import axios from "axios";
 
 const TOKEN_KEY = "caiwave_token";
-const USER_KEY = "caitech_user";
+const USER_KEY = "caiwave_user";
 
 export const setAuthToken = (token) => {
   localStorage.setItem(TOKEN_KEY, token);
