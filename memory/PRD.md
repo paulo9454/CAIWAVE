@@ -67,6 +67,36 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - Updated backend seed data and SMS messages
 - New admin credentials: admin@caiwave.com / admin123
 
+### Phase 2: Admin Campaigns + CAIWAVE TV ✅ COMPLETE
+- **Campaigns System (Admin Only)**
+  - Full CRUD for campaigns
+  - Campaign status management (draft, scheduled, active, paused, completed)
+  - Target regions and hotspots
+  - Assigned ads linking
+  - Performance tracking (impressions, clicks)
+  
+- **CAIWAVE TV Streams (Admin Only)**
+  - Full CRUD for live streams
+  - Stream scheduling (start/end times)
+  - Access types: free, discounted, sponsored, paid
+  - Regional access control
+  - View tracking
+  - Live status indicator
+  
+- **Subsidized Uptime (Admin Only)**
+  - Full CRUD for subsidized offers
+  - Original vs discounted pricing
+  - Time-limited offers (date range)
+  - Daily time windows (optional)
+  - Max uses limit (optional)
+  - Regional targeting
+  - Usage tracking
+  
+- **Landing Page Updates**
+  - Added CAIWAVE TV navigation link
+  - Added CAIWAVE TV section with features
+  - Added broadcast CTA for events
+
 ### Backend Features
 - FastAPI with JWT authentication
 - MongoDB database with Mongoose-like models
@@ -76,25 +106,26 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - Hotspot management
 - Payment tracking
 - Session management structure
+- **NEW**: Campaign management APIs
+- **NEW**: Stream management APIs
+- **NEW**: Subsidized uptime APIs
 
 ### Frontend Features  
 - Dark theme UI with modern design
-- Landing page with all sections
+- Landing page with all sections + CAIWAVE TV
 - Login/Register pages
 - Admin Dashboard with:
-  - Ad Approval section
+  - Overview
+  - **Campaigns** (NEW)
+  - **CAIWAVE TV** (NEW)
+  - **Subsidized Uptime** (NEW)
+  - Ad Approval
   - Package management
-  - Revenue settings (dynamic calculation)
+  - Revenue settings
   - Hotspot management
   - Integration settings
-- Owner Dashboard with:
-  - Hotspot management
-  - Payment history
-  - Analytics
-- Advertiser Dashboard with:
-  - Ad creation
-  - Campaign management
-  - Performance tracking
+- Owner Dashboard
+- Advertiser Dashboard
 - Captive Portal for end users
 
 ### API Endpoints
@@ -109,35 +140,34 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - `POST /api/hotspots` - Create hotspot
 - `GET /api/portal/{hotspot_id}` - Captive portal data
 - `POST /api/seed` - Seed database
+- **NEW Campaigns**:
+  - `GET /api/campaigns/` - List campaigns
+  - `POST /api/campaigns/` - Create campaign
+  - `PUT /api/campaigns/{id}` - Update campaign
+  - `POST /api/campaigns/{id}/status` - Update status
+  - `DELETE /api/campaigns/{id}` - Delete campaign
+- **NEW Streams (CAIWAVE TV)**:
+  - `GET /api/streams/` - List streams
+  - `GET /api/streams/live` - Live streams (public)
+  - `POST /api/streams/` - Create stream
+  - `PUT /api/streams/{id}` - Update stream
+  - `POST /api/streams/{id}/toggle` - Toggle active
+  - `POST /api/streams/{id}/view` - Record view
+  - `DELETE /api/streams/{id}` - Delete stream
+- **NEW Subsidized Uptime**:
+  - `GET /api/subsidized-uptime/` - List offers
+  - `GET /api/subsidized-uptime/active` - Active offers (public)
+  - `POST /api/subsidized-uptime/` - Create offer
+  - `PUT /api/subsidized-uptime/{id}` - Update offer
+  - `POST /api/subsidized-uptime/{id}/status` - Update status
+  - `POST /api/subsidized-uptime/{id}/use` - Record use
+  - `DELETE /api/subsidized-uptime/{id}` - Delete offer
 
 ---
 
 ## Upcoming Tasks (Priority Order)
 
-### Phase 2: Core Features (NEXT)
-1. **Admin-Only Campaigns System**
-   - Create Campaign model (admin-only creation)
-   - Campaign controls: dates, regions, assigned ads
-   - Link campaigns to CAIWAVE TV streams
-   - Link campaigns to subsidized uptime
-
-2. **Ads vs Campaigns Distinction**
-   - Ads: Created by Advertisers → Pending → Approved → Paid → Active
-   - Campaigns: Admin-only containers for approved ads
-   - Payment integration for ad activation
-
-3. **CAIWAVE TV Section**
-   - Admin creates/manages streams
-   - Stream config: name, URL, start/end time, access type
-   - Access types: Free, Discounted, Sponsored
-   - Ads display before stream access
-
-4. **Subsidized/Discounted Uptime**
-   - Admin-controlled cheaper rates (e.g., KES 15 → 25 hours)
-   - Time-limited, region-limited
-   - Event-based activation
-
-### Phase 3: Integrations
+### Phase 3: Integrations (NEXT)
 1. **M-Pesa Daraja Integration**
    - STK Push for payments
    - Callback handling
@@ -167,6 +197,8 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - System Audit Logs
 - Two-Factor Authentication (2FA)
 - MikroTik network rules for streaming domains
+- Link campaigns to streams and subsidized uptime
+- Pre-roll ads for streams
 
 ---
 
@@ -209,33 +241,66 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 }
 ```
 
-### Campaign (TO BE IMPLEMENTED)
+### Campaign (IMPLEMENTED)
 ```javascript
 {
+  id: String,
   name: String,
-  status: ['draft', 'active', 'paused', 'completed'],
-  start_date: Date,
-  end_date: Date,
+  description: String,
+  start_date: DateTime,
+  end_date: DateTime,
   target_regions: [String],
-  target_hotspots: [ObjectId],
-  assigned_ads: [ObjectId],
-  stream_id: ObjectId (optional),
-  subsidized_uptime_id: ObjectId (optional),
-  created_by: ObjectId (admin only)
+  target_hotspot_ids: [String],
+  assigned_ad_ids: [String],
+  stream_id: String (optional),
+  subsidized_uptime_id: String (optional),
+  status: ['draft', 'scheduled', 'active', 'paused', 'completed'],
+  created_by: String,
+  total_impressions: Number,
+  total_clicks: Number
 }
 ```
 
-### Stream (TO BE IMPLEMENTED)
+### Stream (IMPLEMENTED)
 ```javascript
 {
+  id: String,
   name: String,
+  description: String,
   stream_url: String,
-  start_time: Date,
-  end_time: Date,
-  access_type: ['free', 'discounted', 'sponsored'],
-  allowed_hotspots: [ObjectId],
-  pre_roll_ads: [ObjectId],
-  is_active: Boolean
+  start_time: DateTime,
+  end_time: DateTime,
+  access_type: ['free', 'discounted', 'sponsored', 'paid'],
+  price: Number,
+  allowed_hotspot_ids: [String],
+  allowed_regions: [String],
+  pre_roll_ad_ids: [String],
+  thumbnail_url: String,
+  is_active: Boolean,
+  total_views: Number,
+  created_by: String
+}
+```
+
+### SubsidizedUptime (IMPLEMENTED)
+```javascript
+{
+  id: String,
+  name: String,
+  description: String,
+  original_price: Number,
+  discounted_price: Number,
+  duration_hours: Number,
+  start_date: DateTime,
+  end_date: DateTime,
+  daily_start_time: String,
+  daily_end_time: String,
+  allowed_hotspot_ids: [String],
+  allowed_regions: [String],
+  max_uses: Number,
+  status: ['draft', 'scheduled', 'active', 'expired'],
+  total_uses: Number,
+  created_by: String
 }
 ```
 
@@ -252,4 +317,6 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Owner Dashboard**: `/app/frontend/src/pages/owner/Dashboard.jsx`
 - **Advertiser Dashboard**: `/app/frontend/src/pages/advertiser/Dashboard.jsx`
 - **Captive Portal**: `/app/frontend/src/pages/CaptivePortal.jsx`
+- **Landing Page**: `/app/frontend/src/pages/LandingPage.jsx`
 - **Backend Server**: `/app/backend/server.py`
+- **Auth Module**: `/app/frontend/src/lib/auth.js`
