@@ -26,7 +26,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'caitech-secret-key-change-in-production')
+JWT_SECRET = os.environ.get('JWT_SECRET', 'caiwave-secret-key-change-in-production')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
@@ -1844,7 +1844,7 @@ async def seed_data():
         await db.packages.insert_one(pkg_dict)
     
     # Create super admin if not exists
-    admin_email = "admin@caitech.com"
+    admin_email = "admin@caiwave.com"
     existing_admin = await db.users.find_one({"email": admin_email})
     if not existing_admin:
         admin = User(
