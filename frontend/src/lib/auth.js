@@ -1,7 +1,7 @@
 import { API_URL } from "./utils";
 import axios from "axios";
 
-const TOKEN_KEY = "caitech_token";
+const TOKEN_KEY = "caiwave_token";
 const USER_KEY = "caitech_user";
 
 export const setAuthToken = (token) => {
