@@ -3113,6 +3113,440 @@ async def add_marketplace_item(
     await db.marketplace.insert_one(item_dict)
     return item
 
+# ==================== Invoice & Subscription Routes ====================
+
+def generate_invoice_number():
+    """Generate unique invoice number: INV-YYYYMM-XXXX"""
+    now = datetime.now(timezone.utc)
+    random_suffix = str(uuid.uuid4())[:4].upper()
+    return f"INV-{now.strftime('%Y%m')}-{random_suffix}"
+
+async def create_invoice_for_owner(owner_id: str, hotspot_ids: List[str], is_trial: bool = False):
+    """Helper function to create an invoice for a hotspot owner"""
+    now = datetime.now(timezone.utc)
+    
+    # Calculate billing period (1 month from now)
+    billing_start = now
+    billing_end = now + timedelta(days=30)
+    
+    # Due date: 14 days from now (end of trial)
+    due_date = now + timedelta(days=TRIAL_DAYS)
+    
+    invoice = Invoice(
+        invoice_number=generate_invoice_number(),
+        owner_id=owner_id,
+        hotspot_ids=hotspot_ids,
+        billing_period_start=billing_start,
+        billing_period_end=billing_end,
+        amount=SUBSCRIPTION_PRICE_KES * len(hotspot_ids),
+        hotspot_count=len(hotspot_ids),
+        status=InvoiceStatus.TRIAL if is_trial else InvoiceStatus.UNPAID,
+        due_date=due_date
+    )
+    
+    invoice_dict = invoice.model_dump()
+    invoice_dict["created_at"] = invoice_dict["created_at"].isoformat()
+    invoice_dict["billing_period_start"] = invoice_dict["billing_period_start"].isoformat()
+    invoice_dict["billing_period_end"] = invoice_dict["billing_period_end"].isoformat()
+    invoice_dict["due_date"] = invoice_dict["due_date"].isoformat()
+    
+    await db.invoices.insert_one(invoice_dict)
+    return invoice_dict
+
+async def check_and_update_subscription_status(owner_id: str):
+    """Check owner's subscription status and update hotspots accordingly"""
+    now = datetime.now(timezone.utc)
+    
+    # Get latest invoice
+    invoice = await db.invoices.find_one(
+        {"owner_id": owner_id},
+        {"_id": 0},
+        sort=[("created_at", -1)]
+    )
+    
+    if not invoice:
+        return None
+    
+    # Parse dates
+    created_at = datetime.fromisoformat(invoice["created_at"].replace("Z", "+00:00")) if isinstance(invoice["created_at"], str) else invoice["created_at"]
+    days_since_created = (now - created_at).days
+    
+    # Determine status based on days
+    new_status = None
+    hotspot_status = HotspotStatus.ACTIVE
+    
+    if invoice["status"] == InvoiceStatus.PAID.value:
+        new_status = SubscriptionStatus.ACTIVE
+        hotspot_status = HotspotStatus.ACTIVE
+    elif invoice["status"] == InvoiceStatus.TRIAL.value:
+        if days_since_created < TRIAL_DAYS:
+            new_status = SubscriptionStatus.TRIAL
+            hotspot_status = HotspotStatus.ACTIVE
+        elif days_since_created < SUSPENSION_DAY:
+            new_status = SubscriptionStatus.GRACE_PERIOD
+            hotspot_status = HotspotStatus.ACTIVE  # Still active but limited
+            # Update invoice to unpaid
+            await db.invoices.update_one(
+                {"id": invoice["id"]},
+                {"$set": {"status": InvoiceStatus.UNPAID.value}}
+            )
+        else:
+            new_status = SubscriptionStatus.SUSPENDED
+            hotspot_status = HotspotStatus.SUSPENDED
+            await db.invoices.update_one(
+                {"id": invoice["id"]},
+                {"$set": {"status": InvoiceStatus.OVERDUE.value}}
+            )
+    elif invoice["status"] == InvoiceStatus.UNPAID.value:
+        if days_since_created < SUSPENSION_DAY:
+            new_status = SubscriptionStatus.GRACE_PERIOD
+            hotspot_status = HotspotStatus.ACTIVE
+        else:
+            new_status = SubscriptionStatus.SUSPENDED
+            hotspot_status = HotspotStatus.SUSPENDED
+            await db.invoices.update_one(
+                {"id": invoice["id"]},
+                {"$set": {"status": InvoiceStatus.OVERDUE.value}}
+            )
+    elif invoice["status"] == InvoiceStatus.OVERDUE.value:
+        new_status = SubscriptionStatus.SUSPENDED
+        hotspot_status = HotspotStatus.SUSPENDED
+    
+    # Update hotspots
+    if new_status:
+        await db.hotspots.update_many(
+            {"owner_id": owner_id},
+            {"$set": {
+                "subscription_status": new_status.value,
+                "status": hotspot_status.value
+            }}
+        )
+    
+    return {"subscription_status": new_status.value if new_status else None, "days": days_since_created}
+
+# Invoice Routes
+@invoices_router.get("/")
+async def get_invoices(
+    user: dict = Depends(get_current_user),
+    status: Optional[InvoiceStatus] = None,
+    limit: int = 50
+):
+    """Get invoices - owners see their own, admin sees all"""
+    query = {}
+    
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        query["owner_id"] = user["id"]
+    
+    if status:
+        query["status"] = status.value
+    
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return invoices
+
+@invoices_router.get("/current")
+async def get_current_invoice(user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER]))):
+    """Get current/latest invoice for the logged-in hotspot owner"""
+    invoice = await db.invoices.find_one(
+        {"owner_id": user["id"]},
+        {"_id": 0},
+        sort=[("created_at", -1)]
+    )
+    
+    if not invoice:
+        return {"message": "No invoices found", "invoice": None}
+    
+    # Check and update status
+    status_info = await check_and_update_subscription_status(user["id"])
+    
+    # Refresh invoice
+    invoice = await db.invoices.find_one({"id": invoice["id"]}, {"_id": 0})
+    
+    return {
+        "invoice": invoice,
+        "subscription_status": status_info
+    }
+
+@invoices_router.get("/{invoice_id}")
+async def get_invoice(
+    invoice_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Get a specific invoice"""
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Check access
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and invoice["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return invoice
+
+@invoices_router.post("/pay/{invoice_id}")
+async def pay_invoice(
+    invoice_id: str,
+    payment_request: InvoicePaymentRequest,
+    user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER, UserRole.SUPER_ADMIN]))
+):
+    """Pay invoice via M-Pesa STK Push"""
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Verify ownership
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and invoice["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if invoice["status"] == InvoiceStatus.PAID.value:
+        raise HTTPException(status_code=400, detail="Invoice already paid")
+    
+    # Initiate M-Pesa payment
+    if not mpesa_service.is_configured():
+        # Simulate payment success for demo
+        now = datetime.now(timezone.utc)
+        next_billing_end = now + timedelta(days=30)
+        
+        await db.invoices.update_one(
+            {"id": invoice_id},
+            {"$set": {
+                "status": InvoiceStatus.PAID.value,
+                "paid_at": now.isoformat(),
+                "payment_method": "mpesa_simulated",
+                "mpesa_receipt_number": f"SIM{uuid.uuid4().hex[:10].upper()}"
+            }}
+        )
+        
+        # Activate hotspots
+        await db.hotspots.update_many(
+            {"owner_id": invoice["owner_id"]},
+            {"$set": {
+                "status": HotspotStatus.ACTIVE.value,
+                "subscription_status": SubscriptionStatus.ACTIVE.value,
+                "subscription_end_date": next_billing_end.isoformat()
+            }}
+        )
+        
+        return {
+            "success": True,
+            "message": "Payment simulated (M-Pesa not configured). Subscription activated!",
+            "invoice_id": invoice_id
+        }
+    
+    # Real M-Pesa STK Push
+    result = await mpesa_service.stk_push(
+        phone_number=payment_request.phone_number,
+        amount=int(invoice["amount"]),
+        account_ref=invoice["invoice_number"],
+        description=f"CAIWAVE Hotspot Subscription"
+    )
+    
+    if result.get("ResponseCode") == "0":
+        # Store checkout request ID
+        await db.invoices.update_one(
+            {"id": invoice_id},
+            {"$set": {"mpesa_checkout_id": result.get("CheckoutRequestID")}}
+        )
+        return {
+            "success": True,
+            "message": "STK Push sent. Check your phone to complete payment.",
+            "checkout_request_id": result.get("CheckoutRequestID")
+        }
+    else:
+        return {
+            "success": False,
+            "message": result.get("errorMessage", "Failed to initiate payment")
+        }
+
+@invoices_router.post("/admin/create")
+async def admin_create_invoice(
+    data: InvoiceCreate,
+    user: dict = Depends(require_admin)
+):
+    """Admin - manually create invoice for owner"""
+    invoice = await create_invoice_for_owner(data.owner_id, data.hotspot_ids, is_trial=False)
+    return {"success": True, "invoice": invoice}
+
+@invoices_router.post("/admin/mark-paid/{invoice_id}")
+async def admin_mark_invoice_paid(
+    invoice_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Admin - manually mark invoice as paid"""
+    invoice = await db.invoices.find_one({"id": invoice_id})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    now = datetime.now(timezone.utc)
+    next_billing_end = now + timedelta(days=30)
+    
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": InvoiceStatus.PAID.value,
+            "paid_at": now.isoformat(),
+            "payment_method": "manual_admin"
+        }}
+    )
+    
+    # Activate hotspots
+    await db.hotspots.update_many(
+        {"owner_id": invoice["owner_id"]},
+        {"$set": {
+            "status": HotspotStatus.ACTIVE.value,
+            "subscription_status": SubscriptionStatus.ACTIVE.value,
+            "subscription_end_date": next_billing_end.isoformat()
+        }}
+    )
+    
+    return {"success": True, "message": "Invoice marked as paid"}
+
+# Subscription Routes
+@subscriptions_router.get("/status")
+async def get_subscription_status(user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER]))):
+    """Get subscription status for logged-in hotspot owner"""
+    # Get hotspots
+    hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"_id": 0}).to_list(100)
+    
+    # Get current invoice
+    invoice = await db.invoices.find_one(
+        {"owner_id": user["id"]},
+        {"_id": 0},
+        sort=[("created_at", -1)]
+    )
+    
+    # Calculate trial/subscription info
+    now = datetime.now(timezone.utc)
+    trial_days_remaining = 0
+    subscription_status = SubscriptionStatus.TRIAL.value
+    
+    if invoice:
+        created_at = datetime.fromisoformat(invoice["created_at"].replace("Z", "+00:00")) if isinstance(invoice["created_at"], str) else invoice["created_at"]
+        days_since_created = (now - created_at).days
+        
+        if invoice["status"] == InvoiceStatus.PAID.value:
+            subscription_status = SubscriptionStatus.ACTIVE.value
+            trial_days_remaining = 0
+        elif invoice["status"] == InvoiceStatus.TRIAL.value:
+            trial_days_remaining = max(0, TRIAL_DAYS - days_since_created)
+            subscription_status = SubscriptionStatus.TRIAL.value
+        elif invoice["status"] == InvoiceStatus.UNPAID.value:
+            subscription_status = SubscriptionStatus.GRACE_PERIOD.value
+            trial_days_remaining = 0
+        elif invoice["status"] == InvoiceStatus.OVERDUE.value:
+            subscription_status = SubscriptionStatus.SUSPENDED.value
+            trial_days_remaining = 0
+    
+    return {
+        "subscription_status": subscription_status,
+        "trial_days_remaining": trial_days_remaining,
+        "hotspot_count": len(hotspots),
+        "monthly_fee": SUBSCRIPTION_PRICE_KES * len(hotspots),
+        "current_invoice": invoice,
+        "hotspots": hotspots
+    }
+
+@subscriptions_router.post("/start-trial")
+async def start_trial(user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER]))):
+    """Start 14-day free trial for new hotspot owner"""
+    # Check if already has invoices
+    existing = await db.invoices.find_one({"owner_id": user["id"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="Trial already started")
+    
+    # Get owner's hotspots
+    hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"id": 1}).to_list(100)
+    if not hotspots:
+        raise HTTPException(status_code=400, detail="No hotspots found. Create a hotspot first.")
+    
+    hotspot_ids = [h["id"] for h in hotspots]
+    
+    # Create trial invoice
+    invoice = await create_invoice_for_owner(user["id"], hotspot_ids, is_trial=True)
+    
+    # Update hotspots with trial info
+    now = datetime.now(timezone.utc)
+    trial_end = now + timedelta(days=TRIAL_DAYS)
+    
+    await db.hotspots.update_many(
+        {"owner_id": user["id"]},
+        {"$set": {
+            "subscription_status": SubscriptionStatus.TRIAL.value,
+            "trial_start_date": now.isoformat(),
+            "trial_end_date": trial_end.isoformat(),
+            "status": HotspotStatus.ACTIVE.value
+        }}
+    )
+    
+    return {
+        "success": True,
+        "message": f"14-day free trial started! Your subscription will be due on {trial_end.strftime('%Y-%m-%d')}",
+        "invoice": invoice,
+        "trial_end_date": trial_end.isoformat()
+    }
+
+# Admin invoice management
+@invoices_router.get("/admin/all")
+async def admin_get_all_invoices(
+    user: dict = Depends(require_admin),
+    status: Optional[InvoiceStatus] = None,
+    limit: int = 100
+):
+    """Admin - get all invoices with stats"""
+    query = {}
+    if status:
+        query["status"] = status.value
+    
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    
+    # Get stats
+    total = await db.invoices.count_documents({})
+    paid = await db.invoices.count_documents({"status": InvoiceStatus.PAID.value})
+    trial = await db.invoices.count_documents({"status": InvoiceStatus.TRIAL.value})
+    unpaid = await db.invoices.count_documents({"status": InvoiceStatus.UNPAID.value})
+    overdue = await db.invoices.count_documents({"status": InvoiceStatus.OVERDUE.value})
+    
+    # Revenue
+    paid_invoices = await db.invoices.find({"status": InvoiceStatus.PAID.value}, {"amount": 1}).to_list(1000)
+    total_revenue = sum(inv.get("amount", 0) for inv in paid_invoices)
+    
+    return {
+        "invoices": invoices,
+        "stats": {
+            "total": total,
+            "paid": paid,
+            "trial": trial,
+            "unpaid": unpaid,
+            "overdue": overdue,
+            "total_revenue": total_revenue
+        }
+    }
+
+@invoices_router.post("/admin/suspend-overdue")
+async def admin_suspend_overdue(user: dict = Depends(require_admin)):
+    """Admin - suspend all overdue hotspots"""
+    # Find overdue invoices
+    overdue_invoices = await db.invoices.find(
+        {"status": InvoiceStatus.OVERDUE.value},
+        {"owner_id": 1}
+    ).to_list(1000)
+    
+    owner_ids = list(set(inv["owner_id"] for inv in overdue_invoices))
+    
+    # Suspend hotspots
+    result = await db.hotspots.update_many(
+        {"owner_id": {"$in": owner_ids}},
+        {"$set": {
+            "status": HotspotStatus.SUSPENDED.value,
+            "subscription_status": SubscriptionStatus.SUSPENDED.value
+        }}
+    )
+    
+    return {
+        "success": True,
+        "suspended_count": result.modified_count,
+        "owner_count": len(owner_ids)
+    }
+
 # ==================== Seed Data Route ====================
 
 @api_router.post("/seed")
