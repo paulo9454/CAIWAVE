@@ -1400,7 +1400,208 @@ async def get_payments(
     payments = await db.payments.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return payments
 
-# ==================== Ads Routes (WITH ADMIN APPROVAL) ====================
+# ==================== Kenya Locations Data ====================
+
+# Kenya Counties and their Constituencies (sample - can be expanded)
+KENYA_LOCATIONS = {
+    "Nairobi": [
+        "Westlands", "Dagoretti North", "Dagoretti South", "Langata", 
+        "Kibra", "Roysambu", "Kasarani", "Ruaraka", "Embakasi South",
+        "Embakasi North", "Embakasi Central", "Embakasi East", "Embakasi West",
+        "Makadara", "Kamukunji", "Starehe", "Mathare"
+    ],
+    "Mombasa": [
+        "Changamwe", "Jomvu", "Kisauni", "Nyali", "Likoni", "Mvita"
+    ],
+    "Kisumu": [
+        "Kisumu East", "Kisumu West", "Kisumu Central", "Seme", "Nyando", 
+        "Muhoroni", "Nyakach"
+    ],
+    "Nakuru": [
+        "Nakuru Town East", "Nakuru Town West", "Naivasha", "Gilgil", 
+        "Subukia", "Rongai", "Bahati", "Molo", "Kuresoi South", "Kuresoi North", "Njoro"
+    ],
+    "Kiambu": [
+        "Gatundu South", "Gatundu North", "Juja", "Thika Town", "Ruiru",
+        "Githunguri", "Kiambu", "Kiambaa", "Kabete", "Kikuyu", "Limuru", "Lari"
+    ],
+    "Machakos": [
+        "Masinga", "Yatta", "Kangundo", "Matungulu", "Kathiani", "Mavoko",
+        "Machakos Town", "Mwala"
+    ],
+    "Kajiado": [
+        "Kajiado North", "Kajiado Central", "Kajiado East", "Kajiado West", "Kajiado South"
+    ],
+    "Uasin Gishu": [
+        "Soy", "Turbo", "Moiben", "Ainabkoi", "Kapseret", "Kesses"
+    ],
+    "Trans Nzoia": [
+        "Kwanza", "Endebess", "Saboti", "Kiminini", "Cherangany"
+    ],
+    "Kakamega": [
+        "Lugari", "Likuyani", "Malava", "Lurambi", "Navakholo", "Mumias West",
+        "Mumias East", "Matungu", "Butere", "Khwisero", "Shinyalu", "Ikolomani"
+    ],
+    "Bungoma": [
+        "Mount Elgon", "Sirisia", "Kabuchai", "Bumula", "Kanduyi", 
+        "Webuye East", "Webuye West", "Kimilili", "Tongaren"
+    ],
+    "Nyeri": [
+        "Tetu", "Kieni", "Mathira", "Othaya", "Mukurweini", "Nyeri Town"
+    ],
+    "Meru": [
+        "North Imenti", "South Imenti", "Central Imenti", "Tigania West",
+        "Tigania East", "Igembe South", "Igembe Central", "Igembe North", "Buuri"
+    ],
+    "Kilifi": [
+        "Kilifi North", "Kilifi South", "Kaloleni", "Rabai", "Ganze", "Malindi", "Magarini"
+    ],
+    "Kwale": [
+        "Msambweni", "Lunga Lunga", "Matuga", "Kinango"
+    ],
+    "Turkana": [
+        "Turkana North", "Turkana West", "Turkana Central", "Loima", 
+        "Turkana South", "Turkana East"
+    ],
+    "Garissa": [
+        "Garissa Township", "Balambala", "Lagdera", "Dadaab", "Fafi", "Ijara"
+    ],
+    "Wajir": [
+        "Wajir North", "Wajir East", "Tarbaj", "Wajir West", "Eldas", "Wajir South"
+    ],
+    "Mandera": [
+        "Mandera West", "Banissa", "Mandera North", "Mandera South", "Mandera East", "Lafey"
+    ]
+}
+
+# Get all counties
+def get_all_counties() -> List[str]:
+    return list(KENYA_LOCATIONS.keys())
+
+# Get constituencies for a county
+def get_constituencies(county: str) -> List[str]:
+    return KENYA_LOCATIONS.get(county, [])
+
+# Get all constituencies
+def get_all_constituencies() -> List[dict]:
+    result = []
+    for county, constituencies in KENYA_LOCATIONS.items():
+        for const in constituencies:
+            result.append({"county": county, "constituency": const})
+    return result
+
+# ==================== Location Routes ====================
+
+@locations_router.get("/counties")
+async def list_counties():
+    """Get all Kenya counties"""
+    return {"counties": get_all_counties()}
+
+@locations_router.get("/constituencies")
+async def list_constituencies(county: Optional[str] = None):
+    """Get constituencies, optionally filtered by county"""
+    if county:
+        return {"constituencies": get_constituencies(county)}
+    return {"constituencies": get_all_constituencies()}
+
+# ==================== Ad Packages Routes (Admin Only) ====================
+
+@ad_packages_router.get("/")
+async def get_ad_packages(include_disabled: bool = False):
+    """Get all ad packages - public endpoint for advertisers to see pricing"""
+    query = {} if include_disabled else {"status": AdPackageStatus.ACTIVE.value}
+    packages = await db.ad_packages.find(query, {"_id": 0}).sort("price", 1).to_list(100)
+    return packages
+
+@ad_packages_router.get("/{package_id}")
+async def get_ad_package(package_id: str):
+    """Get a specific ad package"""
+    pkg = await db.ad_packages.find_one({"id": package_id}, {"_id": 0})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Package not found")
+    return pkg
+
+@ad_packages_router.post("/")
+async def create_ad_package(
+    package: AdPackageCreate,
+    user: dict = Depends(require_admin)
+):
+    """Create a new ad package (Admin only)"""
+    new_package = AdPackage(
+        name=package.name,
+        description=package.description,
+        coverage_scope=package.coverage_scope,
+        duration_days=package.duration_days,
+        price=package.price,
+        max_impressions=package.max_impressions
+    )
+    
+    pkg_dict = new_package.model_dump()
+    pkg_dict["created_at"] = pkg_dict["created_at"].isoformat()
+    
+    await db.ad_packages.insert_one(pkg_dict)
+    
+    return {"success": True, "package": pkg_dict}
+
+@ad_packages_router.put("/{package_id}")
+async def update_ad_package(
+    package_id: str,
+    update: AdPackageUpdate,
+    user: dict = Depends(require_admin)
+):
+    """Update an ad package (Admin only)"""
+    existing = await db.ad_packages.find_one({"id": package_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.ad_packages.update_one({"id": package_id}, {"$set": update_data})
+    
+    updated = await db.ad_packages.find_one({"id": package_id}, {"_id": 0})
+    return {"success": True, "package": updated}
+
+@ad_packages_router.delete("/{package_id}")
+async def delete_ad_package(
+    package_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Delete an ad package (Admin only) - only if not used by any ads"""
+    # Check if any ads use this package
+    ad_count = await db.ads.count_documents({"package_id": package_id})
+    if ad_count > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Cannot delete - {ad_count} ads use this package. Disable instead."
+        )
+    
+    result = await db.ad_packages.delete_one({"id": package_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    return {"success": True, "message": "Package deleted"}
+
+@ad_packages_router.post("/{package_id}/toggle")
+async def toggle_ad_package(
+    package_id: str,
+    user: dict = Depends(require_admin)
+):
+    """Toggle package status between active/disabled (Admin only)"""
+    pkg = await db.ad_packages.find_one({"id": package_id})
+    if not pkg:
+        raise HTTPException(status_code=404, detail="Package not found")
+    
+    new_status = AdPackageStatus.DISABLED.value if pkg["status"] == AdPackageStatus.ACTIVE.value else AdPackageStatus.ACTIVE.value
+    
+    await db.ad_packages.update_one(
+        {"id": package_id},
+        {"$set": {"status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"success": True, "status": new_status}
+
+# ==================== Ads Routes (WITH PACKAGE-BASED PRICING) ====================
 
 @ads_router.get("/")
 async def get_ads(
