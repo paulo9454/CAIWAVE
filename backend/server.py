@@ -1683,13 +1683,13 @@ async def upload_ad(
     if constituencies:
         try:
             selected_constituencies = json.loads(constituencies)
-        except:
+        except (json.JSONDecodeError, TypeError):
             selected_constituencies = [c.strip() for c in constituencies.split(",") if c.strip()]
     
     if counties:
         try:
             selected_counties = json.loads(counties)
-        except:
+        except (json.JSONDecodeError, TypeError):
             selected_counties = [c.strip() for c in counties.split(",") if c.strip()]
     
     # Validate coverage based on package scope
@@ -1709,13 +1709,13 @@ async def upload_ad(
         if content_type not in ALLOWED_IMAGE_TYPES:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Invalid image type. Allowed: JPG, PNG, WEBP"
+                detail="Invalid image type. Allowed: JPG, PNG, WEBP"
             )
     elif ad_type == AdType.VIDEO:
         if content_type not in ALLOWED_VIDEO_TYPES:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Invalid video type. Allowed: MP4, WEBM"
+                detail="Invalid video type. Allowed: MP4, WEBM"
             )
     
     # Read file content
@@ -1726,13 +1726,13 @@ async def upload_ad(
     if ad_type == AdType.IMAGE and file_size > MAX_IMAGE_SIZE:
         raise HTTPException(
             status_code=400, 
-            detail=f"Image too large. Maximum size: 5MB"
+            detail="Image too large. Maximum size: 5MB"
         )
     
     if ad_type == AdType.VIDEO and file_size > MAX_VIDEO_SIZE:
         raise HTTPException(
             status_code=400, 
-            detail=f"Video too large. Maximum size: 20MB"
+            detail="Video too large. Maximum size: 20MB"
         )
     
     # Generate unique filename
