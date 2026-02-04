@@ -955,10 +955,6 @@ const AdvertiserOverview = () => {
   const [packages, setPackages] = useState([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   const fetchData = async () => {
     try {
       const [adsRes, pkgRes] = await Promise.all([
@@ -978,6 +974,10 @@ const AdvertiserOverview = () => {
       console.error("Failed to fetch data:", error);
     }
   };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   return (
     <div className="space-y-6">
