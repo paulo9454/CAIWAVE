@@ -460,7 +460,7 @@ const LandingPage = () => {
               {
                 icon: Zap,
                 title: "Subsidized Access",
-                description: "Offer discounted rates for event streaming - KES 15 for 25 hours",
+                description: "Offer discounted rates for event streaming (admin-controlled)",
               },
             ].map((item, index) => (
               <div key={index} className="dashboard-card text-center">
