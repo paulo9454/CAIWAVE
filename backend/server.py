@@ -309,40 +309,71 @@ class MPesaSTKCallback(BaseModel):
 
 # Ad Models - WITH APPROVAL WORKFLOW
 class AdTargeting(BaseModel):
-    is_global: bool = False
+    is_global: bool = True  # Default to all locations
     counties: List[str] = Field(default_factory=list)
-    constituencies: List[str] = Field(default_factory=list)
-    wards: List[str] = Field(default_factory=list)
     hotspot_ids: List[str] = Field(default_factory=list)
 
+# Simplified Ad Model for non-technical advertisers
 class AdBase(BaseModel):
     title: str
     ad_type: AdType
-    content_url: Optional[str] = None
-    text_content: Optional[str] = None
-    link_url: Optional[str] = None
-    duration_seconds: int = 10
-    targeting: AdTargeting = Field(default_factory=AdTargeting)
 
-class AdCreate(AdBase):
-    pass
+class AdCreate(BaseModel):
+    """Simple ad creation - advertisers only provide basic info"""
+    title: str
+    ad_type: AdType
+    click_url: Optional[str] = None  # Optional click-through URL
 
-class Ad(AdBase):
+class Ad(BaseModel):
+    """Full ad model with all fields"""
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    ad_type: AdType
     advertiser_id: str
-    status: AdStatus = AdStatus.PENDING  # REQUIRES ADMIN APPROVAL
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    # Media storage
+    media_path: Optional[str] = None  # Local file path
+    media_url: Optional[str] = None  # URL to access media
+    media_size_bytes: int = 0
+    duration_seconds: int = 0  # For videos
+    
+    # Optional link
+    click_url: Optional[str] = None
+    
+    # Status flow: PENDING_APPROVAL → APPROVED → PAYMENT_ENABLED → PAID → ACTIVE
+    status: AdStatus = AdStatus.PENDING_APPROVAL
+    
+    # Admin controls
+    price: float = 0.0  # Set by admin after approval
+    rejection_reason: Optional[str] = None
     approved_at: Optional[datetime] = None
     approved_by: Optional[str] = None
-    rejection_reason: Optional[str] = None
+    
+    # Payment
+    payment_id: Optional[str] = None
+    paid_at: Optional[datetime] = None
+    
+    # Targeting (admin-controlled)
+    targeting: AdTargeting = Field(default_factory=AdTargeting)
+    
+    # Stats
     impressions: int = 0
     clicks: int = 0
-    is_active: bool = False  # Only active after approval
+    
+    # Timestamps
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = False
 
 class AdApproval(BaseModel):
+    """Admin approval with pricing"""
     approved: bool
+    price: float = 0.0  # Required if approved
     rejection_reason: Optional[str] = None
+
+class AdPaymentRequest(BaseModel):
+    """Request payment for an approved ad"""
+    phone_number: str
 
 # Voucher Models
 class VoucherBase(BaseModel):
