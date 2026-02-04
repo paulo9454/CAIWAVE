@@ -207,7 +207,7 @@ const LandingPage = () => {
                     <TrendingUp className="w-5 h-5 text-green-500" strokeWidth={1.5} />
                   </div>
                   <div>
-                    <div className="text-sm text-neutral-400">Today's Revenue</div>
+                    <div className="text-sm text-neutral-400">Today&apos;s Revenue</div>
                     <div className="font-semibold">KES 24,500</div>
                   </div>
                 </div>
