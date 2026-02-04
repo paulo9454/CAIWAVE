@@ -19,6 +19,7 @@ import {
   Radio,
   Tv,
   Play,
+  Check,
 } from "lucide-react";
 
 const LandingPage = () => {
