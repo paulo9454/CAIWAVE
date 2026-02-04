@@ -563,19 +563,13 @@ const AdApprovalPage = () => {
                             onClick={() => setSelectedAd(selectedAd?.id === ad.id ? null : ad)}
                             className="bg-blue-600 hover:bg-blue-700"
                           >
-                            Review & Set Price
+                            Review Ad
                           </Button>
                         </>
                       )}
                       
                       {ad.status === "approved" && (
-                        <Button onClick={() => handleEnablePayment(ad.id)} className="bg-purple-600 hover:bg-purple-700">
-                          <DollarSign className="w-4 h-4 mr-2" /> Enable Payment
-                        </Button>
-                      )}
-                      
-                      {ad.status === "payment_enabled" && (
-                        <span className="text-purple-400 text-sm py-2">Waiting for advertiser payment...</span>
+                        <span className="text-blue-400 text-sm py-2">Waiting for advertiser payment (KES {(ad.package_price || 0).toLocaleString()})...</span>
                       )}
                       
                       {ad.status === "paid" && (
@@ -597,26 +591,55 @@ const AdApprovalPage = () => {
                       )}
                     </div>
 
-                    {/* Approval Form */}
+                    {/* Approval Form - No price setting (package-based) */}
                     {selectedAd?.id === ad.id && ad.status === "pending_approval" && (
                       <div className="mt-4 p-4 bg-neutral-900 rounded-lg space-y-4">
                         <h4 className="font-medium">Review Ad: {ad.title}</h4>
                         
+                        {/* Package Info */}
+                        <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                          <div className="flex justify-between items-center">
+                            <span className="text-neutral-400">Package:</span>
+                            <span className="font-semibold text-purple-400">{ad.package_name}</span>
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-neutral-400">Price:</span>
+                            <span className="font-bold text-green-400">KES {(ad.package_price || 0).toLocaleString()}</span>
+                          </div>
+                          {ad.targeting?.constituencies?.length > 0 && (
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-neutral-400">Coverage:</span>
+                              <span className="text-blue-400">{ad.targeting.constituencies.join(", ")}</span>
+                            </div>
+                          )}
+                          {ad.targeting?.counties?.length > 0 && (
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-neutral-400">Coverage:</span>
+                              <span className="text-blue-400">{ad.targeting.counties.join(", ")}</span>
+                            </div>
+                          )}
+                          {ad.targeting?.is_national && (
+                            <div className="flex justify-between items-center mt-1">
+                              <span className="text-neutral-400">Coverage:</span>
+                              <span className="text-blue-400">National (All hotspots)</span>
+                            </div>
+                          )}
+                        </div>
+                        
                         <div>
-                          <label className="block text-sm text-neutral-400 mb-1">Set Price (KES) *</label>
+                          <label className="block text-sm text-neutral-400 mb-1">Admin Notes (optional)</label>
                           <input
-                            type="number"
-                            value={approvalData.price}
-                            onChange={(e) => setApprovalData({ ...approvalData, price: e.target.value })}
+                            type="text"
+                            value={approvalData.admin_notes}
+                            onChange={(e) => setApprovalData({ ...approvalData, admin_notes: e.target.value })}
                             className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2"
-                            placeholder="e.g., 500"
+                            placeholder="Notes about coverage validation..."
                           />
-                          <p className="text-neutral-500 text-xs mt-1">Advertiser will pay this amount to go live</p>
                         </div>
 
                         <div className="flex gap-3">
                           <Button onClick={() => handleApprove(ad.id)} className="bg-green-600 hover:bg-green-700">
-                            <Check className="w-4 h-4 mr-2" /> Approve with Price
+                            <Check className="w-4 h-4 mr-2" /> Approve Ad
                           </Button>
                           <Button variant="outline" onClick={() => setSelectedAd(null)}>Cancel</Button>
                         </div>
