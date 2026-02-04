@@ -400,18 +400,17 @@ const AdApprovalPage = () => {
 
       {/* Status Flow Info */}
       <div className="dashboard-card bg-blue-500/5 border-blue-500/20">
-        <h3 className="font-medium text-blue-400 mb-2">Ad Status Flow</h3>
+        <h3 className="font-medium text-blue-400 mb-2">Package-Based Ad Flow</h3>
         <div className="flex items-center gap-2 text-sm text-neutral-400 flex-wrap">
-          <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded">Pending</span>
+          <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded">Pending Review</span>
           <span>→</span>
-          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">Approved (set price)</span>
+          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">Approved</span>
           <span>→</span>
-          <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">Payment Enabled</span>
-          <span>→</span>
-          <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">Paid</span>
+          <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">Paid</span>
           <span>→</span>
           <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">Active (LIVE)</span>
         </div>
+        <p className="text-xs text-neutral-500 mt-2">Price is set by the advertiser's package selection. Admin validates coverage and content quality.</p>
       </div>
 
       {/* Tabs */}
