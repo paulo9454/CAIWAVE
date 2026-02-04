@@ -2796,6 +2796,7 @@ const AdminDashboard = () => {
             <Route path="tv" element={<CaiwaveTVPage />} />
             <Route path="subsidized" element={<SubsidizedUptimePage />} />
             <Route path="ads" element={<AdApprovalPage />} />
+            <Route path="invoices" element={<InvoiceManagementPage />} />
             <Route path="hotspots" element={<AllHotspotsPage />} />
             <Route path="packages" element={<PackagesPage />} />
             <Route path="users" element={<UsersPage />} />
