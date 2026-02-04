@@ -1356,95 +1356,312 @@ async def get_payments(
 
 # ==================== Ads Routes (WITH ADMIN APPROVAL) ====================
 
-@ads_router.get("/", response_model=List[Ad])
+@ads_router.get("/")
 async def get_ads(
     user: dict = Depends(get_current_user),
-    status: Optional[AdStatus] = None,
-    approved_only: bool = False
+    status: Optional[AdStatus] = None
 ):
+    """Get ads - advertisers see their own, admin sees all"""
     query = {}
     
     if user["role"] == UserRole.ADVERTISER.value:
         query["advertiser_id"] = user["id"]
-    elif approved_only:
-        query["status"] = AdStatus.APPROVED.value
-        query["is_active"] = True
     
     if status and user["role"] == UserRole.SUPER_ADMIN.value:
         query["status"] = status.value
     
-    ads = await db.ads.find(query, {"_id": 0}).to_list(1000)
+    ads = await db.ads.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return ads
 
-@ads_router.get("/pending", response_model=List[Ad])
+@ads_router.get("/pending")
 async def get_pending_ads(user: dict = Depends(require_admin)):
     """Admin only - get ads pending approval"""
     ads = await db.ads.find(
-        {"status": AdStatus.PENDING.value},
+        {"status": AdStatus.PENDING_APPROVAL.value},
         {"_id": 0}
     ).sort("created_at", 1).to_list(1000)
     return ads
 
-@ads_router.post("/", response_model=Ad)
-async def create_ad(
-    ad_data: AdCreate,
+@ads_router.get("/active")
+async def get_active_ads():
+    """Public - get active ads for display on captive portal"""
+    ads = await db.ads.find(
+        {"status": AdStatus.ACTIVE.value, "is_active": True},
+        {"_id": 0}
+    ).to_list(100)
+    return ads
+
+@ads_router.get("/{ad_id}")
+async def get_ad(ad_id: str, user: dict = Depends(get_current_user)):
+    """Get a specific ad"""
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    # Advertisers can only see their own ads
+    if user["role"] == UserRole.ADVERTISER.value and ad["advertiser_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return ad
+
+@ads_router.post("/upload")
+async def upload_ad(
+    title: str = Form(...),
+    ad_type: AdType = Form(...),
+    click_url: Optional[str] = Form(None),
+    media: UploadFile = File(...),
     user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
 ):
-    """Create ad - goes to PENDING status for admin approval"""
-    ad = Ad(**ad_data.model_dump(), advertiser_id=user["id"])
-    ad.status = AdStatus.PENDING  # Always pending until admin approves
-    ad.is_active = False
+    """
+    Upload a new ad with media file.
+    - Images: Max 5MB, JPG/PNG/WEBP
+    - Videos: Max 20MB, MP4/WEBM, 10-15 seconds
+    """
+    # Validate file type
+    content_type = media.content_type
+    
+    if ad_type == AdType.IMAGE:
+        if content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid image type. Allowed: JPG, PNG, WEBP"
+            )
+    elif ad_type == AdType.VIDEO:
+        if content_type not in ALLOWED_VIDEO_TYPES:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid video type. Allowed: MP4, WEBM"
+            )
+    
+    # Read file content
+    file_content = await media.read()
+    file_size = len(file_content)
+    
+    # Validate file size
+    if ad_type == AdType.IMAGE and file_size > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Image too large. Maximum size: 5MB"
+        )
+    
+    if ad_type == AdType.VIDEO and file_size > MAX_VIDEO_SIZE:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Video too large. Maximum size: 20MB"
+        )
+    
+    # Generate unique filename
+    file_ext = Path(media.filename).suffix.lower() or (
+        ".jpg" if ad_type == AdType.IMAGE else ".mp4"
+    )
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    
+    # Determine upload directory
+    if ad_type == AdType.IMAGE:
+        upload_path = UPLOAD_DIR_IMAGES / unique_filename
+        media_url = f"/uploads/ads/images/{unique_filename}"
+    else:
+        upload_path = UPLOAD_DIR_VIDEOS / unique_filename
+        media_url = f"/uploads/ads/videos/{unique_filename}"
+    
+    # Save file
+    with open(upload_path, "wb") as f:
+        f.write(file_content)
+    
+    # For videos, estimate duration (simplified - real implementation would use ffprobe)
+    duration_seconds = 10 if ad_type == AdType.VIDEO else 5
+    
+    # Create ad record
+    ad = Ad(
+        title=title,
+        ad_type=ad_type,
+        advertiser_id=user["id"],
+        media_path=str(upload_path),
+        media_url=media_url,
+        media_size_bytes=file_size,
+        duration_seconds=duration_seconds,
+        click_url=click_url,
+        status=AdStatus.PENDING_APPROVAL,
+        is_active=False
+    )
     
     ad_dict = ad.model_dump()
     ad_dict["created_at"] = ad_dict["created_at"].isoformat()
     
     await db.ads.insert_one(ad_dict)
-    return ad
+    
+    return {
+        "success": True,
+        "ad_id": ad.id,
+        "status": ad.status.value,
+        "message": "Ad uploaded successfully. Awaiting admin approval."
+    }
 
-@ads_router.post("/{ad_id}/approve", response_model=Ad)
+@ads_router.post("/{ad_id}/approve")
 async def approve_ad(
     ad_id: str,
     approval: AdApproval,
     user: dict = Depends(require_admin)
 ):
-    """Admin only - approve or reject an ad"""
+    """
+    Admin only - approve or reject an ad.
+    If approved, admin must set a price.
+    """
     ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
     if not ad:
         raise HTTPException(status_code=404, detail="Ad not found")
     
+    if ad["status"] != AdStatus.PENDING_APPROVAL.value:
+        raise HTTPException(status_code=400, detail="Ad is not pending approval")
+    
     if approval.approved:
+        if approval.price <= 0:
+            raise HTTPException(status_code=400, detail="Price must be set for approved ads")
+        
         update = {
             "status": AdStatus.APPROVED.value,
-            "is_active": True,
+            "price": approval.price,
             "approved_at": datetime.now(timezone.utc).isoformat(),
             "approved_by": user["id"],
             "rejection_reason": None
         }
     else:
+        if not approval.rejection_reason:
+            raise HTTPException(status_code=400, detail="Rejection reason required")
+        
         update = {
             "status": AdStatus.REJECTED.value,
-            "is_active": False,
             "rejection_reason": approval.rejection_reason
         }
     
-    result = await db.ads.find_one_and_update(
+    await db.ads.update_one({"id": ad_id}, {"$set": update})
+    
+    updated_ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    return updated_ad
+
+@ads_router.post("/{ad_id}/enable-payment")
+async def enable_ad_payment(ad_id: str, user: dict = Depends(require_admin)):
+    """Admin only - enable payment for an approved ad"""
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    if ad["status"] != AdStatus.APPROVED.value:
+        raise HTTPException(status_code=400, detail="Ad must be approved first")
+    
+    if ad.get("price", 0) <= 0:
+        raise HTTPException(status_code=400, detail="Price must be set before enabling payment")
+    
+    await db.ads.update_one(
         {"id": ad_id},
-        {"$set": update},
-        return_document=True
+        {"$set": {"status": AdStatus.PAYMENT_ENABLED.value}}
     )
-    result.pop("_id", None)
-    return result
+    
+    updated_ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    return updated_ad
+
+@ads_router.post("/{ad_id}/pay")
+async def pay_for_ad(
+    ad_id: str,
+    payment_request: AdPaymentRequest,
+    user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
+):
+    """Pay for an approved ad via M-Pesa STK Push"""
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    # Verify ownership
+    if user["role"] == UserRole.ADVERTISER.value and ad["advertiser_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if ad["status"] != AdStatus.PAYMENT_ENABLED.value:
+        raise HTTPException(status_code=400, detail="Payment not enabled for this ad")
+    
+    # Initiate M-Pesa payment
+    if not mpesa_service.is_configured():
+        # For demo - simulate payment success
+        await db.ads.update_one(
+            {"id": ad_id},
+            {
+                "$set": {
+                    "status": AdStatus.PAID.value,
+                    "paid_at": datetime.now(timezone.utc).isoformat()
+                }
+            }
+        )
+        return {
+            "success": True,
+            "message": "Payment simulated (M-Pesa not configured). Ad is now paid.",
+            "ad_id": ad_id
+        }
+    
+    # Real M-Pesa STK Push
+    result = await mpesa_service.stk_push(
+        phone_number=payment_request.phone_number,
+        amount=int(ad["price"]),
+        account_ref=f"CAIWAVE-AD-{ad_id[:8]}",
+        description=f"Payment for ad: {ad['title']}"
+    )
+    
+    if result.get("ResponseCode") == "0":
+        # Store checkout request ID for callback handling
+        await db.ads.update_one(
+            {"id": ad_id},
+            {"$set": {"payment_checkout_id": result.get("CheckoutRequestID")}}
+        )
+        return {
+            "success": True,
+            "message": "STK Push sent. Check your phone to complete payment.",
+            "checkout_request_id": result.get("CheckoutRequestID")
+        }
+    else:
+        return {
+            "success": False,
+            "message": result.get("errorMessage", "Failed to initiate payment")
+        }
+
+@ads_router.post("/{ad_id}/activate")
+async def activate_ad(ad_id: str, user: dict = Depends(require_admin)):
+    """Admin only - activate a paid ad"""
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    if ad["status"] != AdStatus.PAID.value:
+        raise HTTPException(status_code=400, detail="Ad must be paid before activation")
+    
+    await db.ads.update_one(
+        {"id": ad_id},
+        {"$set": {"status": AdStatus.ACTIVE.value, "is_active": True}}
+    )
+    
+    updated_ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    return updated_ad
 
 @ads_router.post("/{ad_id}/suspend")
 async def suspend_ad(ad_id: str, user: dict = Depends(require_admin)):
-    """Admin only - suspend an approved ad"""
+    """Admin only - suspend an active ad"""
     result = await db.ads.find_one_and_update(
-        {"id": ad_id},
+        {"id": ad_id, "status": AdStatus.ACTIVE.value},
         {"$set": {"status": AdStatus.SUSPENDED.value, "is_active": False}},
         return_document=True
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Ad not found")
+        raise HTTPException(status_code=404, detail="Ad not found or not active")
+    result.pop("_id", None)
+    return result
+
+@ads_router.post("/{ad_id}/reactivate")
+async def reactivate_ad(ad_id: str, user: dict = Depends(require_admin)):
+    """Admin only - reactivate a suspended ad"""
+    result = await db.ads.find_one_and_update(
+        {"id": ad_id, "status": AdStatus.SUSPENDED.value},
+        {"$set": {"status": AdStatus.ACTIVE.value, "is_active": True}},
+        return_document=True
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Ad not found or not suspended")
     result.pop("_id", None)
     return result
 
@@ -1452,7 +1669,7 @@ async def suspend_ad(ad_id: str, user: dict = Depends(require_admin)):
 async def record_impression(ad_id: str, hotspot_id: Optional[str] = None):
     """Record an ad impression"""
     result = await db.ads.update_one(
-        {"id": ad_id, "status": AdStatus.APPROVED.value},
+        {"id": ad_id, "status": AdStatus.ACTIVE.value},
         {"$inc": {"impressions": 1}}
     )
     
@@ -1463,7 +1680,7 @@ async def record_impression(ad_id: str, hotspot_id: Optional[str] = None):
         )
     
     if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Ad not found or not approved")
+        raise HTTPException(status_code=404, detail="Ad not found or not active")
     
     return {"status": "recorded"}
 
@@ -1471,12 +1688,33 @@ async def record_impression(ad_id: str, hotspot_id: Optional[str] = None):
 async def record_click(ad_id: str):
     """Record an ad click"""
     result = await db.ads.update_one(
-        {"id": ad_id, "status": AdStatus.APPROVED.value},
+        {"id": ad_id, "status": AdStatus.ACTIVE.value},
         {"$inc": {"clicks": 1}}
     )
     if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Ad not found or not approved")
+        raise HTTPException(status_code=404, detail="Ad not found or not active")
     return {"status": "recorded"}
+
+@ads_router.delete("/{ad_id}")
+async def delete_ad(ad_id: str, user: dict = Depends(get_current_user)):
+    """Delete an ad (advertiser can delete pending, admin can delete any)"""
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    # Advertisers can only delete their own pending ads
+    if user["role"] == UserRole.ADVERTISER.value:
+        if ad["advertiser_id"] != user["id"]:
+            raise HTTPException(status_code=403, detail="Access denied")
+        if ad["status"] not in [AdStatus.PENDING_APPROVAL.value, AdStatus.REJECTED.value]:
+            raise HTTPException(status_code=400, detail="Can only delete pending or rejected ads")
+    
+    # Delete media file if exists
+    if ad.get("media_path") and os.path.exists(ad["media_path"]):
+        os.remove(ad["media_path"])
+    
+    await db.ads.delete_one({"id": ad_id})
+    return {"status": "deleted"}
 
 # ==================== Campaign Routes (ADMIN ONLY) ====================
 
