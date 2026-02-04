@@ -91,13 +91,14 @@ class UserRole(str, Enum):
 class AdType(str, Enum):
     IMAGE = "image"
     VIDEO = "video"
-    BANNER = "banner"
-    TEXT = "text"
 
 class AdStatus(str, Enum):
-    PENDING = "pending"
+    PENDING_APPROVAL = "pending_approval"
     APPROVED = "approved"
     REJECTED = "rejected"
+    PAYMENT_ENABLED = "payment_enabled"
+    PAID = "paid"
+    ACTIVE = "active"
     SUSPENDED = "suspended"
 
 class SessionStatus(str, Enum):
