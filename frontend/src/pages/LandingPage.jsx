@@ -227,7 +227,7 @@ const LandingPage = () => {
               <span className="gradient-text">Profitable Hotspot Business</span>
             </h2>
             <p className="text-neutral-400 max-w-2xl mx-auto">
-              Professional ISP-grade tools without the complexity or monthly fees
+              Professional ISP-grade tools with simple pricing - KES 500/month per hotspot
             </p>
           </div>
 
