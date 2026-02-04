@@ -37,6 +37,8 @@ import {
   Play,
   Pause,
   Video,
+  Image,
+  MousePointer,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
