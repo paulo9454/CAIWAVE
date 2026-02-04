@@ -231,12 +231,17 @@ const DashboardOverview = () => {
 
   const fetchData = async () => {
     try {
-      const [statsRes, hotspotsRes] = await Promise.all([
-        axios.get(`${API_URL}/analytics/dashboard`),
-        axios.get(`${API_URL}/hotspots`),
+      const token = getAuthToken();
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const [statsRes, hotspotsRes, subscriptionRes] = await Promise.all([
+        axios.get(`${API_URL}/analytics/dashboard`, { headers }),
+        axios.get(`${API_URL}/hotspots`, { headers }),
+        axios.get(`${API_URL}/subscriptions/status`, { headers }),
       ]);
       setStats(statsRes.data);
       setHotspots(hotspotsRes.data);
+      setSubscription(subscriptionRes.data);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
