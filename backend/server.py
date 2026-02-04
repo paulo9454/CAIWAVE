@@ -1655,15 +1655,53 @@ async def get_ad(ad_id: str, user: dict = Depends(get_current_user)):
 async def upload_ad(
     title: str = Form(...),
     ad_type: AdType = Form(...),
+    package_id: str = Form(...),
     click_url: Optional[str] = Form(None),
+    constituencies: Optional[str] = Form(None),  # JSON array string
+    counties: Optional[str] = Form(None),  # JSON array string for county/national scope
     media: UploadFile = File(...),
     user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
 ):
     """
-    Upload a new ad with media file.
+    Upload a new ad with media file and package selection.
     - Images: Max 5MB, JPG/PNG/WEBP
     - Videos: Max 20MB, MP4/WEBM, 10-15 seconds
+    - Package determines pricing and coverage scope
     """
+    import json
+    
+    # Validate package exists and is active
+    package = await db.ad_packages.find_one({"id": package_id, "status": AdPackageStatus.ACTIVE.value})
+    if not package:
+        raise HTTPException(status_code=400, detail="Invalid or inactive package selected")
+    
+    # Parse coverage selections
+    selected_constituencies = []
+    selected_counties = []
+    is_national = False
+    
+    if constituencies:
+        try:
+            selected_constituencies = json.loads(constituencies)
+        except:
+            selected_constituencies = [c.strip() for c in constituencies.split(",") if c.strip()]
+    
+    if counties:
+        try:
+            selected_counties = json.loads(counties)
+        except:
+            selected_counties = [c.strip() for c in counties.split(",") if c.strip()]
+    
+    # Validate coverage based on package scope
+    if package["coverage_scope"] == AdCoverageScope.CONSTITUENCY.value:
+        if not selected_constituencies:
+            raise HTTPException(status_code=400, detail="Please select at least one constituency")
+    elif package["coverage_scope"] == AdCoverageScope.COUNTY.value:
+        if not selected_counties and not selected_constituencies:
+            raise HTTPException(status_code=400, detail="Please select at least one county or constituency")
+    elif package["coverage_scope"] == AdCoverageScope.NATIONAL.value:
+        is_national = True  # National coverage
+    
     # Validate file type
     content_type = media.content_type
     
@@ -1718,16 +1756,27 @@ async def upload_ad(
     # For videos, estimate duration (simplified - real implementation would use ffprobe)
     duration_seconds = 10 if ad_type == AdType.VIDEO else 5
     
-    # Create ad record
+    # Create targeting object
+    targeting = AdTargeting(
+        constituencies=selected_constituencies,
+        counties=selected_counties,
+        is_national=is_national
+    )
+    
+    # Create ad record with package info
     ad = Ad(
         title=title,
         ad_type=ad_type,
         advertiser_id=user["id"],
+        package_id=package_id,
+        package_name=package["name"],
+        package_price=package["price"],
         media_path=str(upload_path),
         media_url=media_url,
         media_size_bytes=file_size,
         duration_seconds=duration_seconds,
         click_url=click_url,
+        targeting=targeting,
         status=AdStatus.PENDING_APPROVAL,
         is_active=False
     )
@@ -1741,6 +1790,8 @@ async def upload_ad(
         "success": True,
         "ad_id": ad.id,
         "status": ad.status.value,
+        "package": package["name"],
+        "price": package["price"],
         "message": "Ad uploaded successfully. Awaiting admin approval."
     }
 
