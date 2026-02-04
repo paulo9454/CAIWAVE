@@ -560,7 +560,7 @@ const LandingPage = () => {
           </h2>
           <p className="text-neutral-400 mb-8 max-w-xl mx-auto">
             Join hundreds of hotspot owners earning from their WiFi networks. 
-            No monthly fees, no complicated setup.
+            Start with a 14-day free trial.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Button
