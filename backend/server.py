@@ -3723,7 +3723,8 @@ async def seed_data():
     if not existing_hotspot and owner_id:
         demo_hotspot = Hotspot(
             name="Demo Cafe Hotspot",
-            location="Westlands, Nairobi",
+            ssid="CAIWAVE_Demo",
+            location_name="Westlands Mall, Nairobi",
             county="Nairobi",
             constituency="Westlands",
             owner_id=owner_id,
