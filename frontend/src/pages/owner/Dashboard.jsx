@@ -279,7 +279,7 @@ const DashboardOverview = () => {
       {/* Welcome Header */}
       <div>
         <h1 className="text-2xl font-bold">Welcome back, {user?.name}</h1>
-        <p className="text-neutral-400 mt-1">Here's your hotspot performance overview</p>
+        <p className="text-neutral-400 mt-1">Here&apos;s your hotspot performance overview</p>
       </div>
 
       {/* Stats Grid */}
