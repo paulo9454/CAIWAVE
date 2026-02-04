@@ -333,46 +333,95 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* Hotspot Owner Pricing */}
       <section id="pricing" className="py-24 px-6 lg:px-12" style={{ backgroundColor: '#0a0a0a' }}>
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-600/10 border border-green-600/20 rounded-full text-green-400 text-sm mb-6">
+              <Wifi className="w-4 h-4" strokeWidth={1.5} />
+              Hotspot Owner Plans
+            </div>
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Flexible Packages for
+              Simple, Transparent
               <br />
-              <span className="gradient-text">Every User</span>
+              <span className="gradient-text">Pricing</span>
             </h2>
-            <p className="text-neutral-400">
-              Pre-configured pricing from KES 5 to KES 600
+            <p className="text-neutral-400 max-w-2xl mx-auto">
+              Start earning from your WiFi hotspot today. 14-day free trial included.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
-            {[
-              { price: 5, duration: "30 min", popular: false },
-              { price: 15, duration: "4 hours", popular: false },
-              { price: 25, duration: "8 hours", popular: true },
-              { price: 30, duration: "12 hours", popular: false },
-              { price: 35, duration: "24 hours", popular: false },
-              { price: 200, duration: "1 week", popular: false },
-              { price: 600, duration: "1 month", popular: false },
-            ].map((pkg, index) => (
-              <div
-                key={index}
-                className={`package-card ${pkg.popular ? "package-card-selected" : ""}`}
-                data-testid={`package-${pkg.price}`}
-              >
-                {pkg.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-blue-600 text-xs font-medium rounded-full">
-                    Popular
-                  </div>
-                )}
-                <div className="text-center">
-                  <div className="text-2xl font-bold mb-1">KES {pkg.price}</div>
-                  <div className="text-neutral-400 text-sm">{pkg.duration}</div>
-                </div>
+          <div className="max-w-lg mx-auto">
+            <div className="dashboard-card border-2 border-blue-500/30 relative overflow-hidden">
+              <div className="absolute top-0 right-0 px-4 py-2 bg-blue-600 text-sm font-medium">
+                14-Day Free Trial
               </div>
-            ))}
+              
+              <div className="text-center pt-8">
+                <h3 className="text-xl font-semibold mb-2">Hotspot Subscription</h3>
+                <div className="flex items-baseline justify-center gap-2 mb-2">
+                  <span className="text-5xl font-bold text-blue-400">KES 500</span>
+                  <span className="text-neutral-400">/month</span>
+                </div>
+                <p className="text-neutral-500 text-sm mb-6">per hotspot</p>
+                
+                <div className="space-y-3 text-left mb-8">
+                  {[
+                    "Full dashboard access",
+                    "Ad revenue sharing",
+                    "Real-time analytics",
+                    "MikroTik integration",
+                    "M-Pesa payment collection",
+                    "Customer voucher system",
+                    "Priority support"
+                  ].map((feature, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-5 h-5 rounded-full bg-green-500/10 flex items-center justify-center">
+                        <Check className="w-3 h-3 text-green-400" />
+                      </div>
+                      <span className="text-neutral-300">{feature}</span>
+                    </div>
+                  ))}
+                </div>
+                
+                <button
+                  onClick={() => setShowAuth(true)}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+                  data-testid="start-trial-btn"
+                >
+                  Start 14-Day Free Trial
+                </button>
+                <p className="text-neutral-500 text-xs mt-3">No credit card required</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* WiFi Packages Info */}
+          <div className="mt-16 text-center">
+            <h3 className="text-xl font-semibold mb-4">WiFi Packages for End Users</h3>
+            <p className="text-neutral-400 mb-8">Pre-configured pricing tiers from KES 5 to KES 600</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              {[
+                { price: 5, duration: "30 min" },
+                { price: 15, duration: "4 hours" },
+                { price: 25, duration: "8 hours" },
+                { price: 30, duration: "12 hours" },
+                { price: 35, duration: "24 hours" },
+                { price: 200, duration: "1 week" },
+                { price: 600, duration: "1 month" },
+              ].map((pkg, index) => (
+                <div
+                  key={index}
+                  className="package-card"
+                  data-testid={`package-${pkg.price}`}
+                >
+                  <div className="text-center">
+                    <div className="text-xl font-bold mb-1">KES {pkg.price}</div>
+                    <div className="text-neutral-400 text-xs">{pkg.duration}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
