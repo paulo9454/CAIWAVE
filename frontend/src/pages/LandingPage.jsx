@@ -385,13 +385,13 @@ const LandingPage = () => {
                   ))}
                 </div>
                 
-                <button
-                  onClick={() => setShowAuth(true)}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+                <Link
+                  to="/login"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors block text-center"
                   data-testid="start-trial-btn"
                 >
                   Start 14-Day Free Trial
-                </button>
+                </Link>
                 <p className="text-neutral-500 text-xs mt-3">No credit card required</p>
               </div>
             </div>
