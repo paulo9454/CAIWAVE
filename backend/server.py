@@ -2500,8 +2500,8 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
         result = await db.hotspots.aggregate(pipeline).to_list(1)
         total_sessions = result[0]["total"] if result else 0
         
-        pending_ads = await db.ads.count_documents({"status": AdStatus.PENDING.value})
-        active_ads = await db.ads.count_documents({"status": AdStatus.APPROVED.value, "is_active": True})
+        pending_ads = await db.ads.count_documents({"status": AdStatus.PENDING_APPROVAL.value})
+        active_ads = await db.ads.count_documents({"status": AdStatus.ACTIVE.value, "is_active": True})
         
         return {
             "total_hotspots": total_hotspots,
