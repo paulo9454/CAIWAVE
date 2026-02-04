@@ -761,6 +761,187 @@ const PaymentsPage = () => {
   );
 };
 
+// Billing & Invoices Page
+const BillingPage = () => {
+  const [subscription, setSubscription] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [payingInvoice, setPayingInvoice] = useState(null);
+  
+  useEffect(() => {
+    fetchBillingData();
+  }, []);
+  
+  const fetchBillingData = async () => {
+    try {
+      const token = getAuthToken();
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const [subRes, invoicesRes] = await Promise.all([
+        axios.get(`${API_URL}/subscriptions/status`, { headers }),
+        axios.get(`${API_URL}/invoices/`, { headers }),
+      ]);
+      
+      setSubscription(subRes.data);
+      setInvoices(invoicesRes.data);
+    } catch (error) {
+      console.error("Failed to fetch billing data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const getStatusBadge = (status) => {
+    const badges = {
+      trial: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Trial" },
+      unpaid: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Unpaid" },
+      paid: { bg: "bg-green-500/10", text: "text-green-400", label: "Paid" },
+      overdue: { bg: "bg-red-500/10", text: "text-red-400", label: "Overdue" },
+    };
+    return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
+  };
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-6" data-testid="billing-page">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Billing & Invoices</h1>
+          <p className="text-neutral-400 mt-1">Manage your subscription and view invoices</p>
+        </div>
+      </div>
+      
+      {/* Subscription Summary */}
+      {subscription && (
+        <div className="dashboard-card">
+          <h2 className="font-semibold mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-blue-400" />
+            Subscription Status
+          </h2>
+          
+          <div className="grid md:grid-cols-4 gap-4">
+            <div className="p-4 bg-neutral-800/50 rounded-lg">
+              <p className="text-neutral-400 text-sm">Status</p>
+              <p className="text-lg font-semibold capitalize">{subscription.subscription_status}</p>
+            </div>
+            <div className="p-4 bg-neutral-800/50 rounded-lg">
+              <p className="text-neutral-400 text-sm">Trial Days Left</p>
+              <p className="text-lg font-semibold">{subscription.trial_days_remaining}</p>
+            </div>
+            <div className="p-4 bg-neutral-800/50 rounded-lg">
+              <p className="text-neutral-400 text-sm">Hotspots</p>
+              <p className="text-lg font-semibold">{subscription.hotspot_count}</p>
+            </div>
+            <div className="p-4 bg-neutral-800/50 rounded-lg">
+              <p className="text-neutral-400 text-sm">Monthly Fee</p>
+              <p className="text-lg font-semibold text-green-400">KES {subscription.monthly_fee}</p>
+            </div>
+          </div>
+          
+          {subscription.current_invoice && subscription.current_invoice.status !== "paid" && (
+            <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-center justify-between">
+              <div>
+                <p className="font-medium text-yellow-400">Payment Due</p>
+                <p className="text-sm text-neutral-400">
+                  Invoice #{subscription.current_invoice.invoice_number} - Due: {new Date(subscription.current_invoice.due_date).toLocaleDateString()}
+                </p>
+              </div>
+              <Button 
+                onClick={() => setPayingInvoice(subscription.current_invoice)}
+                className="bg-yellow-600 hover:bg-yellow-700"
+              >
+                <CreditCard className="w-4 h-4 mr-2" />
+                Pay Now
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Invoice History */}
+      <div className="dashboard-card">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <FileText className="w-5 h-5 text-blue-400" />
+          Invoice History
+        </h2>
+        
+        {invoices.length === 0 ? (
+          <p className="text-neutral-500 text-center py-8">No invoices yet</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-neutral-800">
+                  <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Invoice #</th>
+                  <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Period</th>
+                  <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Amount</th>
+                  <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Status</th>
+                  <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Due Date</th>
+                  <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => {
+                  const badge = getStatusBadge(invoice.status);
+                  return (
+                    <tr key={invoice.id} className="border-b border-neutral-800/50">
+                      <td className="py-3 px-4 font-mono text-sm">{invoice.invoice_number}</td>
+                      <td className="py-3 px-4 text-sm">
+                        {new Date(invoice.billing_period_start).toLocaleDateString()} - {new Date(invoice.billing_period_end).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 px-4 font-semibold">KES {invoice.amount}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded-full text-xs ${badge.bg} ${badge.text}`}>
+                          {badge.label}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-neutral-400">
+                        {new Date(invoice.due_date).toLocaleDateString()}
+                      </td>
+                      <td className="py-3 px-4">
+                        {invoice.status !== "paid" && (
+                          <Button 
+                            size="sm" 
+                            onClick={() => setPayingInvoice(invoice)}
+                            className="bg-blue-600 hover:bg-blue-700"
+                          >
+                            Pay
+                          </Button>
+                        )}
+                        {invoice.status === "paid" && (
+                          <span className="text-green-400 text-sm flex items-center gap-1">
+                            <CheckCircle className="w-4 h-4" /> Paid
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      
+      {/* Payment Modal */}
+      {payingInvoice && (
+        <PaymentModal
+          invoice={payingInvoice}
+          onClose={() => setPayingInvoice(null)}
+          onSuccess={fetchBillingData}
+        />
+      )}
+    </div>
+  );
+};
+
 // Main Dashboard Layout
 const OwnerDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
