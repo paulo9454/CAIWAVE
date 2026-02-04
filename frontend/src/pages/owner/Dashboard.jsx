@@ -1061,6 +1061,7 @@ const OwnerDashboard = () => {
           <Routes>
             <Route index element={<DashboardOverview />} />
             <Route path="hotspots" element={<HotspotsPage />} />
+            <Route path="billing" element={<BillingPage />} />
             <Route path="payments" element={<PaymentsPage />} />
             <Route
               path="analytics"
