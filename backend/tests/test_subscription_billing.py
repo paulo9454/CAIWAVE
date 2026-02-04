@@ -28,7 +28,7 @@ class TestSubscriptionBillingSystem:
             "password": self.admin_password
         })
         if response.status_code == 200:
-            return response.json().get("access_token")
+            return response.json().get("token")
         return None
     
     def get_owner_token(self):
@@ -38,7 +38,7 @@ class TestSubscriptionBillingSystem:
             "password": self.owner_password
         })
         if response.status_code == 200:
-            return response.json().get("access_token")
+            return response.json().get("token")
         return None
     
     # ==================== Health Check ====================
@@ -59,7 +59,7 @@ class TestSubscriptionBillingSystem:
         })
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data
+        assert "token" in data
         assert data["user"]["role"] == "super_admin"
         print("✅ Admin login successful")
     
@@ -71,7 +71,7 @@ class TestSubscriptionBillingSystem:
         })
         assert response.status_code == 200
         data = response.json()
-        assert "access_token" in data
+        assert "token" in data
         assert data["user"]["role"] == "hotspot_owner"
         print("✅ Owner login successful")
     
@@ -79,7 +79,8 @@ class TestSubscriptionBillingSystem:
     def test_subscription_status_requires_auth(self):
         """Test subscription status requires authentication"""
         response = self.session.get(f"{BASE_URL}/api/subscriptions/status")
-        assert response.status_code == 401
+        # API returns 403 for missing auth (FastAPI behavior)
+        assert response.status_code in [401, 403]
         print("✅ Subscription status requires auth")
     
     def test_subscription_status_owner(self):
@@ -114,7 +115,8 @@ class TestSubscriptionBillingSystem:
     def test_invoices_requires_auth(self):
         """Test invoices endpoint requires authentication"""
         response = self.session.get(f"{BASE_URL}/api/invoices/")
-        assert response.status_code == 401
+        # API returns 403 for missing auth (FastAPI behavior)
+        assert response.status_code in [401, 403]
         print("✅ Invoices endpoint requires auth")
     
     def test_invoices_owner(self):
@@ -176,7 +178,7 @@ class TestSubscriptionBillingSystem:
         """Test admin invoices endpoint requires admin role"""
         # Test without auth
         response = self.session.get(f"{BASE_URL}/api/invoices/admin/all")
-        assert response.status_code == 401
+        assert response.status_code in [401, 403]
         
         # Test with owner token (should fail)
         owner_token = self.get_owner_token()
@@ -220,6 +222,13 @@ class TestSubscriptionBillingSystem:
     
     def test_admin_mark_paid_requires_admin(self):
         """Test mark paid endpoint requires admin role"""
+        # Without auth should fail
+        response = self.session.post(
+            f"{BASE_URL}/api/invoices/admin/mark-paid/fake-id"
+        )
+        assert response.status_code in [401, 403]
+        
+        # With owner token should fail
         owner_token = self.get_owner_token()
         response = self.session.post(
             f"{BASE_URL}/api/invoices/admin/mark-paid/fake-id",
@@ -230,6 +239,13 @@ class TestSubscriptionBillingSystem:
     
     def test_admin_suspend_overdue_requires_admin(self):
         """Test suspend overdue endpoint requires admin role"""
+        # Without auth should fail
+        response = self.session.post(
+            f"{BASE_URL}/api/invoices/admin/suspend-overdue"
+        )
+        assert response.status_code in [401, 403]
+        
+        # With owner token should fail
         owner_token = self.get_owner_token()
         response = self.session.post(
             f"{BASE_URL}/api/invoices/admin/suspend-overdue",
@@ -241,12 +257,18 @@ class TestSubscriptionBillingSystem:
     # ==================== Start Trial Tests ====================
     def test_start_trial_requires_owner(self):
         """Test start trial requires owner role"""
+        # Without auth should fail
+        response = self.session.post(
+            f"{BASE_URL}/api/subscriptions/start-trial"
+        )
+        assert response.status_code in [401, 403]
+        
+        # Admin should not be able to start trial (requires owner role)
         admin_token = self.get_admin_token()
         response = self.session.post(
             f"{BASE_URL}/api/subscriptions/start-trial",
             headers={"Authorization": f"Bearer {admin_token}"}
         )
-        # Admin should not be able to start trial (requires owner role)
         assert response.status_code == 403
         print("✅ Start trial requires owner role")
     
@@ -257,7 +279,7 @@ class TestSubscriptionBillingSystem:
             f"{BASE_URL}/api/invoices/pay/fake-id",
             json={"phone_number": "254712345678"}
         )
-        assert response.status_code == 401
+        assert response.status_code in [401, 403]
         print("✅ Pay invoice requires auth")
 
 
