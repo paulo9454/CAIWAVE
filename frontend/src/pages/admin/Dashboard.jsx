@@ -2463,6 +2463,209 @@ const SubsidizedUptimePage = () => {
   );
 };
 
+// Admin Invoice Management Page
+const InvoiceManagementPage = () => {
+  const [invoices, setInvoices] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("all");
+  
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
+  
+  const fetchInvoices = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/invoices/admin/all`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      setInvoices(response.data.invoices);
+      setStats(response.data.stats);
+    } catch (error) {
+      console.error("Failed to fetch invoices:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleMarkPaid = async (invoiceId) => {
+    try {
+      await axios.post(`${API_URL}/invoices/admin/mark-paid/${invoiceId}`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      toast.success("Invoice marked as paid");
+      fetchInvoices();
+    } catch (error) {
+      toast.error("Failed to mark invoice as paid");
+    }
+  };
+  
+  const handleSuspendOverdue = async () => {
+    try {
+      const response = await axios.post(`${API_URL}/invoices/admin/suspend-overdue`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      toast.success(`Suspended ${response.data.suspended_count} hotspots`);
+      fetchInvoices();
+    } catch (error) {
+      toast.error("Failed to suspend overdue hotspots");
+    }
+  };
+  
+  const getStatusBadge = (status) => {
+    const badges = {
+      draft: { bg: "bg-gray-500/10", text: "text-gray-400", label: "Draft" },
+      trial: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Trial" },
+      unpaid: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Unpaid" },
+      paid: { bg: "bg-green-500/10", text: "text-green-400", label: "Paid" },
+      overdue: { bg: "bg-red-500/10", text: "text-red-400", label: "Overdue" },
+    };
+    return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
+  };
+  
+  const filteredInvoices = activeFilter === "all" 
+    ? invoices 
+    : invoices.filter(inv => inv.status === activeFilter);
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-6" data-testid="admin-invoice-management">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Invoice Management</h1>
+          <p className="text-neutral-400 mt-1">Manage subscription invoices and payments</p>
+        </div>
+        <Button 
+          onClick={handleSuspendOverdue}
+          variant="outline" 
+          className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+        >
+          <Ban className="w-4 h-4 mr-2" />
+          Suspend Overdue
+        </Button>
+      </div>
+      
+      {/* Stats Grid */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="dashboard-card">
+            <p className="text-neutral-400 text-sm">Total Invoices</p>
+            <p className="text-2xl font-bold mt-1">{stats.total}</p>
+          </div>
+          <div className="dashboard-card border-l-2 border-blue-500">
+            <p className="text-neutral-400 text-sm">In Trial</p>
+            <p className="text-2xl font-bold mt-1 text-blue-400">{stats.trial}</p>
+          </div>
+          <div className="dashboard-card border-l-2 border-yellow-500">
+            <p className="text-neutral-400 text-sm">Unpaid</p>
+            <p className="text-2xl font-bold mt-1 text-yellow-400">{stats.unpaid}</p>
+          </div>
+          <div className="dashboard-card border-l-2 border-red-500">
+            <p className="text-neutral-400 text-sm">Overdue</p>
+            <p className="text-2xl font-bold mt-1 text-red-400">{stats.overdue}</p>
+          </div>
+          <div className="dashboard-card border-l-2 border-green-500">
+            <p className="text-neutral-400 text-sm">Revenue</p>
+            <p className="text-2xl font-bold mt-1 text-green-400">KES {stats.total_revenue.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Filter Tabs */}
+      <div className="flex gap-2 border-b border-neutral-800 pb-4">
+        {[
+          { id: "all", label: "All" },
+          { id: "trial", label: "Trial" },
+          { id: "unpaid", label: "Unpaid" },
+          { id: "overdue", label: "Overdue" },
+          { id: "paid", label: "Paid" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveFilter(tab.id)}
+            className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+              activeFilter === tab.id
+                ? "bg-blue-600/20 text-blue-400"
+                : "text-neutral-400 hover:bg-neutral-800"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      
+      {/* Invoice Table */}
+      <div className="dashboard-card overflow-x-auto">
+        {filteredInvoices.length === 0 ? (
+          <div className="text-center py-12">
+            <FileText className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+            <p className="text-neutral-500">No invoices found</p>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-neutral-800">
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Invoice #</th>
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Owner</th>
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Hotspots</th>
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Amount</th>
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Status</th>
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Due Date</th>
+                <th className="text-left py-3 px-4 text-neutral-400 font-medium text-sm">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredInvoices.map((invoice) => {
+                const badge = getStatusBadge(invoice.status);
+                return (
+                  <tr key={invoice.id} className="border-b border-neutral-800/50">
+                    <td className="py-3 px-4 font-mono text-sm">{invoice.invoice_number}</td>
+                    <td className="py-3 px-4 text-sm">{invoice.owner_id.slice(0, 8)}...</td>
+                    <td className="py-3 px-4">{invoice.hotspot_count}</td>
+                    <td className="py-3 px-4 font-semibold">KES {invoice.amount}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs ${badge.bg} ${badge.text}`}>
+                        {badge.label}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-neutral-400">
+                      {new Date(invoice.due_date).toLocaleDateString()}
+                    </td>
+                    <td className="py-3 px-4">
+                      {invoice.status !== "paid" && (
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleMarkPaid(invoice.id)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Mark Paid
+                        </Button>
+                      )}
+                      {invoice.status === "paid" && (
+                        <span className="text-green-400 text-sm flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" /> Paid
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Main Admin Dashboard Layout
 const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
