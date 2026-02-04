@@ -1,7 +1,7 @@
-# CAIWAVE Wi-Fi Hotspot Billing Platform - PRD v3.1
+# CAIWAVE Wi-Fi Hotspot Billing Platform - PRD v4.0
 
 ## Project Overview
-Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, integrated advertising engine, admin-controlled campaigns, and CAIWAVE TV streaming service.
+Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, **Package-Based Advertising System**, admin-controlled campaigns, and CAIWAVE TV streaming service.
 
 ## Branding (LOCKED)
 - **Brand Name**: CAIWAVE
@@ -13,7 +13,7 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Frontend**: React + TailwindCSS + Shadcn UI
 - **Database**: MongoDB
 - **Auth**: JWT-based multi-role
-- **Payments**: M-Pesa Daraja API (structure ready)
+- **Payments**: M-Pesa Daraja API (structure ready, placeholder credentials)
 - **Router**: MikroTik via FreeRADIUS (structure ready)
 - **SMS**: Flexible gateway (Africa's Talking / Centipid)
 - **WhatsApp**: Twilio
@@ -34,23 +34,42 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - Landing page CAIWAVE TV section
 
 ### Phase 3: Integrations ✅ COMPLETE
-- **M-Pesa Daraja** - STK Push structure ready
-  - `/api/mpesa/stk-push` - Initiate payment
-  - `/api/mpesa/callback` - Handle M-Pesa callbacks
-  - `/api/mpesa/status/{id}` - Check payment status
-  - `/api/mpesa/config-status` - Configuration status
-  
+- **M-Pesa Daraja** - STK Push structure ready (MOCKED without credentials)
 - **MikroTik / RADIUS** - FreeRADIUS structure ready
-  - `/api/radius/config` - RADIUS server config
-  - `/api/radius/nas-clients` - Manage NAS clients (MikroTik routers)
-  - `/api/radius/generate-config/{id}` - Generate MikroTik RouterOS commands
-  - `/api/radius/test-connection` - Test RADIUS connectivity
-  
-- **Integration Settings UI** - Comprehensive admin panel with:
-  - Tabbed interface (M-Pesa, MikroTik/RADIUS, SMS)
-  - Setup instructions and environment variable documentation
-  - NAS client management (add, edit, delete, toggle)
-  - MikroTik config generation with copy-to-clipboard
+- **Integration Settings UI** - Comprehensive admin panel
+
+### Phase 4: Package-Based Advertising ✅ COMPLETE (NEW)
+**Advertising Packages (Admin-defined, non-editable by advertisers)**
+
+| Package | Coverage Scope | Duration | Price (KES) |
+|---------|----------------|----------|-------------|
+| Small Area | Constituency | 3 days | 300 |
+| Large Area | County | 7 days | 1,000 |
+| Wide Area | National | 14 days | 3,500 |
+
+**Advertiser Flow:**
+1. Select package → See pricing upfront
+2. Choose coverage (constituencies/counties/national)
+3. Upload media (image or video)
+4. Submit for admin review
+
+**Admin Flow:**
+1. Review pending ads
+2. Validate coverage and content quality
+3. Approve or reject (no price negotiation)
+4. After advertiser payment, activate ad
+
+**Status Flow:**
+`PENDING_APPROVAL` → `APPROVED` → `PAID` → `ACTIVE`
+
+**Key APIs:**
+- `GET /api/ad-packages` - List all packages
+- `GET /api/locations/counties` - Kenya counties
+- `GET /api/locations/constituencies` - Kenya constituencies
+- `POST /api/ads/upload` - Upload ad with package selection
+- `POST /api/ads/{id}/approve` - Admin approve/reject
+- `POST /api/ads/{id}/pay` - M-Pesa payment
+- `POST /api/ads/{id}/activate` - Go live
 
 ---
 
@@ -75,14 +94,6 @@ RADIUS_AUTH_PORT=1812
 RADIUS_ACCT_PORT=1813
 ```
 
-### SMS (Africa's Talking)
-```env
-SMS_PROVIDER=africas_talking
-AT_API_KEY=your_api_key
-AT_USERNAME=your_username
-AT_SENDER_ID=CAIWAVE
-```
-
 ---
 
 ## API Endpoints Summary
@@ -92,30 +103,31 @@ AT_SENDER_ID=CAIWAVE
 - `POST /api/auth/register`
 - `GET /api/auth/me`
 
-### Packages
+### Ad Packages (NEW)
+- `GET /api/ad-packages/` - List packages (public)
+- `GET /api/ad-packages/{id}` - Get package
+- `POST /api/ad-packages/` - Create (admin)
+- `PUT /api/ad-packages/{id}` - Update (admin)
+- `DELETE /api/ad-packages/{id}` - Delete (admin)
+- `POST /api/ad-packages/{id}/toggle` - Enable/disable (admin)
+
+### Locations (NEW)
+- `GET /api/locations/counties` - Kenya counties
+- `GET /api/locations/constituencies?county=X` - Constituencies
+
+### Ads
+- `GET /api/ads/` - List ads (advertiser sees own, admin sees all)
+- `GET /api/ads/pending` - Admin only
+- `GET /api/ads/active` - Public (captive portal)
+- `POST /api/ads/upload` - Upload with package selection
+- `POST /api/ads/{id}/approve` - Admin approve/reject
+- `POST /api/ads/{id}/pay` - M-Pesa payment
+- `POST /api/ads/{id}/activate` - Go live (admin)
+- `POST /api/ads/{id}/suspend` - Suspend (admin)
+- `POST /api/ads/{id}/reactivate` - Reactivate (admin)
+
+### Wi-Fi Packages
 - `GET /api/packages`
-
-### Hotspots
-- `GET /api/hotspots`
-- `POST /api/hotspots`
-
-### Payments
-- `POST /api/payments/initiate`
-- `GET /api/portal/{hotspot_id}`
-
-### M-Pesa
-- `POST /api/mpesa/stk-push`
-- `POST /api/mpesa/callback`
-- `GET /api/mpesa/config-status`
-
-### RADIUS / MikroTik
-- `GET /api/radius/config`
-- `GET /api/radius/nas-clients`
-- `POST /api/radius/nas-clients`
-- `PUT /api/radius/nas-clients/{id}`
-- `DELETE /api/radius/nas-clients/{id}`
-- `POST /api/radius/nas-clients/{id}/toggle`
-- `GET /api/radius/generate-config/{id}`
 
 ### Campaigns (Admin Only)
 - `GET /api/campaigns/`
@@ -140,32 +152,35 @@ AT_SENDER_ID=CAIWAVE
 - `POST /api/subsidized-uptime/{id}/status`
 - `DELETE /api/subsidized-uptime/{id}`
 
-### Ads
-- `GET /api/ads/pending`
-- `POST /api/ads/{id}/approve`
-- `POST /api/ads/{id}/reject`
-
-### Settings
-- `GET /api/settings/revenue-config`
-- `PUT /api/settings/revenue-config`
-
 ---
 
 ## Credentials
 - **Admin**: admin@caiwave.com / admin123
+- **Advertiser**: advertiser@caiwave.com / advertiser123
 
 ## Key Files
-- **Integration Settings**: `/app/frontend/src/pages/admin/Dashboard.jsx` (IntegrationSettingsPage component)
-- **Backend Server**: `/app/backend/server.py`
+- **Backend**: `/app/backend/server.py` (monolithic - needs refactoring)
+- **Frontend Admin**: `/app/frontend/src/pages/admin/Dashboard.jsx`
+- **Frontend Advertiser**: `/app/frontend/src/pages/advertiser/Dashboard.jsx`
 - **Environment Config**: `/app/backend/.env`
 
 ---
 
 ## Future Tasks (Backlog)
-- Partner Onboarding Wizard
-- Voucher Printing System
-- Equipment Marketplace UI
-- System Audit Logs
-- Two-Factor Authentication (2FA)
-- Actual FreeRADIUS server integration testing
-- Production M-Pesa credentials setup
+- **P1**: Partner Onboarding Wizard - Guided setup for hotspot owners
+- **P2**: Voucher Printing System - Generate pre-paid vouchers
+- **P3**: Equipment Marketplace UI
+- **P3**: System Audit Logs
+- **P3**: Two-Factor Authentication (2FA)
+- **REFACTORING**: Split backend/server.py into modules
+- **REFACTORING**: Split admin Dashboard.jsx into separate pages
+
+---
+
+## MOCKED/PLACEHOLDER Features
+- **M-Pesa STK Push**: Simulated when credentials not configured (payment succeeds automatically)
+- **FreeRADIUS**: Structure ready, requires live server configuration
+
+---
+
+## Last Updated: February 2026
