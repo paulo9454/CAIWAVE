@@ -3047,7 +3047,7 @@ async def add_marketplace_item(
 
 @api_router.post("/seed")
 async def seed_data():
-    """Seed initial packages and demo data"""
+    """Seed initial packages, ad packages, and demo data"""
     # UPDATED PACKAGES - as per spec
     default_packages = [
         {"name": "30 Minutes", "price": 5, "duration_minutes": 30, "speed_mbps": 5, "description": "Quick browsing session"},
@@ -3068,6 +3068,46 @@ async def seed_data():
         pkg_dict["created_at"] = pkg_dict["created_at"].isoformat()
         await db.packages.insert_one(pkg_dict)
     
+    # ==================== AD PACKAGES (New Package-Based Advertising) ====================
+    ad_packages = [
+        {
+            "name": "Small Area",
+            "description": "Advertise in selected hotspots within a single constituency. Perfect for local businesses targeting specific neighborhoods.",
+            "coverage_scope": AdCoverageScope.CONSTITUENCY.value,
+            "duration_days": 3,
+            "price": 300,
+            "max_impressions": None
+        },
+        {
+            "name": "Large Area",
+            "description": "Advertise across all hotspots within an entire constituency. Great for businesses serving a wider local audience.",
+            "coverage_scope": AdCoverageScope.COUNTY.value,
+            "duration_days": 7,
+            "price": 1000,
+            "max_impressions": None
+        },
+        {
+            "name": "Wide Area",
+            "description": "Advertise across multiple constituencies or nationwide. Ideal for county/national campaigns, political ads, and major brands.",
+            "coverage_scope": AdCoverageScope.NATIONAL.value,
+            "duration_days": 14,
+            "price": 3500,
+            "max_impressions": None
+        }
+    ]
+    
+    # Clear existing ad packages and insert new ones
+    await db.ad_packages.delete_many({})
+    
+    for pkg_data in ad_packages:
+        ad_pkg = AdPackage(**pkg_data)
+        pkg_dict = ad_pkg.model_dump()
+        pkg_dict["created_at"] = pkg_dict["created_at"].isoformat()
+        await db.ad_packages.insert_one(pkg_dict)
+    
+    # Clear old ads (as per user request)
+    await db.ads.delete_many({})
+    
     # Create super admin if not exists
     admin_email = "admin@caiwave.com"
     existing_admin = await db.users.find_one({"email": admin_email})
@@ -3082,6 +3122,21 @@ async def seed_data():
         admin_dict["password_hash"] = hash_password("admin123")
         admin_dict["created_at"] = admin_dict["created_at"].isoformat()
         await db.users.insert_one(admin_dict)
+    
+    # Create advertiser user
+    advertiser_email = "advertiser@caiwave.com"
+    existing_advertiser = await db.users.find_one({"email": advertiser_email})
+    if not existing_advertiser:
+        advertiser = User(
+            email=advertiser_email,
+            name="Demo Advertiser",
+            role=UserRole.ADVERTISER,
+            phone="+254711000000"
+        )
+        advertiser_dict = advertiser.model_dump()
+        advertiser_dict["password_hash"] = hash_password("advertiser123")
+        advertiser_dict["created_at"] = advertiser_dict["created_at"].isoformat()
+        await db.users.insert_one(advertiser_dict)
     
     # Create default revenue config
     await db.settings.update_one(
@@ -3121,7 +3176,15 @@ async def seed_data():
             item = MarketplaceItem(**item_data)
             await db.marketplace.insert_one(item.model_dump())
     
-    return {"message": "Seed data created successfully - packages updated to new pricing"}
+    return {
+        "message": "Seed data created successfully",
+        "details": {
+            "wifi_packages": len(default_packages),
+            "ad_packages": len(ad_packages),
+            "admin": admin_email,
+            "advertiser": advertiser_email
+        }
+    }
 
 # Root endpoint
 @api_router.get("/")
