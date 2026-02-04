@@ -455,6 +455,15 @@ const DashboardOverview = () => {
           </div>
         </div>
       </div>
+      
+      {/* Payment Modal */}
+      {payingInvoice && (
+        <PaymentModal
+          invoice={payingInvoice}
+          onClose={() => setPayingInvoice(null)}
+          onSuccess={fetchData}
+        />
+      )}
     </div>
   );
 };
