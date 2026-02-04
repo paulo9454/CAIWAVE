@@ -179,6 +179,19 @@ class AdPackageStatus(str, Enum):
     ACTIVE = "active"
     DISABLED = "disabled"
 
+class InvoiceStatus(str, Enum):
+    DRAFT = "draft"
+    TRIAL = "trial"
+    UNPAID = "unpaid"
+    PAID = "paid"
+    OVERDUE = "overdue"
+
+class SubscriptionStatus(str, Enum):
+    TRIAL = "trial"
+    ACTIVE = "active"
+    GRACE_PERIOD = "grace_period"  # Day 15-17
+    SUSPENDED = "suspended"  # Day 18+
+
 # ==================== Models ====================
 
 # User Models
