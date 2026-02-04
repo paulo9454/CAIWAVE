@@ -1803,7 +1803,7 @@ async def approve_ad(
 ):
     """
     Admin only - approve or reject an ad.
-    If approved, admin must set a price.
+    Price is determined by the package - admin validates coverage and content.
     """
     ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
     if not ad:
@@ -1813,15 +1813,12 @@ async def approve_ad(
         raise HTTPException(status_code=400, detail="Ad is not pending approval")
     
     if approval.approved:
-        if approval.price <= 0:
-            raise HTTPException(status_code=400, detail="Price must be set for approved ads")
-        
         update = {
             "status": AdStatus.APPROVED.value,
-            "price": approval.price,
             "approved_at": datetime.now(timezone.utc).isoformat(),
             "approved_by": user["id"],
-            "rejection_reason": None
+            "rejection_reason": None,
+            "admin_notes": approval.admin_notes
         }
     else:
         if not approval.rejection_reason:
@@ -1833,27 +1830,6 @@ async def approve_ad(
         }
     
     await db.ads.update_one({"id": ad_id}, {"$set": update})
-    
-    updated_ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
-    return updated_ad
-
-@ads_router.post("/{ad_id}/enable-payment")
-async def enable_ad_payment(ad_id: str, user: dict = Depends(require_admin)):
-    """Admin only - enable payment for an approved ad"""
-    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
-    if not ad:
-        raise HTTPException(status_code=404, detail="Ad not found")
-    
-    if ad["status"] != AdStatus.APPROVED.value:
-        raise HTTPException(status_code=400, detail="Ad must be approved first")
-    
-    if ad.get("price", 0) <= 0:
-        raise HTTPException(status_code=400, detail="Price must be set before enabling payment")
-    
-    await db.ads.update_one(
-        {"id": ad_id},
-        {"$set": {"status": AdStatus.PAYMENT_ENABLED.value}}
-    )
     
     updated_ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
     return updated_ad
