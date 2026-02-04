@@ -141,7 +141,7 @@ const LandingPage = () => {
             <div className="space-y-8">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-600/20 rounded-full text-blue-400 text-sm">
                 <Zap className="w-4 h-4" strokeWidth={1.5} />
-                No Monthly Subscription
+                14-Day Free Trial
               </div>
               
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
