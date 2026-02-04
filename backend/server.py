@@ -2643,15 +2643,13 @@ async def get_portal_data(hotspot_id: str):
     else:
         packages = await db.packages.find({"is_active": True}, {"_id": 0}).sort("price", 1).to_list(20)
     
-    # Get approved ads targeting this location
+    # Get active ads targeting this location
     ads_query = {
-        "status": AdStatus.APPROVED.value,
+        "status": AdStatus.ACTIVE.value,
         "is_active": True,
         "$or": [
             {"targeting.is_global": True},
             {"targeting.hotspot_ids": hotspot_id},
-            {"targeting.wards": hotspot.get("ward")},
-            {"targeting.constituencies": hotspot.get("constituency")},
             {"targeting.counties": hotspot.get("county")}
         ]
     }
@@ -2671,9 +2669,9 @@ async def create_free_session(
     user_mac: Optional[str] = None
 ):
     """Create a free session after watching an ad"""
-    # Verify ad is approved
+    # Verify ad is active
     ad = await db.ads.find_one(
-        {"id": ad_id, "status": AdStatus.APPROVED.value},
+        {"id": ad_id, "status": AdStatus.ACTIVE.value},
         {"_id": 0}
     )
     if not ad:
