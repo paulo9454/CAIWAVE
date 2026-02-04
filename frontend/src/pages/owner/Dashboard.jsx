@@ -270,6 +270,12 @@ const DashboardOverview = () => {
 
   return (
     <div className="space-y-8" data-testid="owner-dashboard">
+      {/* Subscription Status Banner */}
+      <SubscriptionBanner 
+        subscription={subscription} 
+        onPayNow={(invoice) => setPayingInvoice(invoice)} 
+      />
+      
       {/* Welcome Header */}
       <div>
         <h1 className="text-2xl font-bold">Welcome back, {user?.name}</h1>
