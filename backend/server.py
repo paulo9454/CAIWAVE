@@ -169,6 +169,15 @@ class SubsidizedUptimeStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
 
+class AdCoverageScope(str, Enum):
+    CONSTITUENCY = "constituency"
+    COUNTY = "county"
+    NATIONAL = "national"
+
+class AdPackageStatus(str, Enum):
+    ACTIVE = "active"
+    DISABLED = "disabled"
+
 # ==================== Models ====================
 
 # User Models
