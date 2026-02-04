@@ -301,7 +301,7 @@ class TestSubscriptionPricing:
             "password": self.owner_password
         })
         if response.status_code == 200:
-            return response.json().get("access_token")
+            return response.json().get("token")
         return None
     
     def test_subscription_price_is_500_kes(self):
