@@ -3353,7 +3353,7 @@ async def pay_invoice(
         phone_number=payment_request.phone_number,
         amount=int(invoice["amount"]),
         account_ref=invoice["invoice_number"],
-        description=f"CAIWAVE Hotspot Subscription"
+        description="CAIWAVE Hotspot Subscription"
     )
     
     if result.get("ResponseCode") == "0":
