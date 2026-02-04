@@ -98,6 +98,8 @@ notifications_router = APIRouter(prefix="/notifications", tags=["Notifications"]
 settings_router = APIRouter(prefix="/settings", tags=["Settings"])
 vouchers_router = APIRouter(prefix="/vouchers", tags=["Vouchers"])
 marketplace_router = APIRouter(prefix="/marketplace", tags=["Marketplace"])
+invoices_router = APIRouter(prefix="/invoices", tags=["Invoices"])
+subscriptions_router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
 security = HTTPBearer()
 
