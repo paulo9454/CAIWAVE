@@ -1190,14 +1190,30 @@ async def create_hotspot(
     elif not hotspot_data.owner_id:
         hotspot_data.owner_id = user["id"]
     
+    now = datetime.now(timezone.utc)
+    trial_end = now + timedelta(days=TRIAL_DAYS)
+    
     hotspot = Hotspot(**hotspot_data.model_dump())
     hotspot.status = HotspotStatus.ACTIVE  # Default to active for new hotspots
+    hotspot.subscription_status = SubscriptionStatus.TRIAL  # Start with trial
+    hotspot.trial_start_date = now
+    hotspot.trial_end_date = trial_end
+    
     hotspot_dict = hotspot.model_dump()
     hotspot_dict["created_at"] = hotspot_dict["created_at"].isoformat()
+    hotspot_dict["trial_start_date"] = hotspot_dict["trial_start_date"].isoformat()
+    hotspot_dict["trial_end_date"] = hotspot_dict["trial_end_date"].isoformat()
     if hotspot_dict.get("last_seen"):
         hotspot_dict["last_seen"] = hotspot_dict["last_seen"].isoformat()
+    if hotspot_dict.get("subscription_end_date"):
+        hotspot_dict["subscription_end_date"] = hotspot_dict["subscription_end_date"].isoformat()
     
     await db.hotspots.insert_one(hotspot_dict)
+    
+    # Create trial invoice for this hotspot
+    owner_id = hotspot_data.owner_id or user["id"]
+    await create_invoice_for_owner(owner_id, [hotspot.id], is_trial=True)
+    
     return hotspot
 
 @hotspots_router.put("/{hotspot_id}/packages", response_model=Hotspot)
