@@ -1840,7 +1840,7 @@ async def pay_for_ad(
     payment_request: AdPaymentRequest,
     user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
 ):
-    """Pay for an approved ad via M-Pesa STK Push"""
+    """Pay for an approved ad via M-Pesa STK Push - price from package"""
     ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
     if not ad:
         raise HTTPException(status_code=404, detail="Ad not found")
@@ -1849,31 +1849,46 @@ async def pay_for_ad(
     if user["role"] == UserRole.ADVERTISER.value and ad["advertiser_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if ad["status"] != AdStatus.PAYMENT_ENABLED.value:
-        raise HTTPException(status_code=400, detail="Payment not enabled for this ad")
+    # New flow: APPROVED → (pay) → PAID → (activate) → ACTIVE
+    if ad["status"] != AdStatus.APPROVED.value:
+        raise HTTPException(status_code=400, detail="Ad must be approved before payment")
+    
+    # Get price from package
+    price = ad.get("package_price", 0)
+    if price <= 0:
+        raise HTTPException(status_code=400, detail="Invalid package price")
     
     # Initiate M-Pesa payment
     if not mpesa_service.is_configured():
         # For demo - simulate payment success
+        # Calculate expiry based on package duration
+        package = await db.ad_packages.find_one({"id": ad.get("package_id")})
+        duration_days = package.get("duration_days", 7) if package else 7
+        starts_at = datetime.now(timezone.utc)
+        expires_at = starts_at + timedelta(days=duration_days)
+        
         await db.ads.update_one(
             {"id": ad_id},
             {
                 "$set": {
                     "status": AdStatus.PAID.value,
-                    "paid_at": datetime.now(timezone.utc).isoformat()
+                    "paid_at": datetime.now(timezone.utc).isoformat(),
+                    "starts_at": starts_at.isoformat(),
+                    "expires_at": expires_at.isoformat()
                 }
             }
         )
         return {
             "success": True,
-            "message": "Payment simulated (M-Pesa not configured). Ad is now paid.",
-            "ad_id": ad_id
+            "message": "Payment simulated (M-Pesa not configured). Ad is now paid and ready for activation.",
+            "ad_id": ad_id,
+            "amount": price
         }
     
     # Real M-Pesa STK Push
     result = await mpesa_service.stk_push(
         phone_number=payment_request.phone_number,
-        amount=int(ad["price"]),
+        amount=int(price),
         account_ref=f"CAIWAVE-AD-{ad_id[:8]}",
         description=f"Payment for ad: {ad['title']}"
     )
@@ -1887,7 +1902,8 @@ async def pay_for_ad(
         return {
             "success": True,
             "message": "STK Push sent. Check your phone to complete payment.",
-            "checkout_request_id": result.get("CheckoutRequestID")
+            "checkout_request_id": result.get("CheckoutRequestID"),
+            "amount": price
         }
     else:
         return {
@@ -1905,9 +1921,24 @@ async def activate_ad(ad_id: str, user: dict = Depends(require_admin)):
     if ad["status"] != AdStatus.PAID.value:
         raise HTTPException(status_code=400, detail="Ad must be paid before activation")
     
+    # Set activation dates if not already set
+    starts_at = ad.get("starts_at")
+    expires_at = ad.get("expires_at")
+    
+    if not starts_at or not expires_at:
+        package = await db.ad_packages.find_one({"id": ad.get("package_id")})
+        duration_days = package.get("duration_days", 7) if package else 7
+        starts_at = datetime.now(timezone.utc).isoformat()
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=duration_days)).isoformat()
+    
     await db.ads.update_one(
         {"id": ad_id},
-        {"$set": {"status": AdStatus.ACTIVE.value, "is_active": True}}
+        {"$set": {
+            "status": AdStatus.ACTIVE.value, 
+            "is_active": True,
+            "starts_at": starts_at,
+            "expires_at": expires_at
+        }}
     )
     
     updated_ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
