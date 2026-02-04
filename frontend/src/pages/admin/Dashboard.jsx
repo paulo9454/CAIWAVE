@@ -263,7 +263,7 @@ const AdApprovalPage = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
   const [selectedAd, setSelectedAd] = useState(null);
-  const [approvalData, setApprovalData] = useState({ price: "", rejection_reason: "" });
+  const [approvalData, setApprovalData] = useState({ admin_notes: "", rejection_reason: "" });
 
   useEffect(() => {
     fetchAds();
@@ -283,18 +283,14 @@ const AdApprovalPage = () => {
   };
 
   const handleApprove = async (adId) => {
-    if (!approvalData.price || parseFloat(approvalData.price) <= 0) {
-      toast.error("Please set a price for the ad");
-      return;
-    }
     try {
       await axios.post(`${API_URL}/ads/${adId}/approve`, {
         approved: true,
-        price: parseFloat(approvalData.price),
+        admin_notes: approvalData.admin_notes || null,
       }, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
-      toast.success("Ad approved with price KES " + approvalData.price);
+      toast.success("Ad approved! Advertiser can now pay.");
       setSelectedAd(null);
-      setApprovalData({ price: "", rejection_reason: "" });
+      setApprovalData({ admin_notes: "", rejection_reason: "" });
       fetchAds();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to approve ad");
@@ -313,22 +309,10 @@ const AdApprovalPage = () => {
       }, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
       toast.success("Ad rejected");
       setSelectedAd(null);
-      setApprovalData({ price: "", rejection_reason: "" });
+      setApprovalData({ admin_notes: "", rejection_reason: "" });
       fetchAds();
     } catch (error) {
       toast.error("Failed to reject ad");
-    }
-  };
-
-  const handleEnablePayment = async (adId) => {
-    try {
-      await axios.post(`${API_URL}/ads/${adId}/enable-payment`, {}, {
-        headers: { Authorization: `Bearer ${getAuthToken()}` },
-      });
-      toast.success("Payment enabled for advertiser");
-      fetchAds();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to enable payment");
     }
   };
 
@@ -370,11 +354,10 @@ const AdApprovalPage = () => {
 
   const getStatusBadge = (status) => {
     const badges = {
-      pending_approval: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Pending" },
-      approved: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Approved" },
+      pending_approval: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Pending Review" },
+      approved: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Approved - Awaiting Payment" },
       rejected: { bg: "bg-red-500/10", text: "text-red-400", label: "Rejected" },
-      payment_enabled: { bg: "bg-purple-500/10", text: "text-purple-400", label: "Awaiting Payment" },
-      paid: { bg: "bg-green-500/10", text: "text-green-400", label: "Paid" },
+      paid: { bg: "bg-purple-500/10", text: "text-purple-400", label: "Paid - Ready to Activate" },
       active: { bg: "bg-green-500/10", text: "text-green-400", label: "Active" },
       suspended: { bg: "bg-red-500/10", text: "text-red-400", label: "Suspended" },
     };
@@ -382,7 +365,7 @@ const AdApprovalPage = () => {
   };
 
   const pendingAds = ads.filter(a => a.status === "pending_approval");
-  const approvedAds = ads.filter(a => ["approved", "payment_enabled"].includes(a.status));
+  const approvedAds = ads.filter(a => a.status === "approved");
   const paidAds = ads.filter(a => a.status === "paid");
   const activeAds = ads.filter(a => a.status === "active");
   const otherAds = ads.filter(a => ["rejected", "suspended"].includes(a.status));
