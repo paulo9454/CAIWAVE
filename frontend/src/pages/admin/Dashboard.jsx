@@ -257,10 +257,11 @@ const AdminOverview = () => {
 
 // Ad Approval Page - CRITICAL FOR CAIWAVE ADMIN
 const AdApprovalPage = () => {
-  const [pendingAds, setPendingAds] = useState([]);
-  const [allAds, setAllAds] = useState([]);
+  const [ads, setAds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
+  const [selectedAd, setSelectedAd] = useState(null);
+  const [approvalData, setApprovalData] = useState({ price: "", rejection_reason: "" });
 
   useEffect(() => {
     fetchAds();
@@ -268,12 +269,10 @@ const AdApprovalPage = () => {
 
   const fetchAds = async () => {
     try {
-      const [pendingRes, allRes] = await Promise.all([
-        axios.get(`${API_URL}/ads/pending`),
-        axios.get(`${API_URL}/ads`),
-      ]);
-      setPendingAds(pendingRes.data);
-      setAllAds(allRes.data);
+      const response = await axios.get(`${API_URL}/ads/`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      setAds(response.data);
     } catch (error) {
       console.error("Failed to fetch ads:", error);
     } finally {
@@ -282,31 +281,72 @@ const AdApprovalPage = () => {
   };
 
   const handleApprove = async (adId) => {
+    if (!approvalData.price || parseFloat(approvalData.price) <= 0) {
+      toast.error("Please set a price for the ad");
+      return;
+    }
     try {
-      await axios.post(`${API_URL}/ads/${adId}/approve`, { approved: true });
-      toast.success("Ad approved successfully");
+      await axios.post(`${API_URL}/ads/${adId}/approve`, {
+        approved: true,
+        price: parseFloat(approvalData.price),
+      }, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+      toast.success("Ad approved with price KES " + approvalData.price);
+      setSelectedAd(null);
+      setApprovalData({ price: "", rejection_reason: "" });
       fetchAds();
     } catch (error) {
-      toast.error("Failed to approve ad");
+      toast.error(error.response?.data?.detail || "Failed to approve ad");
     }
   };
 
-  const handleReject = async (adId, reason = "Does not meet guidelines") => {
+  const handleReject = async (adId) => {
+    if (!approvalData.rejection_reason) {
+      toast.error("Please provide a rejection reason");
+      return;
+    }
     try {
       await axios.post(`${API_URL}/ads/${adId}/approve`, {
         approved: false,
-        rejection_reason: reason,
-      });
+        rejection_reason: approvalData.rejection_reason,
+      }, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
       toast.success("Ad rejected");
+      setSelectedAd(null);
+      setApprovalData({ price: "", rejection_reason: "" });
       fetchAds();
     } catch (error) {
       toast.error("Failed to reject ad");
     }
   };
 
+  const handleEnablePayment = async (adId) => {
+    try {
+      await axios.post(`${API_URL}/ads/${adId}/enable-payment`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      toast.success("Payment enabled for advertiser");
+      fetchAds();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to enable payment");
+    }
+  };
+
+  const handleActivate = async (adId) => {
+    try {
+      await axios.post(`${API_URL}/ads/${adId}/activate`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      toast.success("Ad is now LIVE!");
+      fetchAds();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to activate ad");
+    }
+  };
+
   const handleSuspend = async (adId) => {
     try {
-      await axios.post(`${API_URL}/ads/${adId}/suspend`);
+      await axios.post(`${API_URL}/ads/${adId}/suspend`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
       toast.success("Ad suspended");
       fetchAds();
     } catch (error) {
@@ -314,14 +354,46 @@ const AdApprovalPage = () => {
     }
   };
 
+  const handleReactivate = async (adId) => {
+    try {
+      await axios.post(`${API_URL}/ads/${adId}/reactivate`, {}, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
+      toast.success("Ad reactivated");
+      fetchAds();
+    } catch (error) {
+      toast.error("Failed to reactivate ad");
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
-      pending: "badge-pending",
-      approved: "badge-active",
-      rejected: "badge-inactive",
-      suspended: "badge-inactive",
+      pending_approval: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Pending" },
+      approved: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Approved" },
+      rejected: { bg: "bg-red-500/10", text: "text-red-400", label: "Rejected" },
+      payment_enabled: { bg: "bg-purple-500/10", text: "text-purple-400", label: "Awaiting Payment" },
+      paid: { bg: "bg-green-500/10", text: "text-green-400", label: "Paid" },
+      active: { bg: "bg-green-500/10", text: "text-green-400", label: "Active" },
+      suspended: { bg: "bg-red-500/10", text: "text-red-400", label: "Suspended" },
     };
-    return badges[status] || "badge-inactive";
+    return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
+  };
+
+  const pendingAds = ads.filter(a => a.status === "pending_approval");
+  const approvedAds = ads.filter(a => ["approved", "payment_enabled"].includes(a.status));
+  const paidAds = ads.filter(a => a.status === "paid");
+  const activeAds = ads.filter(a => a.status === "active");
+  const otherAds = ads.filter(a => ["rejected", "suspended"].includes(a.status));
+
+  const getFilteredAds = () => {
+    switch (activeTab) {
+      case "pending": return pendingAds;
+      case "approved": return approvedAds;
+      case "paid": return paidAds;
+      case "active": return activeAds;
+      case "other": return otherAds;
+      default: return ads;
+    }
   };
 
   return (
@@ -329,173 +401,240 @@ const AdApprovalPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ad Management</h1>
-          <p className="text-neutral-400 mt-1">Review and approve advertiser submissions</p>
+          <p className="text-neutral-400 mt-1">Review, approve, and manage advertiser submissions</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-yellow-500" />
-          <span className="text-yellow-400 text-sm font-medium">
-            {pendingAds.length} pending review
-          </span>
+        {pendingAds.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-yellow-500" />
+            <span className="text-yellow-400 text-sm font-medium">
+              {pendingAds.length} pending review
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Status Flow Info */}
+      <div className="dashboard-card bg-blue-500/5 border-blue-500/20">
+        <h3 className="font-medium text-blue-400 mb-2">Ad Status Flow</h3>
+        <div className="flex items-center gap-2 text-sm text-neutral-400 flex-wrap">
+          <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded">Pending</span>
+          <span>→</span>
+          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">Approved (set price)</span>
+          <span>→</span>
+          <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">Payment Enabled</span>
+          <span>→</span>
+          <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">Paid</span>
+          <span>→</span>
+          <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">Active (LIVE)</span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-neutral-800 pb-2">
-        <button
-          onClick={() => setActiveTab("pending")}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            activeTab === "pending"
-              ? "bg-yellow-500/10 text-yellow-400"
-              : "text-neutral-400 hover:text-white"
-          }`}
-        >
-          Pending ({pendingAds.length})
-        </button>
-        <button
-          onClick={() => setActiveTab("all")}
-          className={`px-4 py-2 rounded-lg transition-colors ${
-            activeTab === "all"
-              ? "bg-blue-500/10 text-blue-400"
-              : "text-neutral-400 hover:text-white"
-          }`}
-        >
-          All Ads ({allAds.length})
-        </button>
+      <div className="flex gap-2 border-b border-neutral-800 pb-2 overflow-x-auto">
+        {[
+          { id: "pending", label: "Pending", count: pendingAds.length, color: "yellow" },
+          { id: "approved", label: "Approved", count: approvedAds.length, color: "blue" },
+          { id: "paid", label: "Paid", count: paidAds.length, color: "green" },
+          { id: "active", label: "Active", count: activeAds.length, color: "green" },
+          { id: "other", label: "Rejected/Suspended", count: otherAds.length, color: "red" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
+              activeTab === tab.id
+                ? `bg-${tab.color}-500/10 text-${tab.color}-400`
+                : "text-neutral-400 hover:text-white"
+            }`}
+          >
+            {tab.label} ({tab.count})
+          </button>
+        ))}
       </div>
 
-      {/* Pending Ads */}
-      {activeTab === "pending" && (
-        <div className="space-y-4">
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : pendingAds.length === 0 ? (
-            <div className="dashboard-card p-12 text-center">
-              <Check className="w-12 h-12 text-green-500 mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">All caught up!</h3>
-              <p className="text-neutral-400 text-sm">No ads pending review</p>
-            </div>
-          ) : (
-            pendingAds.map((ad) => (
-              <div key={ad.id} className="dashboard-card p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-lg">{ad.title}</h3>
-                      <span className="px-2 py-1 bg-neutral-800 rounded text-xs uppercase">
-                        {ad.ad_type}
-                      </span>
-                    </div>
-                    {ad.text_content && (
-                      <p className="text-neutral-400 mb-4">{ad.text_content}</p>
-                    )}
-                    {ad.content_url && (
-                      <p className="text-neutral-500 text-sm mb-4">
-                        Content URL: {ad.content_url}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-4 text-sm">
-                      <div>
-                        <span className="text-neutral-500">Targeting:</span>{" "}
-                        {ad.targeting?.is_global ? (
-                          <span className="text-blue-400">Global</span>
+      {/* Ads List */}
+      <div className="space-y-4">
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : getFilteredAds().length === 0 ? (
+          <div className="dashboard-card p-12 text-center">
+            <Check className="w-12 h-12 text-green-500 mx-auto mb-4" />
+            <h3 className="font-semibold mb-2">No ads in this category</h3>
+            <p className="text-neutral-400 text-sm">
+              {activeTab === "pending" ? "All caught up! No ads pending review." : "No ads found."}
+            </p>
+          </div>
+        ) : (
+          getFilteredAds().map((ad) => {
+            const statusInfo = getStatusBadge(ad.status);
+            const mediaUrl = ad.media_url ? `${API_URL.replace('/api', '')}${ad.media_url}` : null;
+            
+            return (
+              <div key={ad.id} className="dashboard-card">
+                <div className="flex gap-6">
+                  {/* Media Preview */}
+                  <div className="w-48 h-32 bg-neutral-800 rounded-lg overflow-hidden flex-shrink-0">
+                    {mediaUrl ? (
+                      ad.ad_type === "image" ? (
+                        <img src={mediaUrl} alt={ad.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <video src={mediaUrl} className="w-full h-full object-cover" controls />
+                      )
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        {ad.ad_type === "image" ? (
+                          <Image className="w-8 h-8 text-neutral-600" />
                         ) : (
-                          <span className="text-purple-400">Local</span>
+                          <Video className="w-8 h-8 text-neutral-600" />
                         )}
                       </div>
-                      <div>
-                        <span className="text-neutral-500">Duration:</span>{" "}
-                        {ad.duration_seconds}s
-                      </div>
-                      <div>
-                        <span className="text-neutral-500">Submitted:</span>{" "}
-                        {new Date(ad.created_at).toLocaleDateString()}
-                      </div>
-                    </div>
+                    )}
                   </div>
-                </div>
-                <div className="flex gap-3 mt-6 pt-4 border-t border-neutral-800">
-                  <Button
-                    onClick={() => handleApprove(ad.id)}
-                    className="bg-green-600 hover:bg-green-700 flex-1"
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    Approve
-                  </Button>
-                  <Button
-                    onClick={() => handleReject(ad.id)}
-                    variant="outline"
-                    className="border-red-700 text-red-400 hover:bg-red-900/20 flex-1"
-                  >
-                    <X className="w-4 h-4 mr-2" />
-                    Reject
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
 
-      {/* All Ads */}
-      {activeTab === "all" && (
-        <div className="dashboard-card overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            </div>
-          ) : allAds.length === 0 ? (
-            <div className="p-8 text-center">
-              <Megaphone className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
-              <h3 className="font-semibold mb-2">No ads yet</h3>
-              <p className="text-neutral-400 text-sm">
-                Ads will appear here when advertisers create them
-              </p>
-            </div>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Impressions</th>
-                  <th>Clicks</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allAds.map((ad) => (
-                  <tr key={ad.id}>
-                    <td className="font-medium">{ad.title}</td>
-                    <td className="uppercase text-xs">{ad.ad_type}</td>
-                    <td>
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusBadge(ad.status)}`}>
-                        {ad.status}
-                      </span>
-                    </td>
-                    <td>{ad.impressions || 0}</td>
-                    <td>{ad.clicks || 0}</td>
-                    <td>
+                  {/* Ad Info */}
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-lg">{ad.title}</h3>
+                          <span className={`px-2 py-0.5 rounded text-xs ${statusInfo.bg} ${statusInfo.text}`}>
+                            {statusInfo.label}
+                          </span>
+                        </div>
+                        <p className="text-neutral-400 text-sm mt-1">
+                          {ad.ad_type === "image" ? "Image Banner" : "Video Ad"} • 
+                          {ad.media_size_bytes ? ` ${(ad.media_size_bytes / 1024 / 1024).toFixed(2)}MB` : ""} •
+                          Submitted {new Date(ad.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      {ad.price > 0 && (
+                        <div className="text-right">
+                          <p className="text-green-400 font-bold text-xl">KES {ad.price}</p>
+                          <p className="text-neutral-500 text-xs">Set price</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Click URL */}
+                    {ad.click_url && (
+                      <p className="text-neutral-500 text-sm mb-2">
+                        Link: <a href={ad.click_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{ad.click_url}</a>
+                      </p>
+                    )}
+
+                    {/* Rejection reason */}
+                    {ad.status === "rejected" && ad.rejection_reason && (
+                      <div className="bg-red-500/5 border border-red-500/20 rounded p-2 mb-2">
+                        <p className="text-red-400 text-sm">Rejected: {ad.rejection_reason}</p>
+                      </div>
+                    )}
+
+                    {/* Stats for active ads */}
+                    {ad.status === "active" && (
+                      <div className="flex gap-6 mb-2">
+                        <div className="flex items-center gap-2">
+                          <Eye className="w-4 h-4 text-blue-400" />
+                          <span className="text-blue-400">{ad.impressions || 0}</span>
+                          <span className="text-neutral-500 text-sm">impressions</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MousePointer className="w-4 h-4 text-green-400" />
+                          <span className="text-green-400">{ad.clicks || 0}</span>
+                          <span className="text-neutral-500 text-sm">clicks</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions based on status */}
+                    <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-800">
+                      {ad.status === "pending_approval" && (
+                        <>
+                          <Button
+                            onClick={() => setSelectedAd(selectedAd?.id === ad.id ? null : ad)}
+                            className="bg-blue-600 hover:bg-blue-700"
+                          >
+                            Review & Set Price
+                          </Button>
+                        </>
+                      )}
+                      
                       {ad.status === "approved" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleSuspend(ad.id)}
-                          className="border-red-700 text-red-400"
-                        >
+                        <Button onClick={() => handleEnablePayment(ad.id)} className="bg-purple-600 hover:bg-purple-700">
+                          <DollarSign className="w-4 h-4 mr-2" /> Enable Payment
+                        </Button>
+                      )}
+                      
+                      {ad.status === "payment_enabled" && (
+                        <span className="text-purple-400 text-sm py-2">Waiting for advertiser payment...</span>
+                      )}
+                      
+                      {ad.status === "paid" && (
+                        <Button onClick={() => handleActivate(ad.id)} className="bg-green-600 hover:bg-green-700">
+                          <Check className="w-4 h-4 mr-2" /> Activate (Go Live)
+                        </Button>
+                      )}
+                      
+                      {ad.status === "active" && (
+                        <Button onClick={() => handleSuspend(ad.id)} variant="outline" className="border-red-600 text-red-400">
                           Suspend
                         </Button>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
+                      
+                      {ad.status === "suspended" && (
+                        <Button onClick={() => handleReactivate(ad.id)} className="bg-green-600 hover:bg-green-700">
+                          Reactivate
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Approval Form */}
+                    {selectedAd?.id === ad.id && ad.status === "pending_approval" && (
+                      <div className="mt-4 p-4 bg-neutral-900 rounded-lg space-y-4">
+                        <h4 className="font-medium">Review Ad: {ad.title}</h4>
+                        
+                        <div>
+                          <label className="block text-sm text-neutral-400 mb-1">Set Price (KES) *</label>
+                          <input
+                            type="number"
+                            value={approvalData.price}
+                            onChange={(e) => setApprovalData({ ...approvalData, price: e.target.value })}
+                            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2"
+                            placeholder="e.g., 500"
+                          />
+                          <p className="text-neutral-500 text-xs mt-1">Advertiser will pay this amount to go live</p>
+                        </div>
+
+                        <div className="flex gap-3">
+                          <Button onClick={() => handleApprove(ad.id)} className="bg-green-600 hover:bg-green-700">
+                            <Check className="w-4 h-4 mr-2" /> Approve with Price
+                          </Button>
+                          <Button variant="outline" onClick={() => setSelectedAd(null)}>Cancel</Button>
+                        </div>
+
+                        <div className="border-t border-neutral-800 pt-4">
+                          <label className="block text-sm text-neutral-400 mb-1">Or Reject with Reason</label>
+                          <input
+                            type="text"
+                            value={approvalData.rejection_reason}
+                            onChange={(e) => setApprovalData({ ...approvalData, rejection_reason: e.target.value })}
+                            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2 mb-2"
+                            placeholder="Reason for rejection..."
+                          />
+                          <Button onClick={() => handleReject(ad.id)} variant="outline" className="border-red-600 text-red-400">
+                            <X className="w-4 h-4 mr-2" /> Reject
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 };
