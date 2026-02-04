@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="15" skipped="0" tests="16" time="3.548" timestamp="2026-02-04T21:31:49.461992+00:00" hostname="agent-env-2ff79e56-969f-4ee6-b99b-a77088d3c090"><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_health_check" time="0.087" /><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_admin_login" time="0.275"><failure message="AssertionError: assert 'access_token' in {'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYTNiM2VjZTgtZTg3MC00NjYxLWE2YmEtOWI1YzM2N2MwMGQ0Iiwicm9sZSI6InN1cGVyX2FkbWluIiwiZXhwIjoxNzcwMzI3MTEwfQ.yxoaPyMWyaQwjPo_DpYCiCA9X3mt8aytRohdytVNIlA', 'user': {'balance': 0.0, 'email': 'admin@caiwave.com', 'id': 'a3b3ece8-e870-4661-a6ba-9b5c367c00d4', 'is_active': True, ...}}">backend/tests/test_subscription_billing.py:62: in test_admin_login
+    assert "access_token" in data
+E   AssertionError: assert 'access_token' in {'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYTNiM2VjZTgtZTg3MC00NjYxLWE2YmEtOWI1YzM2N2MwMGQ0Iiwicm9sZSI6InN1cGVyX2FkbWluIiwiZXhwIjoxNzcwMzI3MTEwfQ.yxoaPyMWyaQwjPo_DpYCiCA9X3mt8aytRohdytVNIlA', 'user': {'balance': 0.0, 'email': 'admin@caiwave.com', 'id': 'a3b3ece8-e870-4661-a6ba-9b5c367c00d4', 'is_active': True, ...}}</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_owner_login" time="0.267"><failure message="AssertionError: assert 'access_token' in {'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNWE2OWVmOWItYjNkOC00Mjk5LWE0ZWQtNmFkNTY4ODQzYjc0Iiwicm9sZSI6ImhvdHNwb3Rfb3duZXIiLCJleHAiOjE3NzAzMjcxMTB9.8cFdFP0APBvcYtqPRSG_m0PNl-bZ55Ug5CnxZmVB-04', 'user': {'balance': 0.0, 'email': 'owner@caiwave.com', 'id': '5a69ef9b-b3d8-4299-a4ed-6ad568843b74', 'is_active': True, ...}}">backend/tests/test_subscription_billing.py:74: in test_owner_login
+    assert "access_token" in data
+E   AssertionError: assert 'access_token' in {'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNWE2OWVmOWItYjNkOC00Mjk5LWE0ZWQtNmFkNTY4ODQzYjc0Iiwicm9sZSI6ImhvdHNwb3Rfb3duZXIiLCJleHAiOjE3NzAzMjcxMTB9.8cFdFP0APBvcYtqPRSG_m0PNl-bZ55Ug5CnxZmVB-04', 'user': {'balance': 0.0, 'email': 'owner@caiwave.com', 'id': '5a69ef9b-b3d8-4299-a4ed-6ad568843b74', 'is_active': True, ...}}</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_subscription_status_requires_auth" time="0.041"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403]&gt;.status_code">backend/tests/test_subscription_billing.py:82: in test_subscription_status_requires_auth
+    assert response.status_code == 401
+E   assert 403 == 401
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_subscription_status_owner" time="0.262"><failure message="AssertionError: Owner login failed&#10;assert None is not None">backend/tests/test_subscription_billing.py:88: in test_subscription_status_owner
+    assert token is not None, "Owner login failed"
+E   AssertionError: Owner login failed
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_invoices_requires_auth" time="0.042"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403]&gt;.status_code">backend/tests/test_subscription_billing.py:117: in test_invoices_requires_auth
+    assert response.status_code == 401
+E   assert 403 == 401
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_invoices_owner" time="0.264"><failure message="AssertionError: Owner login failed&#10;assert None is not None">backend/tests/test_subscription_billing.py:123: in test_invoices_owner
+    assert token is not None, "Owner login failed"
+E   AssertionError: Owner login failed
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_current_invoice_owner" time="0.302"><failure message="AssertionError: Owner login failed&#10;assert None is not None">backend/tests/test_subscription_billing.py:156: in test_current_invoice_owner
+    assert token is not None, "Owner login failed"
+E   AssertionError: Owner login failed
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_admin_invoices_requires_admin" time="0.039"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403]&gt;.status_code">backend/tests/test_subscription_billing.py:179: in test_admin_invoices_requires_admin
+    assert response.status_code == 401
+E   assert 403 == 401
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_admin_get_all_invoices" time="0.259"><failure message="AssertionError: Admin login failed&#10;assert None is not None">backend/tests/test_subscription_billing.py:193: in test_admin_get_all_invoices
+    assert token is not None, "Admin login failed"
+E   AssertionError: Admin login failed
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_admin_mark_paid_requires_admin" time="0.278"><failure message="assert 401 == 403&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_subscription_billing.py:228: in test_admin_mark_paid_requires_admin
+    assert response.status_code == 403
+E   assert 401 == 403
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_admin_suspend_overdue_requires_admin" time="0.317"><failure message="assert 401 == 403&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_subscription_billing.py:238: in test_admin_suspend_overdue_requires_admin
+    assert response.status_code == 403
+E   assert 401 == 403
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_start_trial_requires_owner" time="0.271"><failure message="assert 401 == 403&#10; +  where 401 = &lt;Response [401]&gt;.status_code">backend/tests/test_subscription_billing.py:250: in test_start_trial_requires_owner
+    assert response.status_code == 403
+E   assert 401 == 403
+E    +  where 401 = &lt;Response [401]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionBillingSystem" name="test_pay_invoice_requires_auth" time="0.041"><failure message="assert 403 == 401&#10; +  where 403 = &lt;Response [403]&gt;.status_code">backend/tests/test_subscription_billing.py:260: in test_pay_invoice_requires_auth
+    assert response.status_code == 401
+E   assert 403 == 401
+E    +  where 403 = &lt;Response [403]&gt;.status_code</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionPricing" name="test_subscription_price_is_500_kes" time="0.263"><failure message="AssertionError: Owner login failed&#10;assert None is not None">backend/tests/test_subscription_billing.py:288: in test_subscription_price_is_500_kes
+    assert token is not None, "Owner login failed"
+E   AssertionError: Owner login failed
+E   assert None is not None</failure></testcase><testcase classname="backend.tests.test_subscription_billing.TestSubscriptionPricing" name="test_trial_period_is_14_days" time="0.259"><failure message="AssertionError: Owner login failed&#10;assert None is not None">backend/tests/test_subscription_billing.py:310: in test_trial_period_is_14_days
+    assert token is not None, "Owner login failed"
+E   AssertionError: Owner login failed
+E   assert None is not None</failure></testcase></testsuite></testsuites>
