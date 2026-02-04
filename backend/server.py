@@ -3696,13 +3696,75 @@ async def seed_data():
             item = MarketplaceItem(**item_data)
             await db.marketplace.insert_one(item.model_dump())
     
+    # Create hotspot owner user
+    owner_email = "owner@caiwave.com"
+    existing_owner = await db.users.find_one({"email": owner_email})
+    owner_id = None
+    if not existing_owner:
+        owner = User(
+            email=owner_email,
+            name="Demo Hotspot Owner",
+            role=UserRole.HOTSPOT_OWNER,
+            phone="+254722000000"
+        )
+        owner_dict = owner.model_dump()
+        owner_dict["password_hash"] = hash_password("owner123")
+        owner_dict["created_at"] = owner_dict["created_at"].isoformat()
+        await db.users.insert_one(owner_dict)
+        owner_id = owner_dict["id"]
+    else:
+        owner_id = existing_owner["id"]
+    
+    # Create demo hotspot with trial
+    now = datetime.now(timezone.utc)
+    trial_end = now + timedelta(days=TRIAL_DAYS)
+    
+    existing_hotspot = await db.hotspots.find_one({"name": "Demo Cafe Hotspot"})
+    if not existing_hotspot and owner_id:
+        demo_hotspot = Hotspot(
+            name="Demo Cafe Hotspot",
+            location="Westlands, Nairobi",
+            county="Nairobi",
+            constituency="Westlands",
+            owner_id=owner_id,
+            status=HotspotStatus.ACTIVE,
+            subscription_status=SubscriptionStatus.TRIAL,
+            trial_start_date=now,
+            trial_end_date=trial_end
+        )
+        hotspot_dict = demo_hotspot.model_dump()
+        hotspot_dict["created_at"] = hotspot_dict["created_at"].isoformat()
+        hotspot_dict["trial_start_date"] = hotspot_dict["trial_start_date"].isoformat()
+        hotspot_dict["trial_end_date"] = hotspot_dict["trial_end_date"].isoformat()
+        await db.hotspots.insert_one(hotspot_dict)
+        
+        # Create trial invoice
+        invoice = Invoice(
+            invoice_number=generate_invoice_number(),
+            owner_id=owner_id,
+            hotspot_ids=[demo_hotspot.id],
+            billing_period_start=now,
+            billing_period_end=now + timedelta(days=30),
+            amount=SUBSCRIPTION_PRICE_KES,
+            hotspot_count=1,
+            status=InvoiceStatus.TRIAL,
+            due_date=trial_end
+        )
+        invoice_dict = invoice.model_dump()
+        invoice_dict["created_at"] = invoice_dict["created_at"].isoformat()
+        invoice_dict["billing_period_start"] = invoice_dict["billing_period_start"].isoformat()
+        invoice_dict["billing_period_end"] = invoice_dict["billing_period_end"].isoformat()
+        invoice_dict["due_date"] = invoice_dict["due_date"].isoformat()
+        await db.invoices.insert_one(invoice_dict)
+    
     return {
         "message": "Seed data created successfully",
         "details": {
             "wifi_packages": len(default_packages),
             "ad_packages": len(ad_packages),
             "admin": admin_email,
-            "advertiser": advertiser_email
+            "advertiser": advertiser_email,
+            "hotspot_owner": owner_email
         }
     }
 
