@@ -337,29 +337,61 @@ class MPesaSTKCallback(BaseModel):
     Body: Dict[str, Any]
 
 # Ad Models - WITH APPROVAL WORKFLOW
+# ==================== Advertising Package Models ====================
+
+class AdPackage(BaseModel):
+    """Admin-created advertising packages with fixed pricing"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str  # Small Area, Large Area, Wide Area
+    description: str
+    coverage_scope: AdCoverageScope  # constituency, county, national
+    duration_days: int
+    price: float  # Price in KES
+    max_impressions: Optional[int] = None  # Optional cap
+    status: AdPackageStatus = AdPackageStatus.ACTIVE
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: Optional[datetime] = None
+
+class AdPackageCreate(BaseModel):
+    """Create a new ad package (Admin only)"""
+    name: str
+    description: str
+    coverage_scope: AdCoverageScope
+    duration_days: int
+    price: float
+    max_impressions: Optional[int] = None
+
+class AdPackageUpdate(BaseModel):
+    """Update an ad package (Admin only)"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    coverage_scope: Optional[AdCoverageScope] = None
+    duration_days: Optional[int] = None
+    price: Optional[float] = None
+    max_impressions: Optional[int] = None
+    status: Optional[AdPackageStatus] = None
+
+# ==================== Ad Targeting and Coverage ====================
+
 class AdTargeting(BaseModel):
-    is_global: bool = True  # Default to all locations
-    counties: List[str] = Field(default_factory=list)
-    hotspot_ids: List[str] = Field(default_factory=list)
-
-# Simplified Ad Model for non-technical advertisers
-class AdBase(BaseModel):
-    title: str
-    ad_type: AdType
-
-class AdCreate(BaseModel):
-    """Simple ad creation - advertisers only provide basic info"""
-    title: str
-    ad_type: AdType
-    click_url: Optional[str] = None  # Optional click-through URL
+    """Coverage selection for ads"""
+    constituencies: List[str] = Field(default_factory=list)  # Selected constituencies
+    counties: List[str] = Field(default_factory=list)  # For county/national scope
+    is_national: bool = False  # True for national coverage
 
 class Ad(BaseModel):
-    """Full ad model with all fields"""
+    """Full ad model with package-based pricing"""
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
     ad_type: AdType
     advertiser_id: str
+    
+    # Package reference (required)
+    package_id: str
+    package_name: Optional[str] = None  # Denormalized for display
+    package_price: float = 0.0  # Price at time of purchase
     
     # Media storage
     media_path: Optional[str] = None  # Local file path
@@ -370,21 +402,25 @@ class Ad(BaseModel):
     # Optional link
     click_url: Optional[str] = None
     
-    # Status flow: PENDING_APPROVAL → APPROVED → PAYMENT_ENABLED → PAID → ACTIVE
+    # Coverage selection by advertiser (validated by admin)
+    targeting: AdTargeting = Field(default_factory=AdTargeting)
+    
+    # Status flow: PENDING_APPROVAL → APPROVED → PAID → ACTIVE
     status: AdStatus = AdStatus.PENDING_APPROVAL
     
     # Admin controls
-    price: float = 0.0  # Set by admin after approval
     rejection_reason: Optional[str] = None
     approved_at: Optional[datetime] = None
     approved_by: Optional[str] = None
+    admin_notes: Optional[str] = None  # Admin notes on coverage validation
     
     # Payment
     payment_id: Optional[str] = None
     paid_at: Optional[datetime] = None
     
-    # Targeting (admin-controlled)
-    targeting: AdTargeting = Field(default_factory=AdTargeting)
+    # Activation period
+    starts_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
     
     # Stats
     impressions: int = 0
@@ -395,10 +431,10 @@ class Ad(BaseModel):
     is_active: bool = False
 
 class AdApproval(BaseModel):
-    """Admin approval with pricing"""
+    """Admin approval - no price negotiation"""
     approved: bool
-    price: float = 0.0  # Required if approved
     rejection_reason: Optional[str] = None
+    admin_notes: Optional[str] = None  # Notes on coverage validation
 
 class AdPaymentRequest(BaseModel):
     """Request payment for an approved ad"""
