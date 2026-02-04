@@ -75,6 +75,9 @@ RADIUS_ACCT_PORT = int(os.environ.get('RADIUS_ACCT_PORT', '1813'))
 # Create the main app
 app = FastAPI(title="CAIWAVE Wi-Fi Hotspot Billing Platform", version="2.0.0")
 
+# Mount static files for ad media
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR.parent)), name="uploads")
+
 # Create routers
 api_router = APIRouter(prefix="/api")
 auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
