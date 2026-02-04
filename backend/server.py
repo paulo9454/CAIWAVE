@@ -3294,6 +3294,8 @@ api_router.include_router(notifications_router)
 api_router.include_router(settings_router)
 api_router.include_router(vouchers_router)
 api_router.include_router(marketplace_router)
+api_router.include_router(invoices_router)
+api_router.include_router(subscriptions_router)
 
 app.include_router(api_router)
 
