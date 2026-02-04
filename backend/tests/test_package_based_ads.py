@@ -288,9 +288,23 @@ class TestActiveAdsAPI:
 class TestAnalyticsDashboard:
     """Test Analytics Dashboard API"""
     
-    def test_get_dashboard_stats(self):
-        """GET /api/analytics/dashboard should return stats"""
-        response = requests.get(f"{BASE_URL}/api/analytics/dashboard")
+    @pytest.fixture
+    def admin_token(self):
+        """Get admin auth token"""
+        response = requests.post(
+            f"{BASE_URL}/api/auth/login",
+            json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
+        )
+        if response.status_code == 200:
+            return response.json()["token"]
+        pytest.skip("Admin login failed")
+    
+    def test_get_dashboard_stats(self, admin_token):
+        """GET /api/analytics/dashboard should return stats (requires auth)"""
+        response = requests.get(
+            f"{BASE_URL}/api/analytics/dashboard",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
         assert response.status_code == 200
         
         data = response.json()
