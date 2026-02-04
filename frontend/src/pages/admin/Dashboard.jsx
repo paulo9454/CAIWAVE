@@ -493,13 +493,37 @@ const AdApprovalPage = () => {
                           Submitted {new Date(ad.created_at).toLocaleDateString()}
                         </p>
                       </div>
-                      {ad.price > 0 && (
+                      {(ad.package_price > 0 || ad.price > 0) && (
                         <div className="text-right">
-                          <p className="text-green-400 font-bold text-xl">KES {ad.price}</p>
-                          <p className="text-neutral-500 text-xs">Set price</p>
+                          <p className="text-green-400 font-bold text-xl">KES {(ad.package_price || ad.price || 0).toLocaleString()}</p>
+                          <p className="text-neutral-500 text-xs">{ad.package_name || "Package price"}</p>
                         </div>
                       )}
                     </div>
+
+                    {/* Package & Coverage Info */}
+                    {ad.package_name && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded">
+                          📦 {ad.package_name}
+                        </span>
+                        {ad.targeting?.is_national && (
+                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded">
+                            🌍 National
+                          </span>
+                        )}
+                        {ad.targeting?.counties?.length > 0 && (
+                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded">
+                            🏛️ {ad.targeting.counties.join(", ")}
+                          </span>
+                        )}
+                        {ad.targeting?.constituencies?.length > 0 && (
+                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded">
+                            📍 {ad.targeting.constituencies.length} constituencies
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Click URL */}
                     {ad.click_url && (
