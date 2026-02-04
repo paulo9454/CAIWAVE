@@ -39,6 +39,11 @@ import {
   Video,
   Image,
   MousePointer,
+  FileText,
+  CreditCard,
+  CheckCircle,
+  Ban,
+  RefreshCw,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
