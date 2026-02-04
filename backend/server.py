@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -16,9 +17,25 @@ from enum import Enum
 import httpx
 import base64
 import hashlib
+import shutil
+import mimetypes
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Create upload directories
+UPLOAD_DIR = ROOT_DIR / "uploads" / "ads"
+UPLOAD_DIR_IMAGES = UPLOAD_DIR / "images"
+UPLOAD_DIR_VIDEOS = UPLOAD_DIR / "videos"
+UPLOAD_DIR_IMAGES.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR_VIDEOS.mkdir(parents=True, exist_ok=True)
+
+# Media validation constants
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_VIDEO_SIZE = 20 * 1024 * 1024  # 20MB
+MAX_VIDEO_DURATION = 15  # seconds
+ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
+ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm"]
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
