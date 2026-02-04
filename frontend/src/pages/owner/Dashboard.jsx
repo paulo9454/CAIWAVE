@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/button";
-import { getUser, logout, ROLES } from "../../lib/auth";
+import { getUser, logout, getAuthToken, ROLES } from "../../lib/auth";
 import { API_URL, formatCurrency } from "../../lib/utils";
 import axios from "axios";
 import { toast } from "sonner";
@@ -20,6 +20,12 @@ import {
   ChevronRight,
   Plus,
   BarChart3,
+  FileText,
+  AlertTriangle,
+  CheckCircle,
+  Phone,
+  Calendar,
+  Zap,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
@@ -32,11 +38,191 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+// Subscription Status Banner Component
+const SubscriptionBanner = ({ subscription, onPayNow }) => {
+  if (!subscription) return null;
+  
+  const { subscription_status, trial_days_remaining, current_invoice, monthly_fee } = subscription;
+  
+  const getStatusConfig = () => {
+    switch (subscription_status) {
+      case "trial":
+        return {
+          bg: "bg-blue-500/10 border-blue-500/30",
+          icon: <Clock className="w-5 h-5 text-blue-400" />,
+          title: `Free Trial - ${trial_days_remaining} days remaining`,
+          description: `Your trial ends in ${trial_days_remaining} days. Pay KES ${monthly_fee} to continue after trial.`,
+          showPayButton: trial_days_remaining <= 3,
+          urgent: false
+        };
+      case "active":
+        return {
+          bg: "bg-green-500/10 border-green-500/30",
+          icon: <CheckCircle className="w-5 h-5 text-green-400" />,
+          title: "Subscription Active",
+          description: "Your subscription is active. Enjoy all features!",
+          showPayButton: false,
+          urgent: false
+        };
+      case "grace_period":
+        return {
+          bg: "bg-yellow-500/10 border-yellow-500/30",
+          icon: <AlertTriangle className="w-5 h-5 text-yellow-400" />,
+          title: "Payment Overdue",
+          description: `Your trial has ended. Pay KES ${monthly_fee} now to avoid suspension.`,
+          showPayButton: true,
+          urgent: true
+        };
+      case "suspended":
+        return {
+          bg: "bg-red-500/10 border-red-500/30",
+          icon: <AlertTriangle className="w-5 h-5 text-red-400" />,
+          title: "Account Suspended",
+          description: `Your hotspot is suspended due to non-payment. Pay KES ${monthly_fee} to reactivate.`,
+          showPayButton: true,
+          urgent: true
+        };
+      default:
+        return null;
+    }
+  };
+  
+  const config = getStatusConfig();
+  if (!config) return null;
+  
+  return (
+    <div className={`p-4 rounded-xl border ${config.bg} mb-6`} data-testid="subscription-banner">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          {config.icon}
+          <div>
+            <h3 className="font-semibold">{config.title}</h3>
+            <p className="text-sm text-neutral-400">{config.description}</p>
+          </div>
+        </div>
+        {config.showPayButton && current_invoice && (
+          <Button
+            onClick={() => onPayNow(current_invoice)}
+            className={config.urgent ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}
+            data-testid="pay-now-btn"
+          >
+            <CreditCard className="w-4 h-4 mr-2" />
+            Pay KES {monthly_fee} Now
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Payment Modal Component
+const PaymentModal = ({ invoice, onClose, onSuccess }) => {
+  const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  
+  const handlePay = async () => {
+    if (!phone || phone.length < 9) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        `${API_URL}/invoices/pay/${invoice.id}`,
+        { phone_number: `254${phone}` },
+        { headers: { Authorization: `Bearer ${getAuthToken()}` } }
+      );
+      
+      if (response.data.success) {
+        toast.success(response.data.message);
+        onSuccess();
+        onClose();
+      } else {
+        toast.error(response.data.message || "Payment failed");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Payment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div className="bg-neutral-900 rounded-xl max-w-md w-full p-6 border border-neutral-800">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold">Pay Subscription</h2>
+          <button onClick={onClose} className="p-2 hover:bg-neutral-800 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        
+        <div className="p-4 bg-neutral-800 rounded-lg mb-6">
+          <div className="flex justify-between items-center">
+            <span className="text-neutral-400">Invoice:</span>
+            <span className="font-mono text-sm">{invoice.invoice_number}</span>
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-neutral-400">Hotspots:</span>
+            <span>{invoice.hotspot_count}</span>
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-neutral-400">Amount:</span>
+            <span className="font-bold text-2xl text-green-400">KES {invoice.amount}</span>
+          </div>
+        </div>
+        
+        <div className="mb-6">
+          <label className="block text-sm text-neutral-400 mb-2">M-Pesa Phone Number</label>
+          <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg">
+            <span className="px-4 text-neutral-500">+254</span>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+              className="flex-1 bg-transparent px-2 py-3 focus:outline-none"
+              placeholder="712345678"
+              data-testid="subscription-phone-input"
+            />
+          </div>
+          <p className="text-xs text-neutral-500 mt-2">
+            An STK Push will be sent to this number
+          </p>
+        </div>
+        
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={onClose} className="flex-1 border-neutral-700">
+            Cancel
+          </Button>
+          <Button 
+            onClick={handlePay} 
+            disabled={loading || !phone} 
+            className="flex-1 bg-green-600 hover:bg-green-700"
+            data-testid="confirm-subscription-payment"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <Phone className="w-4 h-4 mr-2" />
+                Pay via M-Pesa
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Dashboard Overview Component
 const DashboardOverview = () => {
   const [stats, setStats] = useState(null);
   const [hotspots, setHotspots] = useState([]);
+  const [subscription, setSubscription] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [payingInvoice, setPayingInvoice] = useState(null);
   const user = getUser();
 
   useEffect(() => {
