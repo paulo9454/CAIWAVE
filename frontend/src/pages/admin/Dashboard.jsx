@@ -1728,16 +1728,10 @@ const AllHotspotsPage = () => {
 
 // Users Management Component
 const UsersPage = () => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // For now, show current admin
-    setUsers([
-      { id: "1", name: "CAIWAVE Admin", email: "admin@caiwave.com", role: "super_admin", is_active: true },
-    ]);
-    setLoading(false);
-  }, []);
+  const [users] = useState([
+    { id: "1", name: "CAIWAVE Admin", email: "admin@caiwave.com", role: "super_admin", is_active: true },
+  ]);
+  const [loading] = useState(false);
 
   return (
     <div className="space-y-6" data-testid="users-page">
