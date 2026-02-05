@@ -262,6 +262,54 @@ const AdminOverview = () => {
   );
 };
 
+// Helper function to determine ad's live status based on dates
+const getAdLiveStatus = (ad) => {
+  if (ad.status !== "active") return null;
+  
+  const now = new Date();
+  const startsAt = ad.starts_at ? new Date(ad.starts_at) : null;
+  const expiresAt = ad.expires_at ? new Date(ad.expires_at) : null;
+  
+  if (!startsAt || !expiresAt) return { status: "live", label: "Live", color: "green" };
+  
+  if (now < startsAt) {
+    return { status: "scheduled", label: "Scheduled", color: "blue" };
+  } else if (now > expiresAt) {
+    return { status: "ended", label: "Ended", color: "gray" };
+  } else {
+    return { status: "live", label: "Live", color: "green" };
+  }
+};
+
+// Helper to check if date is today or yesterday
+const getDateCategory = (dateStr) => {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const isToday = date.toDateString() === today.toDateString();
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  
+  if (isToday) return "today";
+  if (isYesterday) return "yesterday";
+  return "older";
+};
+
+// Format date for display
+const formatAdDate = (dateStr) => {
+  if (!dateStr) return "Not set";
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-GB", { 
+    day: "2-digit", 
+    month: "short", 
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+};
+
 // Ad Approval Page - CRITICAL FOR CAIWAVE ADMIN
 const AdApprovalPage = () => {
   const [ads, setAds] = useState([]);
@@ -357,23 +405,51 @@ const AdApprovalPage = () => {
     }
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (ad) => {
+    const status = ad.status;
+    const liveStatus = getAdLiveStatus(ad);
+    
+    // For active ads, show live status
+    if (status === "active" && liveStatus) {
+      const badges = {
+        live: { bg: "bg-green-500/20", text: "text-green-400", label: "🟢 Live", border: "border-green-500/30" },
+        scheduled: { bg: "bg-blue-500/20", text: "text-blue-400", label: "📅 Scheduled", border: "border-blue-500/30" },
+        ended: { bg: "bg-gray-500/20", text: "text-gray-400", label: "⏹️ Ended", border: "border-gray-500/30" },
+      };
+      return badges[liveStatus.status] || badges.live;
+    }
+    
     const badges = {
-      pending_approval: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Pending Review" },
-      approved: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Approved - Awaiting Payment" },
-      rejected: { bg: "bg-red-500/10", text: "text-red-400", label: "Rejected" },
-      paid: { bg: "bg-purple-500/10", text: "text-purple-400", label: "Paid - Ready to Activate" },
-      active: { bg: "bg-green-500/10", text: "text-green-400", label: "Active" },
-      suspended: { bg: "bg-red-500/10", text: "text-red-400", label: "Suspended" },
+      pending_approval: { bg: "bg-yellow-500/20", text: "text-yellow-400", label: "⏳ Pending", border: "border-yellow-500/30" },
+      approved: { bg: "bg-blue-500/20", text: "text-blue-400", label: "✓ Approved", border: "border-blue-500/30" },
+      rejected: { bg: "bg-red-500/20", text: "text-red-400", label: "✗ Rejected", border: "border-red-500/30" },
+      paid: { bg: "bg-purple-500/20", text: "text-purple-400", label: "💳 Paid", border: "border-purple-500/30" },
+      active: { bg: "bg-green-500/20", text: "text-green-400", label: "🟢 Live", border: "border-green-500/30" },
+      suspended: { bg: "bg-red-500/20", text: "text-red-400", label: "⛔ Suspended", border: "border-red-500/30" },
     };
-    return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
+    return badges[status] || { bg: "bg-gray-500/20", text: "text-gray-400", label: status, border: "border-gray-500/30" };
   };
 
+  // Filter ads and categorize
   const pendingAds = ads.filter(a => a.status === "pending_approval");
   const approvedAds = ads.filter(a => a.status === "approved");
   const paidAds = ads.filter(a => a.status === "paid");
   const activeAds = ads.filter(a => a.status === "active");
   const otherAds = ads.filter(a => ["rejected", "suspended"].includes(a.status));
+  
+  // Separate live vs ended active ads
+  const liveAds = activeAds.filter(a => {
+    const status = getAdLiveStatus(a);
+    return status?.status === "live" || status?.status === "scheduled";
+  });
+  const endedAds = activeAds.filter(a => {
+    const status = getAdLiveStatus(a);
+    return status?.status === "ended";
+  });
+  
+  // Today's and Yesterday's ads for quick filtering
+  const todayAds = ads.filter(a => getDateCategory(a.starts_at) === "today");
+  const yesterdayAds = ads.filter(a => getDateCategory(a.starts_at) === "yesterday");
 
   const getFilteredAds = () => {
     switch (activeTab) {
