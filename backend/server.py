@@ -4374,8 +4374,9 @@ async def seed_data():
 async def root():
     return {
         "message": "CAIWAVE Wi-Fi Hotspot Billing Platform API",
-        "version": "2.0.0",
-        "powered_by": "CAIWAVE © 2026"
+        "version": "2.1.0",
+        "powered_by": "CAIWAVE © 2026",
+        "domain": "www.caiwave.com"
     }
 
 @api_router.get("/health")
