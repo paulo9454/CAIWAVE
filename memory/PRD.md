@@ -116,6 +116,40 @@ MPESA_TILL_NUMBER=8573842
 - **Frontend Admin**: `/app/frontend/src/pages/admin/Dashboard.jsx`
 - **Frontend Owner**: `/app/frontend/src/pages/owner/Dashboard.jsx`
 
+## Modular Backend Structure (NEW - v2.1.0)
+```
+/app/backend/
+├── config.py           # Configuration management (env vars, constants)
+├── database.py         # MongoDB connection
+├── models/             # Pydantic models & enums
+│   ├── enums.py       # All enum types
+│   ├── user.py        # User models
+│   ├── package.py     # WiFi package models
+│   ├── hotspot.py     # Hotspot models
+│   ├── invoice.py     # Invoice & subscription models
+│   ├── session.py     # Session models
+│   ├── payment.py     # Payment models
+│   ├── ad.py          # Advertisement models
+│   ├── voucher.py     # Voucher models
+│   ├── campaign.py    # Campaign & stream models
+│   └── settings.py    # System settings models
+├── services/           # Business logic services
+│   ├── mpesa.py       # M-Pesa Daraja integration
+│   ├── sms.py         # SMS gateway (Africa's Talking)
+│   ├── whatsapp.py    # WhatsApp (Twilio) integration
+│   └── notification.py # Unified notification service
+├── utils/              # Helper utilities
+│   ├── auth.py        # JWT, password hashing, user auth
+│   ├── voucher.py     # Voucher code generation
+│   ├── revenue.py     # Revenue sharing calculations
+│   └── locations.py   # Kenya counties/constituencies
+├── routes/             # API route modules (partial)
+│   ├── auth.py        # Authentication routes
+│   ├── packages.py    # Package routes
+│   └── locations.py   # Location routes
+└── server.py           # Main FastAPI application
+```
+
 ---
 
 ## Testing Notes
