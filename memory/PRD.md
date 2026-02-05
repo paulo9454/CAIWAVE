@@ -165,10 +165,12 @@ MPESA_TILL_NUMBER=8573842
 - **P1**: Partner Onboarding Wizard
 - **P2**: Voucher Printing System
 - **P2**: Invoice PDF/CSV Export
+- **P2**: Complete backend route modularization (move remaining routes from server.py to /routes)
+- **P2**: Frontend dashboard component modularization
 - **P3**: Equipment Marketplace UI
 - **P3**: System Audit Logs
 - **P3**: Two-Factor Authentication (2FA)
 
 ---
 
-## Last Updated: February 2026
+## Last Updated: February 2026 - Version 2.1.0
