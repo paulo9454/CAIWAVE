@@ -588,152 +588,174 @@ const AdApprovalPage = () => {
             </p>
           </div>
         ) : (
-          getFilteredAds().map((ad) => {
-            const statusInfo = getStatusBadge(ad.status);
-            const mediaUrl = ad.media_url ? `${API_URL.replace('/api', '')}${ad.media_url}` : null;
-            
-            return (
-              <div key={ad.id} className="dashboard-card">
-                <div className="flex gap-6">
-                  {/* Media Preview */}
-                  <div className="w-48 h-32 bg-neutral-800 rounded-lg overflow-hidden flex-shrink-0">
-                    {mediaUrl ? (
-                      ad.ad_type === "image" ? (
-                        <img src={mediaUrl} alt={ad.title} className="w-full h-full object-cover" />
-                      ) : (
-                        <video src={mediaUrl} className="w-full h-full object-cover" controls />
-                      )
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {getFilteredAds().map((ad) => {
+              const statusInfo = getStatusBadge(ad);
+              const mediaUrl = ad.media_url ? `${API_URL.replace('/api', '')}${ad.media_url}` : null;
+              const liveStatus = getAdLiveStatus(ad);
+              
+              return (
+                <div key={ad.id} className="dashboard-card overflow-hidden hover:border-neutral-600 transition-colors">
+                  {/* Image Thumbnail - Dominant Visual */}
+                  <div className="relative w-full h-48 bg-neutral-900 -mx-6 -mt-6 mb-4">
+                    {mediaUrl && ad.ad_type === "image" ? (
+                      <img 
+                        src={mediaUrl} 
+                        alt={ad.title} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : mediaUrl && ad.ad_type === "video" ? (
+                      <video 
+                        src={mediaUrl} 
+                        className="w-full h-full object-cover" 
+                        muted
+                        onMouseEnter={(e) => e.target.play()}
+                        onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
+                      />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        {ad.ad_type === "image" ? (
-                          <Image className="w-8 h-8 text-neutral-600" />
-                        ) : (
-                          <Video className="w-8 h-8 text-neutral-600" />
-                        )}
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900">
+                        <Image className="w-16 h-16 text-neutral-600" />
+                      </div>
+                    )}
+                    
+                    {/* Status Badge Overlay */}
+                    <div className="absolute top-3 left-3">
+                      <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${statusInfo.bg} ${statusInfo.text} border ${statusInfo.border} backdrop-blur-sm`}>
+                        {statusInfo.label}
+                      </span>
+                    </div>
+                    
+                    {/* Price Badge */}
+                    {(ad.package_price > 0 || ad.price > 0) && (
+                      <div className="absolute top-3 right-3">
+                        <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-black/70 text-green-400 backdrop-blur-sm">
+                          KES {(ad.package_price || ad.price || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Video indicator */}
+                    {ad.ad_type === "video" && (
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2 py-1 bg-black/70 rounded text-xs">
+                        <Video className="w-3 h-3 text-blue-400" />
+                        <span className="text-white">{ad.duration_seconds || 0}s</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Ad Info */}
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-2">
+                  {/* Ad Content */}
+                  <div className="space-y-3">
+                    {/* Title & Type */}
+                    <div>
+                      <h3 className="font-semibold text-lg">{ad.title}</h3>
+                      <p className="text-neutral-500 text-sm">
+                        {ad.ad_type === "image" ? "Image Banner" : "Video Ad"} • 
+                        {ad.media_size_bytes ? ` ${(ad.media_size_bytes / 1024 / 1024).toFixed(1)}MB` : ""}
+                      </p>
+                    </div>
+
+                    {/* Date Tracking Info */}
+                    <div className="grid grid-cols-2 gap-3 p-3 bg-neutral-900/50 rounded-lg">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-lg">{ad.title}</h3>
-                          <span className={`px-2 py-0.5 rounded text-xs ${statusInfo.bg} ${statusInfo.text}`}>
-                            {statusInfo.label}
-                          </span>
-                        </div>
-                        <p className="text-neutral-400 text-sm mt-1">
-                          {ad.ad_type === "image" ? "Image Banner" : "Video Ad"} • 
-                          {ad.media_size_bytes ? ` ${(ad.media_size_bytes / 1024 / 1024).toFixed(2)}MB` : ""} •
-                          Submitted {new Date(ad.created_at).toLocaleDateString()}
+                        <p className="text-xs text-neutral-500 mb-1">Go-Live Date</p>
+                        <p className="text-sm text-green-400 font-medium">
+                          {ad.starts_at ? formatAdDate(ad.starts_at) : "Not started"}
                         </p>
                       </div>
-                      {(ad.package_price > 0 || ad.price > 0) && (
-                        <div className="text-right">
-                          <p className="text-green-400 font-bold text-xl">KES {(ad.package_price || ad.price || 0).toLocaleString()}</p>
-                          <p className="text-neutral-500 text-xs">{ad.package_name || "Package price"}</p>
-                        </div>
-                      )}
+                      <div>
+                        <p className="text-xs text-neutral-500 mb-1">End Date</p>
+                        <p className="text-sm text-red-400 font-medium">
+                          {ad.expires_at ? formatAdDate(ad.expires_at) : "Not set"}
+                        </p>
+                      </div>
                     </div>
 
                     {/* Package & Coverage Info */}
                     {ad.package_name && (
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded-full">
                           📦 {ad.package_name}
                         </span>
                         {ad.targeting?.is_national && (
-                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded">
+                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded-full">
                             🌍 National
                           </span>
                         )}
                         {ad.targeting?.counties?.length > 0 && (
-                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded">
+                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded-full">
                             🏛️ {ad.targeting.counties.join(", ")}
                           </span>
                         )}
                         {ad.targeting?.constituencies?.length > 0 && (
-                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded">
-                            📍 {ad.targeting.constituencies.length} constituencies
+                          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded-full">
+                            📍 {ad.targeting.constituencies.length} areas
                           </span>
                         )}
                       </div>
                     )}
 
-                    {/* Click URL */}
-                    {ad.click_url && (
-                      <p className="text-neutral-500 text-sm mb-2">
-                        Link: <a href={ad.click_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">{ad.click_url}</a>
-                      </p>
+                    {/* Stats for active/ended ads */}
+                    {(ad.status === "active" || liveStatus?.status === "ended") && (
+                      <div className="flex gap-4 py-2 border-t border-neutral-800">
+                        <div className="flex items-center gap-2">
+                          <Eye className="w-4 h-4 text-blue-400" />
+                          <span className="text-blue-400 font-medium">{ad.impressions || 0}</span>
+                          <span className="text-neutral-500 text-xs">views</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MousePointer className="w-4 h-4 text-green-400" />
+                          <span className="text-green-400 font-medium">{ad.clicks || 0}</span>
+                          <span className="text-neutral-500 text-xs">clicks</span>
+                        </div>
+                      </div>
                     )}
 
                     {/* Rejection reason */}
                     {ad.status === "rejected" && ad.rejection_reason && (
-                      <div className="bg-red-500/5 border border-red-500/20 rounded p-2 mb-2">
-                        <p className="text-red-400 text-sm">Rejected: {ad.rejection_reason}</p>
+                      <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+                        <p className="text-red-400 text-sm">❌ {ad.rejection_reason}</p>
                       </div>
                     )}
 
-                    {/* Stats for active ads */}
-                    {ad.status === "active" && (
-                      <div className="flex gap-6 mb-2">
-                        <div className="flex items-center gap-2">
-                          <Eye className="w-4 h-4 text-blue-400" />
-                          <span className="text-blue-400">{ad.impressions || 0}</span>
-                          <span className="text-neutral-500 text-sm">impressions</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <MousePointer className="w-4 h-4 text-green-400" />
-                          <span className="text-green-400">{ad.clicks || 0}</span>
-                          <span className="text-neutral-500 text-sm">clicks</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions based on status */}
-                    <div className="flex gap-2 mt-4 pt-4 border-t border-neutral-800">
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-2 border-t border-neutral-800">
                       {ad.status === "pending_approval" && (
-                        <>
-                          <Button
-                            onClick={() => setSelectedAd(selectedAd?.id === ad.id ? null : ad)}
-                            className="bg-blue-600 hover:bg-blue-700"
-                          >
-                            Review Ad
-                          </Button>
-                        </>
-                      )}
-                      
-                      {ad.status === "approved" && (
-                        <span className="text-blue-400 text-sm py-2">Waiting for advertiser payment (KES {(ad.package_price || 0).toLocaleString()})...</span>
-                      )}
-                      
-                      {ad.status === "paid" && (
-                        <Button onClick={() => handleActivate(ad.id)} className="bg-green-600 hover:bg-green-700">
-                          <Check className="w-4 h-4 mr-2" /> Activate (Go Live)
+                        <Button
+                          onClick={() => setSelectedAd(selectedAd?.id === ad.id ? null : ad)}
+                          className="bg-blue-600 hover:bg-blue-700 flex-1"
+                        >
+                          Review Ad
                         </Button>
                       )}
                       
-                      {ad.status === "active" && (
-                        <Button onClick={() => handleSuspend(ad.id)} variant="outline" className="border-red-600 text-red-400">
-                          Suspend
+                      {ad.status === "approved" && (
+                        <span className="text-blue-400 text-sm py-2">⏳ Awaiting payment...</span>
+                      )}
+                      
+                      {ad.status === "paid" && (
+                        <Button onClick={() => handleActivate(ad.id)} className="bg-green-600 hover:bg-green-700 flex-1">
+                          <Play className="w-4 h-4 mr-2" /> Go Live
+                        </Button>
+                      )}
+                      
+                      {ad.status === "active" && liveStatus?.status === "live" && (
+                        <Button onClick={() => handleSuspend(ad.id)} variant="outline" className="border-red-600 text-red-400 flex-1">
+                          <Pause className="w-4 h-4 mr-2" /> Suspend
                         </Button>
                       )}
                       
                       {ad.status === "suspended" && (
-                        <Button onClick={() => handleReactivate(ad.id)} className="bg-green-600 hover:bg-green-700">
-                          Reactivate
+                        <Button onClick={() => handleReactivate(ad.id)} className="bg-green-600 hover:bg-green-700 flex-1">
+                          <RefreshCw className="w-4 h-4 mr-2" /> Reactivate
                         </Button>
                       )}
                     </div>
 
-                    {/* Approval Form - No price setting (package-based) */}
+                    {/* Approval Form */}
                     {selectedAd?.id === ad.id && ad.status === "pending_approval" && (
-                      <div className="mt-4 p-4 bg-neutral-900 rounded-lg space-y-4">
-                        <h4 className="font-medium">Review Ad: {ad.title}</h4>
+                      <div className="mt-4 p-4 bg-neutral-900 rounded-lg space-y-4 border border-neutral-700">
+                        <h4 className="font-medium">Review: {ad.title}</h4>
                         
-                        {/* Package Info */}
                         <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
                           <div className="flex justify-between items-center">
                             <span className="text-neutral-400">Package:</span>
@@ -743,24 +765,6 @@ const AdApprovalPage = () => {
                             <span className="text-neutral-400">Price:</span>
                             <span className="font-bold text-green-400">KES {(ad.package_price || 0).toLocaleString()}</span>
                           </div>
-                          {ad.targeting?.constituencies?.length > 0 && (
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="text-neutral-400">Coverage:</span>
-                              <span className="text-blue-400">{ad.targeting.constituencies.join(", ")}</span>
-                            </div>
-                          )}
-                          {ad.targeting?.counties?.length > 0 && (
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="text-neutral-400">Coverage:</span>
-                              <span className="text-blue-400">{ad.targeting.counties.join(", ")}</span>
-                            </div>
-                          )}
-                          {ad.targeting?.is_national && (
-                            <div className="flex justify-between items-center mt-1">
-                              <span className="text-neutral-400">Coverage:</span>
-                              <span className="text-blue-400">National (All hotspots)</span>
-                            </div>
-                          )}
                         </div>
                         
                         <div>
@@ -776,7 +780,7 @@ const AdApprovalPage = () => {
 
                         <div className="flex gap-3">
                           <Button onClick={() => handleApprove(ad.id)} className="bg-green-600 hover:bg-green-700">
-                            <Check className="w-4 h-4 mr-2" /> Approve Ad
+                            <Check className="w-4 h-4 mr-2" /> Approve
                           </Button>
                           <Button variant="outline" onClick={() => setSelectedAd(null)}>Cancel</Button>
                         </div>
@@ -798,9 +802,9 @@ const AdApprovalPage = () => {
                     )}
                   </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
