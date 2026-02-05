@@ -3749,6 +3749,9 @@ async def create_invoice_for_owner(owner_id: str, hotspot_ids: List[str], is_tri
     invoice_dict["due_date"] = invoice_dict["due_date"].isoformat()
     
     await db.invoices.insert_one(invoice_dict)
+    
+    # Remove MongoDB _id before returning
+    invoice_dict.pop("_id", None)
     return invoice_dict
 
 async def check_and_update_subscription_status(owner_id: str):
