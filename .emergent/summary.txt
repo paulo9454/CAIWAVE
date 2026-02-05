@@ -1,81 +1,56 @@
-<analysis>**original_problem_statement**: The user wants to build a production-ready, ISP-grade Wi-Fi hotspot billing and advertising platform. The project was initially named CAITECH but has been rebranded to **CAIWAVE**.
+<analysis>**original_problem_statement**: The user wants to build a production-ready, ISP-grade Wi-Fi hotspot billing and advertising platform named **CAIWAVE**.
 
 **PRODUCT REQUIREMENTS (abridged, full version in )**:
-- **Platform Name**: CAIWAVE
-- **Branding**: The platform must use the new CAIWAVE logo (blue background, white Wi-Fi icon with a C in the center) and the footer Powered by CAIWAVE WiFi © 2026.
-- **User Roles**: Super Admin (CAIWAVE), Hotspot Owner (Partner), Advertiser, Wi-Fi End User.
-- **Core Integrations (to be built with real structures and placeholder credentials)**:
-    - **Payments**: M-Pesa Daraja API (STK Push).
-    - **Routers**: MikroTik integration via FreeRADIUS.
-    - **Notifications**: SMS (Africa's Talking) and WhatsApp.
-- **Key Features**:
-    - **System-Defined Data Packages**: A fixed list of non-editable data packages for partners.
-    - **Admin-Controlled Features**: Super Admin has exclusive control over:
-        - **Campaigns**: Grouping approved ads for controlled rollouts.
-        - **CAIWAVE TV**: A premium live-streaming service delivered through the hotspots.
-        - **Subsidized Uptime**: Creating time-limited, discounted internet offers for special events.
-    - **Simplified Advertising System**:
-        - Advertisers can only upload ad media (image/video) via a simple form. No campaigns, no URLs.
-        - All ads must be stored locally on the server ().
-        - Super Admin must approve ads, set a price, and enable payment before they can go live.
-        - Payment is via M-Pesa STK Push.
+-   **Platform Name**: CAIWAVE
+-   **Core Functionality**:
+    1.  **Package-Based Advertising System**: Advertisers select pre-defined packages (e.g., Small, Large, Wide Area), upload media, and the Super Admin approves it. Payment via M-Pesa is required before the ad goes live.
+    2.  **Hotspot Owner Subscription & Billing**: Hotspot owners are billed KES 500 per hotspot per month after a 14-day free trial. The system must handle invoicing, payment reminders (future), and access enforcement (suspending overdue hotspots).
+-   **Core Integrations**:
+    -   **Payments**: M-Pesa Daraja API (STK Push).
+    -   **Routers**: MikroTik integration via FreeRADIUS (scaffolding exists).
+    -   **Notifications**: SMS (Africa's Talking) and WhatsApp (placeholders).
+-   **User Roles**: Super Admin (CAIWAVE), Hotspot Owner (Partner), Advertiser, Wi-Fi End User.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack application built with React, FastAPI (Python), and MongoDB. The platform has been fully rebranded from CAITECH to CAIWAVE, including a new logo, all UI text, backend configurations, and database seed data.
+A full-stack application built with React, FastAPI, and MongoDB. The platform has been fully rebranded to CAIWAVE.
 
 Key implemented features include:
--   **Phase 1 (Branding)**: Complete rebranding to CAIWAVE is finished.
--   **Phase 2 (Admin Features)**: Backend APIs and frontend UI for Admin-only **Campaigns**, **CAIWAVE TV**, and **Subsidized Uptime** are implemented and functional within the Admin Dashboard.
--   **Phase 3 (Integrations)**: The backend structures and a comprehensive Integration Settings UI in the admin panel are complete for **M-Pesa Daraja** and **MikroTik RADIUS**. The system uses placeholder values, allowing the user to input live credentials.
--   **Simplified Advertising System**: The backend is fully implemented, supporting local file uploads, a strict approval/payment/activation workflow, and admin-set pricing. The frontend UI for advertisers to upload ads and for admins to manage them is also complete.
+-   **Package-Based Advertising**: A complete, tested system allowing advertisers to purchase pre-defined advertising packages. The flow (package selection -> media upload -> admin approval -> M-Pesa payment -> activation) is fully functional.
+-   **Subscription & Billing System**: A complete, tested system for managing Hotspot Owner subscriptions. It includes a 14-day free trial, automatic invoice generation, and UIs for both owners (to view status and pay) and admins (to manage all invoices).
+-   **M-Pesa Daraja STK Push Integration**: A comprehensive, role-based integration with the Safaricom sandbox environment is complete. It handles payments for Owner Subscriptions, Advertiser Ads, and Wi-Fi Client access. It includes role-specific initiation endpoints and a unified callback handler. The integration is fully tested and documented.
 
 **Last working item**:
-- **Last item agent was working**: Implementing and verifying the new Simplified Advertising System. The agent successfully implemented the entire backend workflow (upload, approval, pricing, payment) and built the UI for both the Advertiser and Admin dashboards. API-level tests passed. The agent was in the process of performing UI verification with screenshots when the session ended.
-- **Status**: IN PROGRESS
-- **Agent Testing Done**: Y (API workflow was tested end-to-end via curl).
-- **Which testing method agent to use?**: screenshot tool
+- **Last item agent was working**: Integrating M-Pesa Daraja STK Push payments for all user roles (Hotspot Owner, Advertiser, Wi-Fi Client) using the provided sandbox credentials.
+- **Status**: USER VERIFICATION PENDING
+- **Agent Testing Done**: Y (Extensively tested via curl and confirmed with the testing agent, which ran 20/20 successful tests).
+- **Which testing method agent to use?**: manual testing by curl. The user should be informed that to test the callback functionality, the  in  must be set to a public URL (e.g., from ngrok).
 - **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
-There are no known bugs. The previous agent's UI testing was interrupted by a session timeout when trying to access an authenticated page directly. This is not a bug, and the next agent should simply log in before navigating to authenticated routes for testing.
+There are no known bugs or pending issues.
 
 **In progress Task List**:
-- **Task 1: Complete UI Verification for Simplified Advertising System** (P0)
-    - **Where to resume**: The Advertiser and Admin UIs for the new ad system have been built but need final visual verification.
-        1.  Log in as the advertiser ( / ).
-        2.  Navigate to  and take a screenshot to verify the My Ads list view.
-        3.  Log in as the admin ( / ).
-        4.  Navigate to  and take a screenshot to verify the ad approval and management interface.
-    - **What will be achieved with this?** Full visual confirmation that the new advertising system is working end-to-end for both advertisers and the admin.
-    - **Status**: IN PROGRESS
-    - **Should Test frontend/backend/both after fix?** Frontend
-    - **Blocked on something**: No.
+There are no tasks currently in progress.
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks**:
-    - **P1: Partner Onboarding Wizard**: Create a guided setup flow for new Hotspot Owners to configure their MikroTik routers and payment details.
-    - **P2: Voucher Printing System**: Allow Hotspot Owners to generate and print pre-paid Wi-Fi access vouchers from their dashboard.
+    -   **P1: Partner Onboarding Wizard**: Create a guided setup flow for new Hotspot Owners to configure their MikroTik routers and payment details.
+    -   **P2: Voucher Printing System**: Allow Hotspot Owners to generate and print pre-paid Wi-Fi access vouchers from their dashboard.
 - **Future Tasks**:
-    - Equipment Marketplace UI (Shop Equipment).
-    - System Audit Logs for critical actions.
-    - Two-Factor Authentication (2FA) for enhanced security.
+    -   Equipment Marketplace UI (Shop Equipment).
+    -   System Audit Logs for critical actions.
+    -   Two-Factor Authentication (2FA) for enhanced security.
+    -   Automated SMS/WhatsApp payment reminders for expiring trials and overdue invoices.
 
 **Completed work in this session**
-- **Full Rebranding to CAIWAVE**: Migrated the entire platform from CAITECH to CAIWAVE, including logo generation, updating all code references, assets, DB seed data, and config files.
-- **Phase 2 Feature Implementation (Campaigns, TV, Subsidized Uptime)**:
-    - Implemented backend models, services, and API endpoints in .
-    - Built the corresponding frontend management UIs in the Admin Dashboard ().
-    - Added a CAIWAVE TV section to the public .
-- **Phase 3 Integrations Scaffolding (M-Pesa & MikroTik)**:
-    - Implemented backend structures and a comprehensive Integration Settings UI for user-managed configuration of M-Pesa and MikroTik RADIUS.
-- **Simplified Advertising System**:
-    - Implemented a full backend workflow for ad uploads, admin approval, pricing, and activation.
-    - Built the Advertiser Dashboard for ad creation/upload and the Admin Dashboard for ad management/approval.
-- **Testing**:
-    - Successfully ran the testing agent after completing Phase 2, confirming all new features were working.
-    - Manually tested the complete advertising backend workflow via  commands.
+- **Package-Based Advertising System**: Replaced the previous ad system. Implemented backend models, services, and API endpoints. Rewrote the advertiser dashboard and updated the admin dashboard.
+- **Subscription & Billing System**: Implemented backend models (, ), services, and API endpoints for managing hotspot owner subscriptions, trials, and payments. Created new UI components in the owner and admin dashboards.
+- **M-Pesa Daraja Integration**: Fully implemented and tested the STK Push payment flow for all roles using the provided sandbox credentials. This included creating role-specific endpoints, a unified callback handler, and robust error handling.
+- **Landing Page Updates**: Removed no monthly subscription messaging and updated feature descriptions to align with the new billing model.
+- **Bug Fixes**: Resolved several  serialization errors in the backend that occurred when returning documents from MongoDB after database operations.
+- **Documentation**: Created  explaining how to configure and test the M-Pesa integration.
 
 **Earlier issues found/mentioned but not fixed**
 None.
@@ -87,89 +62,84 @@ N/A
 
 
 **Key Technical Concepts**
-- **Frontend**: React, Tailwind CSS, Shadcn UI,  for icons.
-- **Backend**: Python, FastAPI.
-- **Database**: MongoDB (accessed via  async driver).
-- **Authentication**: JSON Web Tokens (JWT).
+- **Frontend**: React, Tailwind CSS, Shadcn UI
+- **Backend**: Python, FastAPI
+- **Database**: MongoDB
+- **Authentication**: JSON Web Tokens (JWT)
+- **Payments**: M-Pesa Daraja API (STK Push) via Safaricom Sandbox.
 
 **key DB schema**
-- **User**: 
-- **Ad**: 
-- **Campaign**: 
-- **Stream (CAIWAVE TV)**: 
-- **SubsidizedUptime**: 
-- **NASClient (MikroTik)**: 
+-   **AdPackage**: 
+-   **Ad**: (updated to include  and coverage details)
+-   **Invoice**: 
+-   **Subscription**: 
+-   **MpesaTransaction**: 
 
 **changes in tech stack**
-- The backend is confirmed to be **Python/FastAPI**, not Node.js/Express as mentioned in the initial handoff.
+None.
 
 **All files of reference**
-- **Heavily Modified:**
-    - : Grown into a monolithic file containing all backend logic, models, and routes.
-    - : Is now a monolithic file containing the components for the main dashboard and all sub-pages (Campaigns, TV, Ads, Integrations, etc.).
-    - : Rewritten to support the simplified ad upload workflow.
-    - : Updated multiple times with new branding and feature requirements.
-    - : Updated with new placeholder variables for integrations.
+-   **Heavily Modified:**
+    -   : Massively expanded with logic for package advertising, subscriptions, and a full M-Pesa service integration.
+    -   : Updated for ad approval and a new invoice management page.
+    -   : Completely rewritten for the new package-based advertising flow.
+    -   : Overhauled to include subscription status, billing information, and payment modals.
+    -   : Text updated to reflect the new monthly subscription model.
+    -   : Updated with M-Pesa sandbox credentials.
+-   **Newly Created:**
+    -   : Documentation for M-Pesa configuration.
 
 **Areas that need refactoring**:
-- ****: This file is over 3,500 lines long and urgently needs to be broken down into a proper Python package structure (e.g., , , ).
-- ****: This file is over 2,500 lines and contains multiple distinct page components. These should be split into separate files under a directory like .
+-   ****: This file has grown to over 4,000 lines. It urgently needs to be broken down into a proper Python package structure (e.g., , , ).
+-   ** & **: These monolithic dashboard files are becoming unmanageable and should be broken down into smaller, reusable components and pages.
 
 **key api endpoints**
-- **Auth**: 
-- **Ads**:
-    -  (for advertisers, multipart/form-data)
-    -  (for admin)
-    -  (for admin)
-    -  (for admin)
-    -  (for admin)
-- **Campaigns**: , 
-- **Streams (CAIWAVE TV)**: , 
-- **Integrations**:
-    - 
-    - 
-    - 
-    - 
+-   **M-Pesa (New/Updated)**:
+    -   
+    -   
+    -   
+    -    (Public, for Safaricom)
+    -    (Admin)
+-   **Subscriptions & Invoices (New)**:
+    -    (Owner)
+    -    (Admin)
+-   **Ad Packages (New)**:
+    -   
 
 **Critical Info for New Agent**
-- **Refactoring Needed**: Be aware that the main backend () and admin frontend () files are extremely large and monolithic. While functional, they are difficult to maintain. Proposing a refactoring task after the current work is complete would be beneficial.
-- **Session Timeouts**: UI testing requires logging in first. Authenticated pages are not directly accessible. Use the credentials provided. After making changes to auth logic or seed data, log out and log in again to ensure the new state is reflected.
-- **Source of Truth**: The latest requirements are in . This document reflects the pivot to CAIWAVE and the simplified advertising model.
+-   **M-Pesa Sandbox Testing**: The M-Pesa integration is fully functional but points to the Safaricom sandbox. To receive payment confirmation callbacks, you **must** expose the application's port 8001 to a public URL (using  or a similar tool) and set that URL in the  variable in . Detailed instructions are in .
+-   **Monolithic Codebase**: Be aware that the main backend file () and the primary frontend dashboard files are extremely large. Proposing a refactoring task before starting the next major feature is highly recommended to improve maintainability.
+-   **Database Seeding**: The seed data ( endpoint) is crucial for setting up test users (admin, advertiser, owner). For payment testing, you may need to manually clear the  and  collections in the database before reseeding to get a clean state.
 
 **documents and test reports created in this job**
-- 
-- 
+-    (Updated)
+-    (New)
+-   
+-   
+-   
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**: Provided a detailed PRD for a simplified advertising system.
-2.  **Agent**: Acknowledged and started implementation.
-3.  **User**: proceed with Phase 3... (M-Pesa/MikroTik).
-4.  **Agent**: Acknowledged and implemented scaffolding for both.
-5.  **User**: proceed with Phase 2... (Campaigns/CAIWAVE TV).
-6.  **Agent**: Acknowledged and implemented Phase 2 features.
-7.  **User**: proceed with Phase 1... (Branding rebrand to CAIWAVE).
-8.  **Agent**: Acknowledged and completed the full rebranding.
-9.  **User**: Provided a comprehensive new PRD for CAIWAVE.
-10. **Agent**: Acknowledged the major pivot and asked for confirmation to start the rebrand.
+The last set of user messages defined the full requirements for the M-Pesa Daraja STK Push integration, including sandbox credentials, roles, and expected behavior, which has now been implemented.
 
 **Project Health Check:**
-- **Broken**: None.
-- **Mocked**: None. Integrations use real structures with placeholder credentials, as requested.
+-   **Broken**: None.
+-   **Mocked**: The M-Pesa integration is **not** mocked; it is a live integration with the Safaricom sandbox. Other integrations like MikroTik and SMS/WhatsApp remain as placeholders.
 
 **3rd Party Integrations**
-- **M-Pesa Daraja (Payments)**: Structure implemented; requires user to provide credentials in the admin panel.
-- **MikroTik (RADIUS via FreeRADIUS)**: Structure implemented; requires user to provide credentials in the admin panel.
-- **Twilio / Africa's Talking (Notifications)**: Not yet started.
+-   **M-Pesa Daraja (Payments)**: Fully integrated with the sandbox environment. Ready for testing and production credential swap.
+-   **MikroTik (RADIUS)**: Placeholder structures and UI exist. Not functional.
+-   **SMS/WhatsApp Notifications**: Not yet started.
 
 **Testing status**
-- **Testing agent used after significant changes**: YES (after Phase 2 implementation, all tests passed).
-- **Troubleshoot agent used after agent stuck in loop**: NO
-- **Test files created**: None.
-- **Known regressions**: None.
+-   **Testing agent used after significant changes**: YES (Used for Package-Ads, Subscriptions, and M-Pesa features).
+-   **Troubleshoot agent used after agent stuck in loop**: NO
+-   **Test files created**: None.
+-   **Known regressions**: None.
 
 **Credentials to test flow:**
-- **Admin**:  / 
-- **Advertiser**:  / 
+-   **Admin**:  / 
+-   **Advertiser**:  / 
+-   **Hotspot Owner**:  / 
 
 **What agent forgot to execute**
-The agent did not forget but was interrupted. The UI verification (screenshots) for the newly implemented Simplified Advertising System is incomplete and must be the first action for the next agent.</analysis>
+Nothing. The agent successfully completed all requested tasks, including implementing three major features (Package-Ads, Subscriptions, M-Pesa), fixing bugs, and creating documentation.</analysis>
