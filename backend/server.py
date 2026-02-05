@@ -1,3 +1,14 @@
+"""
+CAIWAVE Wi-Fi Hotspot Billing Platform
+Main FastAPI Application
+
+Refactored to use modular architecture:
+- /models: Pydantic models and enums  
+- /services: Business logic (M-Pesa, SMS, WhatsApp, Notifications)
+- /utils: Helper functions (auth, vouchers, revenue, locations)
+- /config.py: Configuration management
+- /database.py: MongoDB connection
+"""
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
