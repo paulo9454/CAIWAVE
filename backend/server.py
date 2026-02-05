@@ -1433,7 +1433,7 @@ async def advertiser_pay_ad(
             "success": True,
             "checkout_request_id": checkout_id,
             "merchant_request_id": result.get("MerchantRequestID"),
-            "message": f"STK Push sent. Check your phone to complete payment.",
+            "message": "STK Push sent. Check your phone to complete payment.",
             "amount": amount,
             "ad_title": ad["title"]
         }
