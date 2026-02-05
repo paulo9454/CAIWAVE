@@ -1261,7 +1261,7 @@ async def initiate_stk_push(
     request: MPesaSTKPushRequest,
     background_tasks: BackgroundTasks
 ):
-    """Initiate M-Pesa STK Push payment"""
+    """Initiate M-Pesa STK Push payment (generic)"""
     result = await mpesa_service.stk_push(
         phone_number=request.phone_number,
         amount=request.amount,
@@ -1283,27 +1283,516 @@ async def initiate_stk_push(
             "details": result
         }
 
+# ==================== Role-Specific Payment Endpoints ====================
+
+class OwnerSubscriptionPayment(BaseModel):
+    """Payment request for hotspot owner subscription"""
+    phone_number: str
+    invoice_id: str
+
+class AdvertiserPayment(BaseModel):
+    """Payment request for advertiser ad"""
+    phone_number: str
+    ad_id: str
+
+class ClientWiFiPayment(BaseModel):
+    """Payment request for WiFi client"""
+    phone_number: str
+    package_id: str
+    hotspot_id: str
+
+@mpesa_router.post("/owner/pay-subscription")
+async def owner_pay_subscription(
+    payment: OwnerSubscriptionPayment,
+    user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER, UserRole.SUPER_ADMIN]))
+):
+    """
+    Hotspot Owner: Pay monthly subscription via M-Pesa STK Push
+    Post-payment: Activates/extends hotspot subscription
+    """
+    # Get invoice
+    invoice = await db.invoices.find_one({"id": payment.invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Verify ownership
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and invoice["owner_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if invoice["status"] == InvoiceStatus.PAID.value:
+        raise HTTPException(status_code=400, detail="Invoice already paid")
+    
+    amount = invoice["amount"]
+    account_ref = f"SUB-{invoice['invoice_number']}"
+    
+    # Store pending payment
+    payment_record = {
+        "id": str(uuid.uuid4()),
+        "type": "subscription",
+        "owner_id": invoice["owner_id"],
+        "invoice_id": payment.invoice_id,
+        "phone_number": payment.phone_number,
+        "amount": amount,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.mpesa_transactions.insert_one(payment_record)
+    
+    # Initiate STK Push
+    result = await mpesa_service.stk_push(
+        phone_number=payment.phone_number,
+        amount=amount,
+        account_ref=account_ref,
+        description="CAIWAVE Hotspot Monthly Subscription"
+    )
+    
+    if result.get("ResponseCode") == "0":
+        checkout_id = result.get("CheckoutRequestID")
+        # Update transaction with checkout ID
+        await db.mpesa_transactions.update_one(
+            {"id": payment_record["id"]},
+            {"$set": {"mpesa_checkout_id": checkout_id, "merchant_request_id": result.get("MerchantRequestID")}}
+        )
+        
+        return {
+            "success": True,
+            "checkout_request_id": checkout_id,
+            "merchant_request_id": result.get("MerchantRequestID"),
+            "message": f"STK Push sent to {payment.phone_number}. Check your phone to complete payment.",
+            "amount": amount,
+            "invoice_number": invoice["invoice_number"]
+        }
+    else:
+        await db.mpesa_transactions.update_one(
+            {"id": payment_record["id"]},
+            {"$set": {"status": "failed", "error": result.get("errorMessage")}}
+        )
+        return {
+            "success": False,
+            "error": result.get("errorMessage", "Failed to initiate payment"),
+            "details": result
+        }
+
+@mpesa_router.post("/advertiser/pay-ad")
+async def advertiser_pay_ad(
+    payment: AdvertiserPayment,
+    user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
+):
+    """
+    Advertiser: Pay for approved ad via M-Pesa STK Push
+    Post-payment: Ad becomes ready for activation (goes live)
+    """
+    # Get ad
+    ad = await db.ads.find_one({"id": payment.ad_id}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found")
+    
+    # Verify ownership
+    if user["role"] == UserRole.ADVERTISER.value and ad["advertiser_id"] != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if ad["status"] != AdStatus.APPROVED.value:
+        raise HTTPException(status_code=400, detail="Ad must be approved before payment")
+    
+    amount = ad.get("package_price", 0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid ad price")
+    
+    account_ref = f"AD-{ad['id'][:8].upper()}"
+    
+    # Store pending payment
+    payment_record = {
+        "id": str(uuid.uuid4()),
+        "type": "advertising",
+        "advertiser_id": ad["advertiser_id"],
+        "ad_id": payment.ad_id,
+        "phone_number": payment.phone_number,
+        "amount": amount,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.mpesa_transactions.insert_one(payment_record)
+    
+    # Initiate STK Push
+    result = await mpesa_service.stk_push(
+        phone_number=payment.phone_number,
+        amount=amount,
+        account_ref=account_ref,
+        description=f"CAIWAVE Ad Payment - {ad['title'][:20]}"
+    )
+    
+    if result.get("ResponseCode") == "0":
+        checkout_id = result.get("CheckoutRequestID")
+        await db.mpesa_transactions.update_one(
+            {"id": payment_record["id"]},
+            {"$set": {"mpesa_checkout_id": checkout_id, "merchant_request_id": result.get("MerchantRequestID")}}
+        )
+        
+        return {
+            "success": True,
+            "checkout_request_id": checkout_id,
+            "merchant_request_id": result.get("MerchantRequestID"),
+            "message": f"STK Push sent. Check your phone to complete payment.",
+            "amount": amount,
+            "ad_title": ad["title"]
+        }
+    else:
+        await db.mpesa_transactions.update_one(
+            {"id": payment_record["id"]},
+            {"$set": {"status": "failed", "error": result.get("errorMessage")}}
+        )
+        return {
+            "success": False,
+            "error": result.get("errorMessage", "Failed to initiate payment")
+        }
+
+@mpesa_router.post("/client/pay-wifi")
+async def client_pay_wifi(payment: ClientWiFiPayment):
+    """
+    WiFi Client: Pay for WiFi package via M-Pesa STK Push (no auth required)
+    Post-payment: Client gets WiFi access credentials
+    """
+    # Get package
+    package = await db.packages.find_one({"id": payment.package_id, "is_active": True}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="Package not found or inactive")
+    
+    # Get hotspot
+    hotspot = await db.hotspots.find_one({"id": payment.hotspot_id}, {"_id": 0})
+    if not hotspot:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    
+    if hotspot["status"] != HotspotStatus.ACTIVE.value:
+        raise HTTPException(status_code=400, detail="Hotspot is not active")
+    
+    amount = package["price"]
+    account_ref = f"WIFI-{payment.hotspot_id[:4].upper()}-{str(uuid.uuid4())[:4].upper()}"
+    
+    # Store pending payment
+    payment_record = {
+        "id": str(uuid.uuid4()),
+        "type": "wifi",
+        "hotspot_id": payment.hotspot_id,
+        "hotspot_owner_id": hotspot["owner_id"],
+        "package_id": payment.package_id,
+        "phone_number": payment.phone_number,
+        "amount": amount,
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.mpesa_transactions.insert_one(payment_record)
+    
+    # Initiate STK Push
+    result = await mpesa_service.stk_push(
+        phone_number=payment.phone_number,
+        amount=amount,
+        account_ref=account_ref,
+        description=f"CAIWAVE WiFi - {package['name']}"
+    )
+    
+    if result.get("ResponseCode") == "0":
+        checkout_id = result.get("CheckoutRequestID")
+        await db.mpesa_transactions.update_one(
+            {"id": payment_record["id"]},
+            {"$set": {"mpesa_checkout_id": checkout_id, "merchant_request_id": result.get("MerchantRequestID")}}
+        )
+        
+        return {
+            "success": True,
+            "checkout_request_id": checkout_id,
+            "merchant_request_id": result.get("MerchantRequestID"),
+            "message": f"STK Push sent. Enter your M-Pesa PIN to pay KES {amount}.",
+            "amount": amount,
+            "package_name": package["name"],
+            "duration": f"{package['duration_minutes']} minutes"
+        }
+    else:
+        await db.mpesa_transactions.update_one(
+            {"id": payment_record["id"]},
+            {"$set": {"status": "failed", "error": result.get("errorMessage")}}
+        )
+        return {
+            "success": False,
+            "error": result.get("errorMessage", "Failed to initiate payment")
+        }
+
+# ==================== M-Pesa Callback Handler ====================
+
 @mpesa_router.post("/callback")
-async def mpesa_callback(callback_data: MPesaSTKCallback):
-    """Handle M-Pesa STK Push callback"""
-    body = callback_data.Body
+async def mpesa_callback(request: Request):
+    """
+    Handle M-Pesa STK Push callback for all payment types
+    This endpoint receives payment confirmations from Safaricom
+    """
+    try:
+        callback_data = await request.json()
+        logging.info(f"M-Pesa Callback received: {json.dumps(callback_data, indent=2)}")
+    except Exception as e:
+        logging.error(f"Failed to parse callback data: {e}")
+        return {"ResultCode": 0, "ResultDesc": "Accepted"}
+    
+    body = callback_data.get("Body", {})
     stk_callback = body.get("stkCallback", {})
     
     checkout_request_id = stk_callback.get("CheckoutRequestID")
+    merchant_request_id = stk_callback.get("MerchantRequestID")
     result_code = stk_callback.get("ResultCode")
+    result_desc = stk_callback.get("ResultDesc")
     
-    # Find the payment
-    payment = await db.payments.find_one(
-        {"mpesa_checkout_request_id": checkout_request_id},
+    logging.info(f"Callback - CheckoutID: {checkout_request_id}, ResultCode: {result_code}, Desc: {result_desc}")
+    
+    # Find the transaction
+    transaction = await db.mpesa_transactions.find_one(
+        {"mpesa_checkout_id": checkout_request_id},
         {"_id": 0}
     )
     
-    if not payment:
-        logging.error(f"Payment not found for checkout: {checkout_request_id}")
+    if not transaction:
+        # Try to find in payments collection (legacy)
+        transaction = await db.payments.find_one(
+            {"mpesa_checkout_request_id": checkout_request_id},
+            {"_id": 0}
+        )
+        if transaction:
+            # Handle legacy payment
+            await handle_legacy_payment_callback(transaction, stk_callback, result_code)
+            return {"ResultCode": 0, "ResultDesc": "Accepted"}
+        
+        logging.warning(f"Transaction not found for checkout: {checkout_request_id}")
         return {"ResultCode": 0, "ResultDesc": "Accepted"}
     
+    # Extract receipt number from callback metadata
+    mpesa_receipt = None
+    transaction_amount = None
+    phone_number = None
+    
     if result_code == 0:
-        # Payment successful
+        callback_metadata = stk_callback.get("CallbackMetadata", {}).get("Item", [])
+        for item in callback_metadata:
+            name = item.get("Name")
+            value = item.get("Value")
+            if name == "MpesaReceiptNumber":
+                mpesa_receipt = value
+            elif name == "Amount":
+                transaction_amount = value
+            elif name == "PhoneNumber":
+                phone_number = value
+    
+    # Update transaction record
+    update_data = {
+        "result_code": result_code,
+        "result_desc": result_desc,
+        "mpesa_receipt": mpesa_receipt,
+        "transaction_amount": transaction_amount,
+        "callback_phone": phone_number,
+        "callback_received_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if result_code == 0:
+        update_data["status"] = "completed"
+        logging.info(f"Payment SUCCESS - Type: {transaction['type']}, Receipt: {mpesa_receipt}")
+        
+        # Handle post-payment actions based on payment type
+        payment_type = transaction.get("type")
+        
+        if payment_type == "subscription":
+            # Hotspot Owner Subscription Payment
+            await handle_subscription_payment_success(transaction, mpesa_receipt)
+            
+        elif payment_type == "advertising":
+            # Advertiser Ad Payment
+            await handle_ad_payment_success(transaction, mpesa_receipt)
+            
+        elif payment_type == "wifi":
+            # WiFi Client Payment
+            await handle_wifi_payment_success(transaction, mpesa_receipt)
+    else:
+        update_data["status"] = "failed"
+        logging.info(f"Payment FAILED - Type: {transaction['type']}, Reason: {result_desc}")
+    
+    await db.mpesa_transactions.update_one(
+        {"id": transaction["id"]},
+        {"$set": update_data}
+    )
+    
+    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+# ==================== Post-Payment Action Handlers ====================
+
+async def handle_subscription_payment_success(transaction: dict, mpesa_receipt: str):
+    """Handle successful subscription payment - activate hotspot subscription"""
+    invoice_id = transaction.get("invoice_id")
+    owner_id = transaction.get("owner_id")
+    
+    if not invoice_id:
+        logging.error(f"No invoice_id in subscription transaction: {transaction['id']}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    next_billing_end = now + timedelta(days=30)
+    
+    # Update invoice
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": InvoiceStatus.PAID.value,
+            "paid_at": now.isoformat(),
+            "payment_method": "mpesa",
+            "mpesa_receipt_number": mpesa_receipt,
+            "mpesa_transaction_date": now.isoformat()
+        }}
+    )
+    
+    # Activate owner's hotspots
+    await db.hotspots.update_many(
+        {"owner_id": owner_id},
+        {"$set": {
+            "status": HotspotStatus.ACTIVE.value,
+            "subscription_status": SubscriptionStatus.ACTIVE.value,
+            "subscription_end_date": next_billing_end.isoformat()
+        }}
+    )
+    
+    logging.info(f"Subscription activated for owner {owner_id}, Invoice: {invoice_id}")
+
+async def handle_ad_payment_success(transaction: dict, mpesa_receipt: str):
+    """Handle successful ad payment - mark ad as paid and ready for activation"""
+    ad_id = transaction.get("ad_id")
+    
+    if not ad_id:
+        logging.error(f"No ad_id in advertising transaction: {transaction['id']}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get ad to calculate expiry
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        logging.error(f"Ad not found: {ad_id}")
+        return
+    
+    # Get package for duration
+    package = await db.ad_packages.find_one({"id": ad.get("package_id")})
+    duration_days = package.get("duration_days", 7) if package else 7
+    
+    expires_at = now + timedelta(days=duration_days)
+    
+    # Update ad status to PAID (ready for admin to activate)
+    await db.ads.update_one(
+        {"id": ad_id},
+        {"$set": {
+            "status": AdStatus.PAID.value,
+            "paid_at": now.isoformat(),
+            "payment_id": transaction["id"],
+            "mpesa_receipt": mpesa_receipt,
+            "starts_at": now.isoformat(),
+            "expires_at": expires_at.isoformat()
+        }}
+    )
+    
+    logging.info(f"Ad payment successful for ad {ad_id}, ready for activation")
+
+async def handle_wifi_payment_success(transaction: dict, mpesa_receipt: str):
+    """Handle successful WiFi payment - create session and grant access"""
+    hotspot_id = transaction.get("hotspot_id")
+    package_id = transaction.get("package_id")
+    phone_number = transaction.get("phone_number")
+    amount = transaction.get("amount", 0)
+    
+    if not all([hotspot_id, package_id]):
+        logging.error(f"Missing data in wifi transaction: {transaction['id']}")
+        return
+    
+    # Get package and hotspot
+    package = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
+    
+    if not package or not hotspot:
+        logging.error(f"Package or hotspot not found for transaction: {transaction['id']}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    
+    # Calculate revenue sharing
+    revenue = await calculate_dynamic_revenue(hotspot_id, amount)
+    
+    # Create payment record
+    payment = Payment(
+        hotspot_id=hotspot_id,
+        package_id=package_id,
+        phone_number=phone_number,
+        amount=amount,
+        method=PaymentMethod.MPESA,
+        status=PaymentStatus.COMPLETED,
+        mpesa_checkout_request_id=transaction.get("mpesa_checkout_id"),
+        mpesa_receipt=mpesa_receipt,
+        owner_share=revenue.owner_share,
+        platform_share=revenue.platform_share
+    )
+    
+    payment_dict = payment.model_dump()
+    payment_dict["created_at"] = payment_dict["created_at"].isoformat()
+    payment_dict["completed_at"] = now.isoformat()
+    await db.payments.insert_one(payment_dict)
+    
+    # Generate WiFi credentials
+    username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
+    
+    # Create session
+    session = Session(
+        package_id=package_id,
+        hotspot_id=hotspot_id,
+        phone_number=phone_number,
+        username=username,
+        password=password,
+        payment_id=payment.id,
+        expires_at=now + timedelta(minutes=package["duration_minutes"])
+    )
+    
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session_dict["started_at"].isoformat()
+    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+    await db.sessions.insert_one(session_dict)
+    
+    # Update payment with session ID
+    await db.payments.update_one(
+        {"id": payment.id},
+        {"$set": {"session_id": session.id}}
+    )
+    
+    # Update hotspot stats
+    await db.hotspots.update_one(
+        {"id": hotspot_id},
+        {"$inc": {"total_revenue": amount, "total_sessions": 1}}
+    )
+    
+    # Store credentials in transaction for client to retrieve
+    await db.mpesa_transactions.update_one(
+        {"id": transaction["id"]},
+        {"$set": {
+            "wifi_username": username,
+            "wifi_password": password,
+            "session_id": session.id,
+            "expires_at": session_dict["expires_at"]
+        }}
+    )
+    
+    logging.info(f"WiFi access granted - Session: {session.id}, Username: {username}")
+    
+    # Send SMS with credentials (if configured)
+    try:
+        await notification_service.send_payment_confirmation(
+            phone_number,
+            amount,
+            f"{package['duration_minutes']} minutes",
+            {"sms_enabled": True, "whatsapp_enabled": False}
+        )
+    except Exception as e:
+        logging.warning(f"Failed to send notification: {e}")
+
+async def handle_legacy_payment_callback(payment: dict, stk_callback: dict, result_code: int):
+    """Handle callbacks for legacy payment records (backward compatibility)"""
+    if result_code == 0:
         callback_metadata = stk_callback.get("CallbackMetadata", {}).get("Item", [])
         mpesa_receipt = None
         for item in callback_metadata:
@@ -1311,83 +1800,148 @@ async def mpesa_callback(callback_data: MPesaSTKCallback):
                 mpesa_receipt = item.get("Value")
                 break
         
-        # Calculate revenue sharing
         revenue = await calculate_dynamic_revenue(payment["hotspot_id"], payment["amount"])
         
-        # Update payment
         await db.payments.update_one(
             {"id": payment["id"]},
-            {
-                "$set": {
-                    "status": PaymentStatus.COMPLETED.value,
-                    "mpesa_receipt": mpesa_receipt,
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "owner_share": revenue.owner_share,
-                    "platform_share": revenue.platform_share
-                }
-            }
+            {"$set": {
+                "status": PaymentStatus.COMPLETED.value,
+                "mpesa_receipt": mpesa_receipt,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "owner_share": revenue.owner_share,
+                "platform_share": revenue.platform_share
+            }}
         )
         
-        # Create session
+        # Create session and update stats (same as wifi payment)
         package = await db.packages.find_one({"id": payment["package_id"]}, {"_id": 0})
         hotspot = await db.hotspots.find_one({"id": payment["hotspot_id"]}, {"_id": 0})
         
-        username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
-        
-        session = Session(
-            package_id=payment["package_id"],
-            hotspot_id=payment["hotspot_id"],
-            phone_number=payment["phone_number"],
-            username=username,
-            password=password,
-            payment_id=payment["id"],
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
-        )
-        
-        session_dict = session.model_dump()
-        session_dict["started_at"] = session_dict["started_at"].isoformat()
-        session_dict["expires_at"] = session_dict["expires_at"].isoformat()
-        
-        await db.sessions.insert_one(session_dict)
-        
-        # Update payment with session ID
-        await db.payments.update_one(
-            {"id": payment["id"]},
-            {"$set": {"session_id": session.id}}
-        )
-        
-        # Update hotspot stats
-        await db.hotspots.update_one(
-            {"id": payment["hotspot_id"]},
-            {
-                "$inc": {
-                    "total_revenue": payment["amount"],
-                    "total_sessions": 1
-                }
-            }
-        )
-        
-        # Send notification
-        await notification_service.send_payment_confirmation(
-            payment["phone_number"],
-            payment["amount"],
-            f"{package['duration_minutes']} minutes",
-            {"sms_enabled": True, "whatsapp_enabled": False}
-        )
+        if package and hotspot:
+            username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
+            
+            session = Session(
+                package_id=payment["package_id"],
+                hotspot_id=payment["hotspot_id"],
+                phone_number=payment["phone_number"],
+                username=username,
+                password=password,
+                payment_id=payment["id"],
+                expires_at=datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
+            )
+            
+            session_dict = session.model_dump()
+            session_dict["started_at"] = session_dict["started_at"].isoformat()
+            session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+            await db.sessions.insert_one(session_dict)
+            
+            await db.payments.update_one(
+                {"id": payment["id"]},
+                {"$set": {"session_id": session.id}}
+            )
+            
+            await db.hotspots.update_one(
+                {"id": payment["hotspot_id"]},
+                {"$inc": {"total_revenue": payment["amount"], "total_sessions": 1}}
+            )
     else:
-        # Payment failed
         await db.payments.update_one(
             {"id": payment["id"]},
             {"$set": {"status": PaymentStatus.FAILED.value}}
         )
-    
-    return {"ResultCode": 0, "ResultDesc": "Accepted"}
+
+# ==================== Payment Status & Transaction Queries ====================
 
 @mpesa_router.get("/status/{checkout_request_id}")
 async def check_payment_status(checkout_request_id: str):
     """Check the status of an STK Push request"""
+    # First check our database
+    transaction = await db.mpesa_transactions.find_one(
+        {"mpesa_checkout_id": checkout_request_id},
+        {"_id": 0}
+    )
+    
+    if transaction:
+        return {
+            "found_in_db": True,
+            "transaction": transaction
+        }
+    
+    # Query Safaricom API
     result = await mpesa_service.query_stk_status(checkout_request_id)
-    return result
+    return {
+        "found_in_db": False,
+        "safaricom_response": result
+    }
+
+@mpesa_router.get("/transaction/{transaction_id}")
+async def get_transaction(transaction_id: str):
+    """Get transaction details by ID"""
+    transaction = await db.mpesa_transactions.find_one(
+        {"id": transaction_id},
+        {"_id": 0}
+    )
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    return transaction
+
+@mpesa_router.get("/wifi-credentials/{checkout_request_id}")
+async def get_wifi_credentials(checkout_request_id: str):
+    """Get WiFi credentials after successful payment"""
+    transaction = await db.mpesa_transactions.find_one(
+        {"mpesa_checkout_id": checkout_request_id, "type": "wifi"},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if transaction["status"] != "completed":
+        return {
+            "success": False,
+            "status": transaction["status"],
+            "message": "Payment not yet completed. Please enter your M-Pesa PIN."
+        }
+    
+    return {
+        "success": True,
+        "username": transaction.get("wifi_username"),
+        "password": transaction.get("wifi_password"),
+        "expires_at": transaction.get("expires_at"),
+        "message": "Connect to WiFi using these credentials"
+    }
+
+@mpesa_router.get("/transactions")
+async def list_transactions(
+    user: dict = Depends(require_admin),
+    payment_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50
+):
+    """Admin: List all M-Pesa transactions"""
+    query = {}
+    if payment_type:
+        query["type"] = payment_type
+    if status:
+        query["status"] = status
+    
+    transactions = await db.mpesa_transactions.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    
+    # Get stats
+    total = await db.mpesa_transactions.count_documents({})
+    completed = await db.mpesa_transactions.count_documents({"status": "completed"})
+    pending = await db.mpesa_transactions.count_documents({"status": "pending"})
+    failed = await db.mpesa_transactions.count_documents({"status": "failed"})
+    
+    return {
+        "transactions": transactions,
+        "stats": {
+            "total": total,
+            "completed": completed,
+            "pending": pending,
+            "failed": failed
+        }
+    }
 
 @mpesa_router.get("/config-status")
 async def get_mpesa_config_status(user: dict = Depends(require_admin)):
@@ -1395,7 +1949,9 @@ async def get_mpesa_config_status(user: dict = Depends(require_admin)):
     return {
         "configured": mpesa_service.is_configured(),
         "environment": MPESA_ENV,
-        "shortcode": MPESA_SHORTCODE if MPESA_SHORTCODE else None
+        "shortcode": MPESA_SHORTCODE if MPESA_SHORTCODE else None,
+        "callback_url": MPESA_CALLBACK_URL if MPESA_CALLBACK_URL else "Not configured",
+        "note": "For sandbox testing, use ngrok to expose callback URL"
     }
 
 # ==================== Payments Routes ====================
