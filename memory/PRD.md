@@ -1,7 +1,7 @@
-# CAIWAVE Wi-Fi Hotspot Platform - PRD v5.0
+# CAIWAVE Wi-Fi Hotspot Platform - PRD v6.0
 
 ## Project Overview
-Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, and **Subscription & Billing System** for hotspot owners.
+Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, Subscription & Billing System, and **M-Pesa Daraja STK Push payments**.
 
 ## Branding (LOCKED)
 - **Brand Name**: CAIWAVE
@@ -13,7 +13,7 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Frontend**: React + TailwindCSS + Shadcn UI
 - **Database**: MongoDB
 - **Auth**: JWT-based multi-role
-- **Payments**: M-Pesa Daraja API (structure ready, placeholder credentials)
+- **Payments**: M-Pesa Daraja API (LIVE sandbox integration)
 - **Router**: MikroTik via FreeRADIUS (structure ready)
 
 ---
@@ -30,79 +30,75 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Subsidized Uptime** (Admin Only)
 
 ### Phase 3: Integrations ✅ COMPLETE
-- **M-Pesa Daraja** - STK Push structure ready (MOCKED without credentials)
+- **M-Pesa Daraja** - LIVE STK Push integration
 - **MikroTik / RADIUS** - FreeRADIUS structure ready
 
 ### Phase 4: Package-Based Advertising ✅ COMPLETE
-**Advertising Packages (Admin-defined)**
-
-| Package | Coverage Scope | Duration | Price (KES) |
-|---------|----------------|----------|-------------|
+| Package | Coverage | Duration | Price (KES) |
+|---------|----------|----------|-------------|
 | Small Area | Constituency | 3 days | 300 |
 | Large Area | County | 7 days | 1,000 |
 | Wide Area | National | 14 days | 3,500 |
 
-### Phase 5: Subscription & Billing System ✅ COMPLETE (NEW)
+### Phase 5: Subscription & Billing ✅ COMPLETE
+- Monthly subscription: KES 500/hotspot/month
+- 14-day free trial
+- Invoice statuses: trial → unpaid → paid → overdue
+- Access enforcement (suspend overdue hotspots)
 
-**Pricing & Trial Rules:**
-- Monthly subscription: **KES 500 per hotspot per month**
-- **14-day free trial** for every new hotspot
-- Invoice created on Day 1 with status = TRIAL
+### Phase 6: M-Pesa STK Push Integration ✅ COMPLETE (NEW)
 
-**Invoice Statuses:**
-- `draft` - Initial state
-- `trial` - During 14-day trial period
-- `unpaid` - After trial ends
-- `paid` - Payment received
-- `overdue` - Day 18+ without payment
+**Three Payment Flows:**
 
-**Access Enforcement:**
-| Status | Access |
-|--------|--------|
-| Trial (Day 1-14) | Full access |
-| Grace Period (Day 15-17) | Limited dashboard access |
-| Suspended (Day 18+) | Hotspot disabled, ads paused |
+| Role | Endpoint | Post-Payment Action |
+|------|----------|---------------------|
+| Hotspot Owner | `/api/mpesa/owner/pay-subscription` | Activates subscription |
+| Advertiser | `/api/mpesa/advertiser/pay-ad` | Ad goes live |
+| WiFi Client | `/api/mpesa/client/pay-wifi` | Grants WiFi access |
 
-**Owner Dashboard Features:**
-- Subscription Status Banner (trial countdown, pay now button)
-- Billing page with invoice history
-- M-Pesa STK Push payment
+**Current Configuration (Sandbox):**
+```env
+MPESA_ENV=sandbox
+MPESA_SHORTCODE=174379
+MPESA_CONSUMER_KEY=7ONektuabEWBEDGNKM4UgvdBb9le0XdIG3Q0PMfHfqnq3MeM
+```
 
-**Admin Dashboard Features:**
-- Invoice Management page
-- Stats: Total, Trial, Unpaid, Overdue, Revenue
-- Mark Paid / Suspend Overdue actions
-- Invoice filtering by status
+**Production Credentials (Ready to switch):**
+```env
+MPESA_SHORTCODE=6386009
+MPESA_TILL_NUMBER=8573842
+```
+
+**Documentation**: `/app/memory/MPESA_INTEGRATION.md`
 
 ---
 
 ## Key API Endpoints
 
-### Subscription & Billing (NEW)
-- `GET /api/subscriptions/status` - Owner's subscription status
-- `POST /api/subscriptions/start-trial` - Start 14-day trial
-- `GET /api/invoices/` - List invoices (owner sees own, admin sees all)
-- `GET /api/invoices/current` - Owner's current invoice
-- `GET /api/invoices/{id}` - Get specific invoice
-- `POST /api/invoices/pay/{id}` - Pay via M-Pesa
-- `GET /api/invoices/admin/all` - Admin: all invoices with stats
-- `POST /api/invoices/admin/mark-paid/{id}` - Admin: mark paid
-- `POST /api/invoices/admin/suspend-overdue` - Admin: suspend all overdue
+### M-Pesa Payments (NEW)
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/mpesa/stk-push` | POST | No | Generic STK Push |
+| `/api/mpesa/owner/pay-subscription` | POST | Owner | Pay subscription |
+| `/api/mpesa/advertiser/pay-ad` | POST | Advertiser | Pay for ad |
+| `/api/mpesa/client/pay-wifi` | POST | No | Pay for WiFi |
+| `/api/mpesa/callback` | POST | No | Safaricom callback |
+| `/api/mpesa/status/{checkout_id}` | GET | No | Check status |
+| `/api/mpesa/wifi-credentials/{checkout_id}` | GET | No | Get WiFi credentials |
+| `/api/mpesa/transactions` | GET | Admin | List transactions |
+| `/api/mpesa/config-status` | GET | Admin | Config status |
+
+### Subscription & Billing
+- `GET /api/subscriptions/status` - Subscription status
+- `POST /api/subscriptions/start-trial` - Start trial
+- `GET /api/invoices/` - List invoices
+- `POST /api/invoices/pay/{id}` - Pay invoice
 
 ### Ad Packages
-- `GET /api/ad-packages/` - List packages (public)
-- `POST /api/ad-packages/` - Create (admin)
-- `PUT /api/ad-packages/{id}` - Update (admin)
-
-### Locations
-- `GET /api/locations/counties` - Kenya counties
-- `GET /api/locations/constituencies` - Kenya constituencies
-
-### Ads
-- `POST /api/ads/upload` - Upload with package selection
-- `POST /api/ads/{id}/approve` - Admin approve/reject
-- `POST /api/ads/{id}/pay` - M-Pesa payment
-- `POST /api/ads/{id}/activate` - Go live (admin)
+- `GET /api/ad-packages/` - List packages
+- `POST /api/ads/upload` - Upload ad
+- `POST /api/ads/{id}/approve` - Approve ad
+- `POST /api/ads/{id}/activate` - Activate ad
 
 ---
 
@@ -113,29 +109,29 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 
 ## Key Files
 - **Backend**: `/app/backend/server.py`
+- **Backend .env**: `/app/backend/.env`
+- **M-Pesa Docs**: `/app/memory/MPESA_INTEGRATION.md`
 - **Frontend Admin**: `/app/frontend/src/pages/admin/Dashboard.jsx`
 - **Frontend Owner**: `/app/frontend/src/pages/owner/Dashboard.jsx`
-- **Frontend Advertiser**: `/app/frontend/src/pages/advertiser/Dashboard.jsx`
-- **Landing Page**: `/app/frontend/src/pages/LandingPage.jsx`
 
 ---
 
-## MOCKED/PLACEHOLDER Features
-- **M-Pesa STK Push**: Simulated when credentials not configured
-- **FreeRADIUS**: Structure ready, requires live server configuration
+## Testing Notes
+- M-Pesa sandbox is LIVE and working
+- Callbacks require ngrok setup for full end-to-end testing
+- All API tests passing (100% success rate)
 
 ---
 
 ## Future Tasks (Backlog)
-- **P1**: Partner Onboarding Wizard - Guided setup for hotspot owners
-- **P1**: Automated Payment Reminders (SMS/Email before trial ends)
-- **P2**: Voucher Printing System - Generate pre-paid vouchers
-- **P2**: Invoice PDF Export
+- **P1**: ngrok setup guide for M-Pesa callback testing
+- **P1**: SMS notification integration for payment confirmations
+- **P1**: Partner Onboarding Wizard
+- **P2**: Voucher Printing System
+- **P2**: Invoice PDF/CSV Export
 - **P3**: Equipment Marketplace UI
 - **P3**: System Audit Logs
 - **P3**: Two-Factor Authentication (2FA)
-- **REFACTORING**: Split backend/server.py into modules
-- **REFACTORING**: Split admin Dashboard.jsx into separate pages
 
 ---
 
