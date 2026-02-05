@@ -134,12 +134,22 @@ const LandingPage = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="pt-32 pb-20 px-6 lg:px-12 relative">
-        <div className="hero-gradient absolute inset-0 pointer-events-none" />
-        <div className="max-w-7xl mx-auto">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
+      <section className="pt-32 pb-20 px-6 lg:px-12 relative min-h-[90vh] flex items-center">
+        {/* Background Image */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url('https://customer-assets.emergentagent.com/job_e82f0d66-fc04-490f-82b3-f7da293b0bea/artifacts/zluofvmc_caiwave.png')`
+          }}
+        />
+        {/* Dark overlay for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-r from-[#050505]/95 via-[#050505]/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-[#050505]/50" />
+        
+        <div className="max-w-7xl mx-auto relative z-10 w-full">
+          <div className="max-w-2xl">
             <div className="space-y-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/10 border border-blue-600/20 rounded-full text-blue-400 text-sm">
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/20 border border-blue-600/30 rounded-full text-blue-400 text-sm backdrop-blur-sm">
                 <Zap className="w-4 h-4" strokeWidth={1.5} />
                 14-Day Free Trial
               </div>
@@ -150,7 +160,7 @@ const LandingPage = () => {
                 <span className="gradient-text">Into Revenue</span>
               </h1>
               
-              <p className="text-lg text-neutral-400 max-w-xl leading-relaxed">
+              <p className="text-lg text-neutral-300 max-w-xl leading-relaxed">
                 The complete hotspot billing platform with integrated advertising engine. 
                 Earn from every connection while providing seamless internet access starting from KES 5.
               </p>
@@ -166,50 +176,24 @@ const LandingPage = () => {
                   <ChevronRight className="w-5 h-5 ml-2" strokeWidth={1.5} />
                 </Button>
                 <a href="#how-it-works">
-                  <Button size="lg" variant="outline" className="border-neutral-700 text-neutral-300 hover:bg-neutral-800">
+                  <Button size="lg" variant="outline" className="border-neutral-600 text-white hover:bg-white/10 backdrop-blur-sm">
                     See How It Works
                   </Button>
                 </a>
               </div>
               
               <div className="flex items-center gap-8 pt-4">
-                <div>
-                  <div className="text-2xl font-bold">500+</div>
-                  <div className="text-neutral-500 text-sm">Active Hotspots</div>
+                <div className="backdrop-blur-sm bg-black/20 px-4 py-2 rounded-lg">
+                  <div className="text-2xl font-bold text-white">500+</div>
+                  <div className="text-neutral-400 text-sm">Active Hotspots</div>
                 </div>
-                <div className="w-px h-12 bg-neutral-800" />
-                <div>
-                  <div className="text-2xl font-bold">50K+</div>
-                  <div className="text-neutral-500 text-sm">Daily Users</div>
+                <div className="backdrop-blur-sm bg-black/20 px-4 py-2 rounded-lg">
+                  <div className="text-2xl font-bold text-white">50K+</div>
+                  <div className="text-neutral-400 text-sm">Daily Users</div>
                 </div>
-                <div className="w-px h-12 bg-neutral-800" />
-                <div>
-                  <div className="text-2xl font-bold">KES 5</div>
-                  <div className="text-neutral-500 text-sm">Starting Price</div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="relative hidden lg:block">
-              <div className="relative rounded-xl overflow-hidden border border-neutral-800">
-                <img
-                  src="https://images.unsplash.com/photo-1680691257251-5fead813b73e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHwxfHxzZXJ2ZXIlMjByYWNrJTIwYmx1ZXxlbnwwfHx8fDE3Njk5ODQ5NDh8MA&ixlib=rb-4.1.0&q=85&w=800"
-                  alt="Network Infrastructure"
-                  className="w-full h-auto object-cover opacity-80"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050505] via-transparent to-transparent" />
-              </div>
-              
-              {/* Floating Stats Card */}
-              <div className="absolute -bottom-6 -left-6 bg-[#0a0a0a] border border-neutral-800 rounded-xl p-4 shadow-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-green-500" strokeWidth={1.5} />
-                  </div>
-                  <div>
-                    <div className="text-sm text-neutral-400">Today&apos;s Revenue</div>
-                    <div className="font-semibold">KES 24,500</div>
-                  </div>
+                <div className="backdrop-blur-sm bg-black/20 px-4 py-2 rounded-lg">
+                  <div className="text-2xl font-bold text-white">KES 5</div>
+                  <div className="text-neutral-400 text-sm">Starting Price</div>
                 </div>
               </div>
             </div>
