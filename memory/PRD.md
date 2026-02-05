@@ -1,7 +1,9 @@
-# CAIWAVE Wi-Fi Hotspot Platform - PRD v6.0
+# CAIWAVE Wi-Fi Hotspot Platform - PRD v7.0
 
 ## Project Overview
 Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, Subscription & Billing System, and **M-Pesa Daraja STK Push payments**.
+
+**Domain**: www.caiwave.com
 
 ## Branding (LOCKED)
 - **Brand Name**: CAIWAVE
