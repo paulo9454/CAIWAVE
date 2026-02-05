@@ -168,9 +168,8 @@ MPESA_TILL_NUMBER=8573842
 ---
 
 ## Future Tasks (Backlog)
-- **P1**: ngrok setup guide for M-Pesa callback testing
+- **P1**: Partner Onboarding Wizard - guided setup for new hotspot owners
 - **P1**: SMS notification integration for payment confirmations
-- **P1**: Partner Onboarding Wizard
 - **P2**: Voucher Printing System
 - **P2**: Invoice PDF/CSV Export
 - **P2**: Complete backend route modularization (move remaining routes from server.py to /routes)
