@@ -1,4 +1,4 @@
-# CAIWAVE Wi-Fi Hotspot Platform - PRD v7.0
+# CAIWAVE Wi-Fi Hotspot Platform - PRD v7.1
 
 ## Project Overview
 Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, Subscription & Billing System, and **M-Pesa Daraja STK Push payments**.
@@ -47,6 +47,14 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - 14-day free trial
 - Invoice statuses: trial → unpaid → paid → overdue
 - Access enforcement (suspend overdue hotspots)
+
+### Phase 6: Enhanced Ad Management ✅ COMPLETE (Feb 2026)
+- **Campaign/Ads Display**: Image-first card layout with dominant thumbnails
+- **Quick Stats Dashboard**: Live Now, Pending, Today, Ended counts
+- **Ad Time & Date Tracking**: Go-Live and End dates for every ad
+- **Status Flow**: Pending → Approved → Paid → Live → Ended
+- **Date Filtering**: Today's ads vs Yesterday's ads tabs
+- **CAIWAVE TV Contact**: WhatsApp button (https://wa.me/254738570630)
 
 ### Phase 6: M-Pesa STK Push Integration ✅ COMPLETE (NEW)
 
