@@ -1563,7 +1563,7 @@ RADIUS_ACCT_PORT=1813`}
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
                 <h4 className="font-medium text-blue-400 mb-2">Supported Providers</h4>
                 <ul className="text-sm text-neutral-400 space-y-1">
-                  <li>• <strong>Africa's Talking</strong> - <a href="https://africastalking.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">africastalking.com</a></li>
+                  <li>• <strong>Africa&apos;s Talking</strong> - <a href="https://africastalking.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">africastalking.com</a></li>
                   <li>• <strong>Centipid</strong> - Alternative Kenya SMS provider</li>
                 </ul>
               </div>
