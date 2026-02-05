@@ -1969,10 +1969,15 @@ async def get_mpesa_config_status(user: dict = Depends(require_admin)):
     """Check if M-Pesa is configured"""
     return {
         "configured": mpesa_service.is_configured(),
+        "has_callback": mpesa_service.has_callback_url(),
         "environment": MPESA_ENV,
         "shortcode": MPESA_SHORTCODE if MPESA_SHORTCODE else None,
-        "callback_url": MPESA_CALLBACK_URL if MPESA_CALLBACK_URL else "Not configured",
-        "note": "For sandbox testing, use ngrok to expose callback URL"
+        "callback_url": MPESA_CALLBACK_URL if MPESA_CALLBACK_URL else "Not configured - Using default for testing",
+        "consumer_key_set": bool(MPESA_CONSUMER_KEY),
+        "consumer_secret_set": bool(MPESA_CONSUMER_SECRET),
+        "passkey_set": bool(MPESA_PASSKEY),
+        "sandbox_test_note": "For sandbox testing: 1) Use ngrok to expose callback URL, 2) Update MPESA_CALLBACK_URL in backend/.env, 3) Restart backend",
+        "production_note": "For production: Update MPESA_ENV to 'production' and add live credentials"
     }
 
 # ==================== Payments Routes ====================
