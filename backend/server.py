@@ -4052,7 +4052,7 @@ async def start_trial(user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER]
         raise HTTPException(status_code=400, detail="Trial already started")
     
     # Get owner's hotspots
-    hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"id": 1}).to_list(100)
+    hotspots = await db.hotspots.find({"owner_id": user["id"]}, {"_id": 0, "id": 1}).to_list(100)
     if not hotspots:
         raise HTTPException(status_code=400, detail="No hotspots found. Create a hotspot first.")
     
