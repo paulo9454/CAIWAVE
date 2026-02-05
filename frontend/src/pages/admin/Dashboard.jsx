@@ -1551,7 +1551,7 @@ RADIUS_ACCT_PORT=1813`}
                 </div>
                 <div>
                   <h3 className="font-semibold text-lg">SMS Gateway</h3>
-                  <p className="text-neutral-400 text-sm">Africa's Talking or Centipid</p>
+                  <p className="text-neutral-400 text-sm">Africa&apos;s Talking or Centipid</p>
                 </div>
               </div>
               <span className="px-4 py-2 rounded-lg text-sm font-medium bg-yellow-500/10 text-yellow-400 border border-yellow-500/30">
