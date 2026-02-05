@@ -796,14 +796,17 @@ class MPesaService:
             self.base_url = "https://api.safaricom.co.ke"
     
     def is_configured(self) -> bool:
-        """Check if M-Pesa is properly configured"""
+        """Check if M-Pesa has API credentials configured"""
         return all([
             self.consumer_key,
             self.consumer_secret,
             self.shortcode,
-            self.passkey,
-            self.callback_url
+            self.passkey
         ])
+    
+    def has_callback_url(self) -> bool:
+        """Check if callback URL is configured"""
+        return bool(self.callback_url)
     
     async def get_access_token(self) -> str:
         """Get OAuth access token from Daraja API"""
@@ -821,6 +824,7 @@ class MPesaService:
             )
             
             if response.status_code != 200:
+                logging.error(f"M-Pesa token error: {response.text}")
                 raise HTTPException(status_code=502, detail="Failed to get M-Pesa access token")
             
             return response.json()["access_token"]
@@ -835,7 +839,10 @@ class MPesaService:
     async def stk_push(self, phone_number: str, amount: float, account_ref: str, description: str) -> dict:
         """Initiate STK Push request"""
         if not self.is_configured():
-            raise HTTPException(status_code=503, detail="M-Pesa not configured. Please add credentials in settings.")
+            return {"errorMessage": "M-Pesa not configured. Please add credentials in settings."}
+        
+        # Use a default callback URL for testing if not set
+        callback = self.callback_url if self.callback_url else "https://example.com/callback"
         
         # Format phone number (254XXXXXXXXX)
         phone = phone_number.replace("+", "").replace(" ", "")
@@ -844,7 +851,12 @@ class MPesaService:
         elif not phone.startswith("254"):
             phone = "254" + phone
         
-        access_token = await self.get_access_token()
+        try:
+            access_token = await self.get_access_token()
+        except Exception as e:
+            logging.error(f"Failed to get M-Pesa token: {e}")
+            return {"errorMessage": str(e)}
+        
         password, timestamp = self.generate_password()
         
         payload = {
