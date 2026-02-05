@@ -456,7 +456,10 @@ const AdApprovalPage = () => {
       case "pending": return pendingAds;
       case "approved": return approvedAds;
       case "paid": return paidAds;
-      case "active": return activeAds;
+      case "live": return liveAds;
+      case "ended": return endedAds;
+      case "today": return todayAds;
+      case "yesterday": return yesterdayAds;
       case "other": return otherAds;
       default: return ads;
     }
@@ -479,19 +482,68 @@ const AdApprovalPage = () => {
         )}
       </div>
 
+      {/* Quick Stats Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="dashboard-card bg-green-500/5 border-green-500/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-green-500/10">
+              <Play className="w-5 h-5 text-green-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-green-400">{liveAds.length}</p>
+              <p className="text-xs text-neutral-400">Live Now</p>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-card bg-yellow-500/5 border-yellow-500/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-yellow-500/10">
+              <Clock className="w-5 h-5 text-yellow-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-yellow-400">{pendingAds.length}</p>
+              <p className="text-xs text-neutral-400">Pending</p>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-card bg-blue-500/5 border-blue-500/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/10">
+              <Calendar className="w-5 h-5 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-blue-400">{todayAds.length}</p>
+              <p className="text-xs text-neutral-400">Today</p>
+            </div>
+          </div>
+        </div>
+        <div className="dashboard-card bg-gray-500/5 border-gray-500/20">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-gray-500/10">
+              <Ban className="w-5 h-5 text-gray-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-400">{endedAds.length}</p>
+              <p className="text-xs text-neutral-400">Ended</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Status Flow Info */}
       <div className="dashboard-card bg-blue-500/5 border-blue-500/20">
         <h3 className="font-medium text-blue-400 mb-2">Package-Based Ad Flow</h3>
         <div className="flex items-center gap-2 text-sm text-neutral-400 flex-wrap">
-          <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded">Pending Review</span>
+          <span className="px-2 py-1 bg-yellow-500/10 text-yellow-400 rounded">⏳ Pending</span>
           <span>→</span>
-          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">Approved</span>
+          <span className="px-2 py-1 bg-blue-500/10 text-blue-400 rounded">✓ Approved</span>
           <span>→</span>
-          <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">Paid</span>
+          <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded">💳 Paid</span>
           <span>→</span>
-          <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">Active (LIVE)</span>
+          <span className="px-2 py-1 bg-green-500/10 text-green-400 rounded">🟢 Live</span>
+          <span>→</span>
+          <span className="px-2 py-1 bg-gray-500/10 text-gray-400 rounded">⏹️ Ended</span>
         </div>
-        <p className="text-xs text-neutral-500 mt-2">Price is set by the advertiser's package selection. Admin validates coverage and content quality.</p>
       </div>
 
       {/* Tabs */}
@@ -499,18 +551,22 @@ const AdApprovalPage = () => {
         {[
           { id: "pending", label: "Pending", count: pendingAds.length, color: "yellow" },
           { id: "approved", label: "Approved", count: approvedAds.length, color: "blue" },
-          { id: "paid", label: "Paid", count: paidAds.length, color: "green" },
-          { id: "active", label: "Active", count: activeAds.length, color: "green" },
-          { id: "other", label: "Rejected/Suspended", count: otherAds.length, color: "red" },
+          { id: "paid", label: "Paid", count: paidAds.length, color: "purple" },
+          { id: "live", label: "🟢 Live", count: liveAds.length, color: "green" },
+          { id: "ended", label: "Ended", count: endedAds.length, color: "gray" },
+          { id: "today", label: "📅 Today", count: todayAds.length, color: "cyan" },
+          { id: "yesterday", label: "Yesterday", count: yesterdayAds.length, color: "slate" },
+          { id: "other", label: "Rejected", count: otherAds.length, color: "red" },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
               activeTab === tab.id
-                ? `bg-${tab.color}-500/10 text-${tab.color}-400`
-                : "text-neutral-400 hover:text-white"
+                ? `bg-${tab.color}-500/20 text-${tab.color}-400 border border-${tab.color}-500/30`
+                : "text-neutral-400 hover:text-white hover:bg-neutral-800"
             }`}
+            data-testid={`tab-${tab.id}`}
           >
             {tab.label} ({tab.count})
           </button>
