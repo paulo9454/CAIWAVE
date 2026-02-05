@@ -868,22 +868,30 @@ class MPesaService:
             "PartyA": phone,
             "PartyB": self.shortcode,
             "PhoneNumber": phone,
-            "CallBackURL": self.callback_url,
-            "AccountReference": account_ref,
-            "TransactionDesc": description
+            "CallBackURL": callback,
+            "AccountReference": account_ref[:12],  # Max 12 chars
+            "TransactionDesc": description[:13]  # Max 13 chars
         }
         
+        logging.info(f"STK Push request - Phone: {phone}, Amount: {amount}, Ref: {account_ref}")
+        
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}/mpesa/stkpush/v1/processrequest",
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json"
-                }
-            )
-            
-            return response.json()
+            try:
+                response = await client.post(
+                    f"{self.base_url}/mpesa/stkpush/v1/processrequest",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {access_token}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                
+                result = response.json()
+                logging.info(f"STK Push response: {result}")
+                return result
+            except Exception as e:
+                logging.error(f"STK Push error: {e}")
+                return {"errorMessage": str(e)}
     
     async def query_stk_status(self, checkout_request_id: str) -> dict:
         """Query the status of an STK Push request"""
