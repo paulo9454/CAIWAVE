@@ -44,6 +44,7 @@ import {
   CheckCircle,
   Ban,
   RefreshCw,
+  StopCircle,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
