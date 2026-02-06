@@ -165,9 +165,23 @@
                 if (badge) badge.remove();
                 document.querySelectorAll('a[href*="emergent"]').forEach(el => el.remove());
                 document.querySelectorAll('[id*="emergent"]').forEach(el => el.remove());
+                // Target fixed position badges at bottom right
+                document.querySelectorAll('a').forEach(el => {
+                    const style = el.getAttribute('style') || '';
+                    if (style.includes('fixed') && style.includes('bottom') && style.includes('right')) {
+                        el.remove();
+                    }
+                    if (style.includes('z-index: 9999') || style.includes('178px')) {
+                        el.remove();
+                    }
+                });
             }
             removeEmergentBadge();
-            setInterval(removeEmergentBadge, 100);
+            setTimeout(removeEmergentBadge, 100);
+            setTimeout(removeEmergentBadge, 500);
+            setTimeout(removeEmergentBadge, 1000);
+            setTimeout(removeEmergentBadge, 2000);
+            setInterval(removeEmergentBadge, 500);
             document.addEventListener('DOMContentLoaded', removeEmergentBadge);
             window.addEventListener('load', removeEmergentBadge);
         </script>
