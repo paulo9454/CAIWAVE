@@ -4228,22 +4228,10 @@ async def seed_data():
     # Clear old ads (as per user request)
     await db.ads.delete_many({})
     
-    # Create super admin if not exists
-    admin_email = "admin@caiwave.com"
-    existing_admin = await db.users.find_one({"email": admin_email})
-    if not existing_admin:
-        admin = User(
-            email=admin_email,
-            name="CAIWAVE Admin",
-            role=UserRole.SUPER_ADMIN,
-            phone="+254700000000"
-        )
-        admin_dict = admin.model_dump()
-        admin_dict["password_hash"] = hash_password("admin123")
-        admin_dict["created_at"] = admin_dict["created_at"].isoformat()
-        await db.users.insert_one(admin_dict)
+    # Note: Admin user should be created manually via registration or direct DB insert
+    # DO NOT seed admin credentials in production
     
-    # Create advertiser user
+    # Create demo advertiser user (for testing only - remove in production)
     advertiser_email = "advertiser@caiwave.com"
     existing_advertiser = await db.users.find_one({"email": advertiser_email})
     if not existing_advertiser:
