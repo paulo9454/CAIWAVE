@@ -675,11 +675,28 @@ const AdApprovalPage = () => {
                   <div className="space-y-3">
                     {/* Title & Type */}
                     <div>
-                      <h3 className="font-semibold text-lg">{ad.title}</h3>
+                      {ad.click_url ? (
+                        <a 
+                          href={ad.click_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-semibold text-lg hover:text-blue-400 transition-colors flex items-center gap-2"
+                        >
+                          {ad.title}
+                          <Globe className="w-4 h-4 text-blue-400" />
+                        </a>
+                      ) : (
+                        <h3 className="font-semibold text-lg">{ad.title}</h3>
+                      )}
                       <p className="text-neutral-500 text-sm">
-                        {ad.ad_type === "image" ? "Image Banner" : "Video Ad"} • 
+                        {ad.ad_type === "image" ? "📷 Image Banner" : "🎬 Video Ad"} • 
                         {ad.media_size_bytes ? ` ${(ad.media_size_bytes / 1024 / 1024).toFixed(1)}MB` : ""}
                       </p>
+                      {ad.click_url && (
+                        <p className="text-blue-400 text-xs mt-1 truncate" title={ad.click_url}>
+                          🔗 {ad.click_url}
+                        </p>
+                      )}
                     </div>
 
                     {/* Date Tracking Info */}
