@@ -4,6 +4,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide external badges */
+a[href*="emergent"],
+[id*="emergent"],
+a[href*="utm_source=emergent"],
+a[style*="position: fixed"][style*="bottom"][style*="right"][style*="z-index: 9999"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    position: absolute !important;
+    left: -99999px !important;
+}
+
 @layer base {
     :root, html {
         --background: 0 0% 2%;
