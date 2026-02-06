@@ -11,28 +11,31 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
         <style>
-            /* Hide Emergent badge for custom domain deployment */
+            /* Aggressive hide for Emergent badge */
             #emergent-badge, 
             [id*="emergent"], 
             a[href*="emergent.sh"],
             a[href*="emergent-badge"],
-            div[style*="position: fixed"][style*="bottom: 16px"][style*="right: 16px"],
-            a[style*="position: fixed"][style*="bottom"][style*="right"] {
+            a[href*="utm_source=emergent"],
+            div[style*="position: fixed"][style*="bottom"][style*="right"],
+            a[style*="position: fixed"][style*="bottom"][style*="right"],
+            a[style*="z-index: 9999"],
+            a[style*="178px"],
+            a[style*="border-radius: 50px"][style*="position: fixed"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
                 width: 0 !important;
                 height: 0 !important;
+                max-width: 0 !important;
+                max-height: 0 !important;
                 overflow: hidden !important;
                 position: absolute !important;
-                left: -9999px !important;
-            }
-            /* Target the specific badge styling */
-            body > a[style*="z-index: 9999"],
-            body > a[style*="border-radius: 50px"],
-            a[style*="178px"] {
-                display: none !important;
+                left: -99999px !important;
+                top: -99999px !important;
+                transform: scale(0) !important;
+                clip: rect(0,0,0,0) !important;
             }
         </style>
         <!--
