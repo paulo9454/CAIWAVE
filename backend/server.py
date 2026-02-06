@@ -4351,11 +4351,57 @@ async def seed_data():
         "details": {
             "wifi_packages": len(default_packages),
             "ad_packages": len(ad_packages),
-            "admin": admin_email,
             "advertiser": advertiser_email,
-            "hotspot_owner": owner_email
+            "hotspot_owner": owner_email,
+            "note": "Admin must be created separately via /api/admin/setup endpoint"
         }
     }
+
+
+# Secure admin setup endpoint (use with caution)
+class AdminSetupRequest(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    phone: Optional[str] = None
+    setup_key: str  # Secret key to authorize admin creation
+
+
+@api_router.post("/admin/setup")
+async def setup_admin(request: AdminSetupRequest):
+    """Create admin account with secure setup key"""
+    # Setup key should be set in environment variable
+    expected_key = os.environ.get('ADMIN_SETUP_KEY', '')
+    
+    if not expected_key:
+        raise HTTPException(status_code=503, detail="Admin setup not configured. Set ADMIN_SETUP_KEY in environment.")
+    
+    if request.setup_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid setup key")
+    
+    # Check if admin already exists
+    existing = await db.users.find_one({"email": request.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+    
+    # Check if any admin exists
+    existing_admin = await db.users.find_one({"role": UserRole.SUPER_ADMIN.value})
+    if existing_admin:
+        raise HTTPException(status_code=400, detail="Admin already exists. Contact system administrator.")
+    
+    # Create admin
+    admin = User(
+        email=request.email,
+        name=request.name,
+        role=UserRole.SUPER_ADMIN,
+        phone=request.phone
+    )
+    admin_dict = admin.model_dump()
+    admin_dict["password_hash"] = hash_password(request.password)
+    admin_dict["created_at"] = admin_dict["created_at"].isoformat()
+    await db.users.insert_one(admin_dict)
+    
+    return {"message": "Admin account created successfully", "email": request.email}
 
 # Root endpoint
 @api_router.get("/")
