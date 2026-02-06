@@ -162,31 +162,75 @@
             });
         </script>
         <script>
-            // Remove Emergent badge for custom domain
-            function removeEmergentBadge() {
-                const badge = document.getElementById('emergent-badge');
-                if (badge) badge.remove();
-                document.querySelectorAll('a[href*="emergent"]').forEach(el => el.remove());
-                document.querySelectorAll('[id*="emergent"]').forEach(el => el.remove());
-                // Target fixed position badges at bottom right
-                document.querySelectorAll('a').forEach(el => {
-                    const style = el.getAttribute('style') || '';
-                    if (style.includes('fixed') && style.includes('bottom') && style.includes('right')) {
-                        el.remove();
-                    }
-                    if (style.includes('z-index: 9999') || style.includes('178px')) {
-                        el.remove();
-                    }
+            // Aggressive removal of any external badges
+            (function() {
+                function removeBadge() {
+                    // Remove by ID
+                    const badge = document.getElementById('emergent-badge');
+                    if (badge) badge.parentNode.removeChild(badge);
+                    
+                    // Remove any link containing emergent
+                    document.querySelectorAll('a').forEach(function(el) {
+                        var href = el.getAttribute('href') || '';
+                        var text = el.textContent || '';
+                        var style = el.getAttribute('style') || '';
+                        
+                        if (href.indexOf('emergent') !== -1 || 
+                            text.indexOf('Emergent') !== -1 ||
+                            text.indexOf('Made with') !== -1 ||
+                            (style.indexOf('fixed') !== -1 && style.indexOf('bottom') !== -1 && style.indexOf('right') !== -1) ||
+                            (style.indexOf('z-index') !== -1 && style.indexOf('9999') !== -1)) {
+                            el.parentNode.removeChild(el);
+                        }
+                    });
+                    
+                    // Remove any element with emergent in id
+                    document.querySelectorAll('[id*="emergent"]').forEach(function(el) {
+                        el.parentNode.removeChild(el);
+                    });
+                }
+                
+                // Run immediately
+                removeBadge();
+                
+                // Run on DOM ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', removeBadge);
+                }
+                
+                // Run on load
+                window.addEventListener('load', removeBadge);
+                
+                // Run periodically
+                setInterval(removeBadge, 100);
+                
+                // Use MutationObserver to catch dynamically injected elements
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeType === 1) {
+                                var href = node.getAttribute ? node.getAttribute('href') || '' : '';
+                                var text = node.textContent || '';
+                                var style = node.getAttribute ? node.getAttribute('style') || '' : '';
+                                var id = node.id || '';
+                                
+                                if (id.indexOf('emergent') !== -1 ||
+                                    href.indexOf('emergent') !== -1 || 
+                                    text.indexOf('Made with Emergent') !== -1 ||
+                                    (style.indexOf('fixed') !== -1 && style.indexOf('9999') !== -1)) {
+                                    node.parentNode.removeChild(node);
+                                }
+                            }
+                        });
+                    });
+                    removeBadge();
                 });
-            }
-            removeEmergentBadge();
-            setTimeout(removeEmergentBadge, 100);
-            setTimeout(removeEmergentBadge, 500);
-            setTimeout(removeEmergentBadge, 1000);
-            setTimeout(removeEmergentBadge, 2000);
-            setInterval(removeEmergentBadge, 500);
-            document.addEventListener('DOMContentLoaded', removeEmergentBadge);
-            window.addEventListener('load', removeEmergentBadge);
+                
+                observer.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true
+                });
+            })();
         </script>
     </body>
 </html>
