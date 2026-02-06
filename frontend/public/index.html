@@ -149,5 +149,18 @@
                 },
             });
         </script>
+        <script>
+            // Remove Emergent badge for custom domain
+            function removeEmergentBadge() {
+                const badge = document.getElementById('emergent-badge');
+                if (badge) badge.remove();
+                document.querySelectorAll('a[href*="emergent"]').forEach(el => el.remove());
+                document.querySelectorAll('[id*="emergent"]').forEach(el => el.remove());
+            }
+            removeEmergentBadge();
+            setInterval(removeEmergentBadge, 100);
+            document.addEventListener('DOMContentLoaded', removeEmergentBadge);
+            window.addEventListener('load', removeEmergentBadge);
+        </script>
     </body>
 </html>
