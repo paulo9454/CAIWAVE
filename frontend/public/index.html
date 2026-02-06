@@ -16,7 +16,8 @@
             [id*="emergent"], 
             a[href*="emergent.sh"],
             a[href*="emergent-badge"],
-            div[style*="position: fixed"][style*="bottom: 16px"][style*="right: 16px"] {
+            div[style*="position: fixed"][style*="bottom: 16px"][style*="right: 16px"],
+            a[style*="position: fixed"][style*="bottom"][style*="right"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -24,6 +25,14 @@
                 width: 0 !important;
                 height: 0 !important;
                 overflow: hidden !important;
+                position: absolute !important;
+                left: -9999px !important;
+            }
+            /* Target the specific badge styling */
+            body > a[style*="z-index: 9999"],
+            body > a[style*="border-radius: 50px"],
+            a[style*="178px"] {
+                display: none !important;
             }
         </style>
         <!--
