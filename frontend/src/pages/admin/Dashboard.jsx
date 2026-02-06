@@ -589,66 +589,47 @@ const AdApprovalPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {getFilteredAds().map((ad) => {
               const statusInfo = getStatusBadge(ad);
               const mediaUrl = ad.media_url ? `${API_URL.replace('/api', '')}${ad.media_url}` : null;
               const liveStatus = getAdLiveStatus(ad);
               
               return (
-                <div key={ad.id} className="dashboard-card overflow-hidden hover:border-blue-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/10" data-testid={`ad-card-${ad.id}`}>
-                  {/* Image Thumbnail - Large & Clickable */}
-                  <div className="relative w-full h-56 bg-neutral-900 -mx-6 -mt-6 mb-4 group">
+                <div key={ad.id} className="dashboard-card overflow-hidden hover:border-neutral-600 transition-colors">
+                  {/* Image Thumbnail */}
+                  <div className="relative w-full h-48 bg-neutral-900 -mx-6 -mt-6 mb-4">
                     {mediaUrl && ad.ad_type === "image" ? (
-                      <a 
-                        href={ad.click_url || "#"} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block w-full h-full cursor-pointer"
-                        title={ad.click_url ? `Visit: ${ad.click_url}` : ad.title}
-                      >
-                        <img 
-                          src={mediaUrl} 
-                          alt={ad.title} 
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                        {ad.click_url && (
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 text-black px-4 py-2 rounded-full text-sm font-medium">
-                              🔗 Click to Visit
-                            </span>
-                          </div>
-                        )}
-                      </a>
+                      <img 
+                        src={mediaUrl} 
+                        alt={ad.title} 
+                        className="w-full h-full object-cover"
+                      />
                     ) : mediaUrl && ad.ad_type === "video" ? (
                       <video 
                         src={mediaUrl} 
                         className="w-full h-full object-cover" 
                         muted
-                        loop
-                        playsInline
                         onMouseEnter={(e) => e.target.play()}
                         onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
                       />
                     ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900">
-                        <Image className="w-20 h-20 text-neutral-600 mb-2" />
-                        <span className="text-neutral-500 text-sm">No image uploaded</span>
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900">
+                        <Image className="w-16 h-16 text-neutral-600" />
                       </div>
                     )}
                     
                     {/* Status Badge Overlay */}
-                    <div className="absolute top-3 left-3 z-10">
-                      <span className={`px-3 py-1.5 rounded-full text-sm font-semibold ${statusInfo.bg} ${statusInfo.text} border ${statusInfo.border} backdrop-blur-md shadow-lg`}>
+                    <div className="absolute top-3 left-3">
+                      <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${statusInfo.bg} ${statusInfo.text} border ${statusInfo.border} backdrop-blur-sm`}>
                         {statusInfo.label}
                       </span>
                     </div>
                     
                     {/* Price Badge */}
                     {(ad.package_price > 0 || ad.price > 0) && (
-                      <div className="absolute top-3 right-3 z-10">
-                        <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-black/80 text-green-400 backdrop-blur-md shadow-lg border border-green-500/30">
+                      <div className="absolute top-3 right-3">
+                        <span className="px-3 py-1.5 rounded-full text-sm font-bold bg-black/70 text-green-400 backdrop-blur-sm">
                           KES {(ad.package_price || ad.price || 0).toLocaleString()}
                         </span>
                       </div>
@@ -656,17 +637,9 @@ const AdApprovalPage = () => {
                     
                     {/* Video indicator */}
                     {ad.ad_type === "video" && (
-                      <div className="absolute bottom-3 left-3 flex items-center gap-1 px-3 py-1.5 bg-black/80 rounded-full text-xs backdrop-blur-md z-10">
-                        <Video className="w-4 h-4 text-blue-400" />
-                        <span className="text-white font-medium">{ad.duration_seconds || 0}s</span>
-                      </div>
-                    )}
-                    
-                    {/* Link indicator */}
-                    {ad.click_url && (
-                      <div className="absolute bottom-3 right-3 flex items-center gap-1 px-3 py-1.5 bg-blue-600/90 rounded-full text-xs backdrop-blur-md z-10">
-                        <Globe className="w-4 h-4 text-white" />
-                        <span className="text-white font-medium">Has Link</span>
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1 px-2 py-1 bg-black/70 rounded text-xs">
+                        <Video className="w-3 h-3 text-blue-400" />
+                        <span className="text-white">{ad.duration_seconds || 0}s</span>
                       </div>
                     )}
                   </div>
