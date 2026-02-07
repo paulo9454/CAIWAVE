@@ -2409,13 +2409,13 @@ async def upload_ad(
     if ad_type == AdType.IMAGE and file_size > MAX_IMAGE_SIZE:
         raise HTTPException(
             status_code=400, 
-            detail="Image too large. Maximum size: 5MB"
+            detail="Image too large. Maximum size: 2MB. Recommended: 600x600 pixels"
         )
     
     if ad_type == AdType.VIDEO and file_size > MAX_VIDEO_SIZE:
         raise HTTPException(
             status_code=400, 
-            detail="Video too large. Maximum size: 20MB"
+            detail="Video too large. Maximum size: 10MB"
         )
     
     # Generate unique filename
