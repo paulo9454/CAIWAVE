@@ -3,160 +3,94 @@
 ## Recommended Image Sizes
 
 ### 1. Standard Ad Banner (Primary)
-- **Dimensions**: 1200 x 628 pixels
-- **Aspect Ratio**: 1.91:1
-- **File Size**: Max 5MB
+- **Dimensions**: 600 x 600 pixels
+- **Aspect Ratio**: 1:1 (Square)
+- **File Size**: Max 2MB (recommended under 500KB for fast loading)
 - **Format**: JPG, PNG, or WebP
 - **Use Case**: Main ad display in admin dashboard and hotspot captive portal
 
-### 2. Square Ad (Alternative)
-- **Dimensions**: 1080 x 1080 pixels
-- **Aspect Ratio**: 1:1
-- **File Size**: Max 5MB
-- **Format**: JPG, PNG, or WebP
-- **Use Case**: Social media style ads, mobile-first displays
-
-### 3. Vertical Ad (Mobile Optimized)
-- **Dimensions**: 1080 x 1920 pixels
-- **Aspect Ratio**: 9:16
-- **File Size**: Max 5MB
-- **Format**: JPG, PNG, or WebP
-- **Use Case**: Full-screen mobile captive portal ads
+### 2. Alternative Sizes
+| Size | Dimensions | Best For |
+|------|-----------|----------|
+| Small | 400 x 400 px | Thumbnail previews |
+| Medium | 600 x 600 px | **Standard (Recommended)** |
+| Large | 800 x 800 px | High-resolution displays |
 
 ---
 
 ## Video Ad Specifications
 
 ### Standard Video Ad
-- **Resolution**: 1280 x 720 (720p) minimum
-- **Aspect Ratio**: 16:9
+- **Resolution**: 720 x 720 pixels (square format)
+- **Aspect Ratio**: 1:1
 - **Duration**: 5-15 seconds (max 15 seconds)
-- **File Size**: Max 20MB
+- **File Size**: Max 10MB
 - **Format**: MP4 or WebM
 - **Frame Rate**: 30fps
 - **Audio**: Optional (muted by default)
 
 ---
 
+## Quick Reference
+
+```
+┌─────────────────────────────────┐
+│                                 │
+│        600 x 600 px             │
+│                                 │
+│     RECOMMENDED SIZE            │
+│                                 │
+│   Max file size: 2MB            │
+│   Format: JPG, PNG, WebP        │
+│                                 │
+└─────────────────────────────────┘
+```
+
+---
+
 ## Image Quality Guidelines
 
 ### Do's ✅
-- Use high-resolution images (min 72 DPI for web, 150 DPI recommended)
-- Use vibrant, eye-catching colors
-- Ensure text is readable (min 24pt font size)
+- Use 600x600 pixel images for consistency
+- Compress images to under 500KB for fast loading
+- Use vibrant, high-contrast colors
+- Ensure text is readable (min 32pt font)
 - Include clear call-to-action
-- Compress images without losing quality
-- Test on both desktop and mobile
+- Test on mobile devices
 
 ### Don'ts ❌
-- Avoid blurry or pixelated images
-- Don't use too much text (max 20% of image)
-- Avoid dark images without contrast
-- Don't use copyrighted images without permission
-- Avoid excessive file sizes (slow loading)
+- Avoid images smaller than 400x400 px
+- Don't exceed 2MB file size
+- Avoid dark images on dark backgrounds
+- Don't use excessive text (max 20%)
 
 ---
 
-## Display Contexts & Sizes
+## Color Recommendations for Dark Theme
 
-| Location | Display Size | Recommended Upload |
-|----------|-------------|-------------------|
-| Admin Dashboard Card | 400 x 224 px | 1200 x 628 px |
-| Captive Portal Banner | Full width | 1200 x 628 px |
-| Mobile Captive Portal | Full screen | 1080 x 1920 px |
-| End User Preview | 320 x 180 px | 1200 x 628 px |
-
----
-
-## Color Recommendations
-
-For maximum visibility on CAIWAVE's dark theme:
-
-### Best Colors for Ads
+### Best Colors (High Visibility)
 - **Bright Blue**: #0066FF
 - **Vibrant Green**: #00FF66
 - **Electric Yellow**: #FFCC00
 - **Hot Pink**: #FF0066
 - **Bright Orange**: #FF6600
-- **Pure White**: #FFFFFF (for text)
+- **Pure White**: #FFFFFF
 
-### Colors to Avoid
-- Dark grays (#333333 and below)
-- Pure black (#000000)
-- Very dark blues (#000033)
-- Muted/pastel colors
-
----
-
-## Technical Requirements
-
-### Supported Formats
-| Format | Support | Best For |
-|--------|---------|----------|
-| JPEG/JPG | ✅ Full | Photos, complex images |
-| PNG | ✅ Full | Graphics, logos, transparency |
-| WebP | ✅ Full | Best compression, modern browsers |
-| GIF | ⚠️ Limited | Simple animations only |
-| SVG | ❌ Not supported | - |
-
-### Compression Tools
-- **TinyPNG**: https://tinypng.com
-- **Squoosh**: https://squoosh.app
-- **ImageOptim**: https://imageoptim.com
+### Avoid (Low Visibility)
+- Dark grays, blacks, muted colors
 
 ---
 
 ## Upload Checklist
 
-Before uploading an ad image:
-
-- [ ] Image is at least 1200 x 628 pixels
-- [ ] File size is under 5MB
+- [ ] Image is exactly 600 x 600 pixels
+- [ ] File size is under 2MB
 - [ ] Format is JPG, PNG, or WebP
 - [ ] Colors are vibrant and visible
-- [ ] Text is readable at small sizes
-- [ ] Call-to-action is clear
+- [ ] Text is readable
 - [ ] No copyrighted content
-- [ ] Tested on mobile preview
 
 ---
 
-## Example Ad Layouts
-
-### Layout 1: Product Focus
-```
-┌─────────────────────────────────┐
-│  LOGO        [Product Image]   │
-│  ────────────────────────────  │
-│  HEADLINE TEXT                 │
-│  Subtext description           │
-│  [CALL TO ACTION BUTTON]       │
-└─────────────────────────────────┘
-```
-
-### Layout 2: Promotional
-```
-┌─────────────────────────────────┐
-│      🔥 SPECIAL OFFER 🔥       │
-│  ────────────────────────────  │
-│      50% OFF                   │
-│      Limited Time Only         │
-│  [SHOP NOW]                    │
-└─────────────────────────────────┘
-```
-
-### Layout 3: Brand Awareness
-```
-┌─────────────────────────────────┐
-│  [Full Background Image]       │
-│                                │
-│       BRAND NAME               │
-│       tagline here             │
-│                                │
-└─────────────────────────────────┘
-```
-
----
-
-*Document Version: 1.0*
+*Document Version: 2.0*
 *Last Updated: February 2026*
