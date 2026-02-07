@@ -43,7 +43,7 @@ UPLOAD_DIR_IMAGES.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR_VIDEOS.mkdir(parents=True, exist_ok=True)
 
 # Media validation constants
-MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+MAX_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB (600x600 recommended)
 MAX_VIDEO_SIZE = 20 * 1024 * 1024  # 20MB
 MAX_VIDEO_DURATION = 15  # seconds
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
