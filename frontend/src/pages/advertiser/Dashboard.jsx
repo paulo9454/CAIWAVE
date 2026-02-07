@@ -283,13 +283,13 @@ const AdUploadForm = ({ onSuccess }) => {
 
     // Validate file
     const isImage = formData.ad_type === "image";
-    const maxSize = isImage ? 5 * 1024 * 1024 : 20 * 1024 * 1024;
+    const maxSize = isImage ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
     const allowedTypes = isImage 
       ? ["image/jpeg", "image/png", "image/webp"]
       : ["video/mp4", "video/webm"];
 
     if (file.size > maxSize) {
-      toast.error(`File too large. Maximum: ${isImage ? "5MB" : "20MB"}`);
+      toast.error(`File too large. Maximum: ${isImage ? "2MB" : "10MB"}`);
       return;
     }
 
