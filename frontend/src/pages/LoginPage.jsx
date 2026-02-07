@@ -143,14 +143,6 @@ const LoginPage = () => {
                 </Link>
               </p>
             </div>
-
-            {/* Demo Credentials */}
-            <div className="mt-8 p-4 bg-neutral-900/50 border border-neutral-800 rounded-lg">
-              <p className="text-sm text-neutral-400 mb-2">Demo credentials:</p>
-              <div className="font-mono text-sm space-y-1">
-                <p><span className="text-neutral-500">Admin:</span> admin@caiwave.com / admin123</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
