@@ -596,9 +596,9 @@ const AdApprovalPage = () => {
               const liveStatus = getAdLiveStatus(ad);
               
               return (
-                <div key={ad.id} className="dashboard-card overflow-hidden hover:border-neutral-600 transition-colors">
+                <div key={ad.id} className="dashboard-card overflow-hidden hover:border-neutral-600 transition-colors p-0">
                   {/* Image Thumbnail */}
-                  <div className="relative w-full h-48 bg-neutral-900 -mx-6 -mt-6 mb-4">
+                  <div className="relative w-full h-48 bg-neutral-900">
                     {mediaUrl && ad.ad_type === "image" ? (
                       <img 
                         src={mediaUrl} 
