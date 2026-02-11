@@ -3253,14 +3253,12 @@ class MikroTikConfirmRequest(BaseModel):
 
 def generate_secure_secret() -> str:
     """Generate a secure RADIUS secret"""
-    import secrets
-    return secrets.token_hex(16)
+    return secrets_module.token_hex(16)
 
 def generate_nas_id(name: str) -> str:
     """Generate a unique NAS identifier"""
-    import secrets
     clean_name = "".join(c for c in name if c.isalnum())[:10].upper()
-    return f"CAIWAVE-{clean_name}-{secrets.token_hex(4).upper()}"
+    return f"CAIWAVE-{clean_name}-{secrets_module.token_hex(4).upper()}"
 
 def generate_mikrotik_script(router_name: str, nas_id: str, radius_secret: str, radius_host: str, callback_url: str) -> str:
     """Generate a complete MikroTik auto-configuration script"""
