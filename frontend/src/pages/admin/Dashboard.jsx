@@ -604,6 +604,11 @@ const AdApprovalPage = () => {
                         src={mediaUrl} 
                         alt={ad.title} 
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Image load error:', mediaUrl);
+                          e.target.style.display = 'none';
+                          e.target.parentElement.classList.add('flex', 'items-center', 'justify-center');
+                        }}
                       />
                     ) : mediaUrl && ad.ad_type === "video" ? (
                       <video 
