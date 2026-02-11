@@ -3327,10 +3327,10 @@ async def upload_ad(
     # Determine upload directory
     if ad_type == AdType.IMAGE:
         upload_path = UPLOAD_DIR_IMAGES / unique_filename
-        media_url = f"/uploads/ads/images/{unique_filename}"
+        media_url = f"/api/uploads/ads/images/{unique_filename}"
     else:
         upload_path = UPLOAD_DIR_VIDEOS / unique_filename
-        media_url = f"/uploads/ads/videos/{unique_filename}"
+        media_url = f"/api/uploads/ads/videos/{unique_filename}"
     
     # Save file
     with open(upload_path, "wb") as f:
