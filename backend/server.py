@@ -1990,7 +1990,7 @@ async def list_transactions(
 
 @mpesa_router.get("/config-status")
 async def get_mpesa_config_status(user: dict = Depends(require_admin)):
-    """Check if M-Pesa is configured"""
+    """Check if M-Pesa is configured (Legacy - use Paystack)"""
     return {
         "configured": mpesa_service.is_configured(),
         "has_callback": mpesa_service.has_callback_url(),
@@ -2000,8 +2000,897 @@ async def get_mpesa_config_status(user: dict = Depends(require_admin)):
         "consumer_key_set": bool(MPESA_CONSUMER_KEY),
         "consumer_secret_set": bool(MPESA_CONSUMER_SECRET),
         "passkey_set": bool(MPESA_PASSKEY),
-        "sandbox_test_note": "For sandbox testing: 1) Use ngrok to expose callback URL, 2) Update MPESA_CALLBACK_URL in backend/.env, 3) Restart backend",
-        "production_note": "For production: Update MPESA_ENV to 'production' and add live credentials"
+        "deprecation_notice": "M-Pesa Daraja is deprecated. Use Paystack /api/payments/* endpoints instead."
+    }
+
+# ==================== Paystack Payment Routes ====================
+
+from services.paystack import (
+    PaystackService, PaystackConfig, 
+    TransactionInitRequest, MobileMoneyChargeRequest, SubaccountCreateRequest,
+    KENYA_BANKS
+)
+
+# Initialize Paystack service
+paystack_config = PaystackConfig(
+    secret_key=PAYSTACK_SECRET_KEY,
+    public_key=PAYSTACK_PUBLIC_KEY,
+    environment=PAYSTACK_ENVIRONMENT
+)
+paystack_service = PaystackService(paystack_config)
+
+
+class PaystackPaymentRequest(BaseModel):
+    """Request to initiate payment via Paystack"""
+    email: str
+    phone_number: str  # Format: 0724825975 or 254724825975
+    amount: float
+    payment_type: str  # 'subscription', 'advertising', 'wifi'
+    reference_id: Optional[str] = None  # invoice_id, ad_id, or hotspot_id
+    description: Optional[str] = None
+    subaccount_code: Optional[str] = None
+
+
+class PaystackSubaccountRequest(BaseModel):
+    """Request to create subaccount for hotspot owner"""
+    business_name: str
+    bank_code: str
+    account_number: str
+    percentage_charge: float = 80.0  # Owner gets 80%, platform gets 20%
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@paystack_router.get("/config")
+async def get_paystack_config():
+    """Get Paystack public configuration for frontend"""
+    return {
+        "public_key": PAYSTACK_PUBLIC_KEY,
+        "environment": PAYSTACK_ENVIRONMENT,
+        "configured": paystack_service.is_configured(),
+        "currency": "KES",
+        "channels": ["mobile_money", "card", "bank"]
+    }
+
+
+@paystack_router.get("/banks")
+async def list_kenya_banks():
+    """List available Kenya banks for subaccount creation"""
+    # Try to fetch from Paystack API first
+    result = await paystack_service.list_banks("kenya")
+    if result.get("status") and result.get("data"):
+        return result["data"]
+    # Fallback to static list
+    return KENYA_BANKS
+
+
+@paystack_router.post("/initialize")
+async def initialize_paystack_payment(request: PaystackPaymentRequest):
+    """
+    Initialize a Paystack payment transaction.
+    Returns authorization URL for customer to complete payment.
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    # Format phone number
+    phone = request.phone_number.replace(" ", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    elif not phone.startswith("254"):
+        phone = "254" + phone
+    
+    # Generate reference
+    reference = f"CAIWAVE-{request.payment_type.upper()}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:8]}"
+    
+    # Create transaction record
+    transaction_id = str(uuid.uuid4())
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": request.email,
+        "phone_number": phone,
+        "amount": request.amount,
+        "currency": "KES",
+        "payment_type": request.payment_type,
+        "reference_id": request.reference_id,
+        "description": request.description or f"CAIWAVE {request.payment_type} payment",
+        "subaccount_code": request.subaccount_code,
+        "status": "pending",
+        "provider": "paystack",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.paystack_transactions.insert_one(transaction_record)
+    
+    # Initialize with Paystack
+    init_request = TransactionInitRequest(
+        email=request.email,
+        amount=request.amount,
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": request.payment_type,
+            "reference_id": request.reference_id,
+            "phone_number": phone
+        },
+        subaccount_code=request.subaccount_code
+    )
+    
+    result = await paystack_service.initialize_transaction(init_request)
+    
+    if not result.get("status"):
+        await db.paystack_transactions.update_one(
+            {"id": transaction_id},
+            {"$set": {"status": "failed", "error": result.get("message")}}
+        )
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initialize payment"))
+    
+    # Update with authorization URL
+    await db.paystack_transactions.update_one(
+        {"id": transaction_id},
+        {"$set": {
+            "authorization_url": result["data"]["authorization_url"],
+            "access_code": result["data"]["access_code"]
+        }}
+    )
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "reference": reference,
+        "authorization_url": result["data"]["authorization_url"],
+        "access_code": result["data"]["access_code"],
+        "message": "Redirect customer to authorization_url to complete payment"
+    }
+
+
+@paystack_router.post("/charge-mobile")
+async def charge_mobile_money(request: PaystackPaymentRequest):
+    """
+    Directly charge customer via M-Pesa mobile money.
+    This sends an STK Push to the customer's phone.
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    # Format phone number
+    phone = request.phone_number.replace(" ", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    elif not phone.startswith("254"):
+        phone = "254" + phone
+    
+    # Generate reference
+    reference = f"CAIWAVE-{request.payment_type.upper()}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{str(uuid.uuid4())[:8]}"
+    
+    # Create transaction record
+    transaction_id = str(uuid.uuid4())
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": request.email,
+        "phone_number": phone,
+        "amount": request.amount,
+        "currency": "KES",
+        "payment_type": request.payment_type,
+        "reference_id": request.reference_id,
+        "description": request.description or f"CAIWAVE {request.payment_type} payment",
+        "subaccount_code": request.subaccount_code,
+        "status": "pending",
+        "provider": "paystack",
+        "payment_method": "mobile_money",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.paystack_transactions.insert_one(transaction_record)
+    
+    # Charge via mobile money
+    charge_request = MobileMoneyChargeRequest(
+        email=request.email,
+        amount=request.amount,
+        phone_number=phone,
+        provider="mpesa",
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": request.payment_type,
+            "reference_id": request.reference_id
+        }
+    )
+    
+    result = await paystack_service.charge_mobile_money(charge_request)
+    
+    if not result.get("status"):
+        await db.paystack_transactions.update_one(
+            {"id": transaction_id},
+            {"$set": {"status": "failed", "error": result.get("message")}}
+        )
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initiate M-Pesa payment"))
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "reference": reference,
+        "message": "M-Pesa payment request sent. Check your phone for the payment prompt.",
+        "data": result.get("data", {})
+    }
+
+
+@paystack_router.post("/owner/pay-subscription")
+async def owner_pay_subscription_paystack(
+    phone_number: str = Body(...),
+    invoice_id: Optional[str] = Body(None),
+    user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER]))
+):
+    """
+    Hotspot Owner: Pay monthly subscription via Paystack M-Pesa
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    # Get owner's details
+    owner = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not owner:
+        raise HTTPException(status_code=404, detail="Owner not found")
+    
+    # Get or create pending invoice
+    if invoice_id:
+        invoice = await db.invoices.find_one({"id": invoice_id, "owner_id": user["id"]}, {"_id": 0})
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Invoice not found")
+    else:
+        # Find unpaid invoice or create new one
+        invoice = await db.invoices.find_one({
+            "owner_id": user["id"],
+            "status": InvoiceStatus.PENDING.value
+        }, {"_id": 0})
+        
+        if not invoice:
+            # Create new subscription invoice
+            invoice_id = str(uuid.uuid4())
+            invoice = {
+                "id": invoice_id,
+                "owner_id": user["id"],
+                "type": "subscription",
+                "amount": 500.0,  # KES 500 monthly subscription
+                "currency": "KES",
+                "status": InvoiceStatus.PENDING.value,
+                "due_date": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.invoices.insert_one(invoice)
+    
+    amount = invoice.get("amount", 500.0)
+    
+    # Format phone
+    phone = phone_number.replace(" ", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    elif not phone.startswith("254"):
+        phone = "254" + phone
+    
+    # Generate reference
+    reference = f"CAIWAVE-SUB-{user['id'][:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    
+    # Create transaction record
+    transaction_id = str(uuid.uuid4())
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": owner.get("email", f"{phone}@caiwave.com"),
+        "phone_number": phone,
+        "amount": amount,
+        "currency": "KES",
+        "payment_type": "subscription",
+        "invoice_id": invoice["id"],
+        "owner_id": user["id"],
+        "status": "pending",
+        "provider": "paystack",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.paystack_transactions.insert_one(transaction_record)
+    
+    # Initialize payment
+    init_request = TransactionInitRequest(
+        email=owner.get("email", f"{phone}@caiwave.com"),
+        amount=amount,
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": "subscription",
+            "invoice_id": invoice["id"],
+            "owner_id": user["id"]
+        }
+    )
+    
+    result = await paystack_service.initialize_transaction(init_request)
+    
+    if not result.get("status"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initialize payment"))
+    
+    await db.paystack_transactions.update_one(
+        {"id": transaction_id},
+        {"$set": {
+            "authorization_url": result["data"]["authorization_url"],
+            "access_code": result["data"]["access_code"]
+        }}
+    )
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "reference": reference,
+        "amount": amount,
+        "authorization_url": result["data"]["authorization_url"],
+        "message": f"Complete payment of KES {amount} for your monthly subscription"
+    }
+
+
+@paystack_router.post("/advertiser/pay-ad")
+async def advertiser_pay_ad_paystack(
+    ad_id: str = Body(...),
+    phone_number: str = Body(...),
+    user: dict = Depends(require_role([UserRole.ADVERTISER]))
+):
+    """
+    Advertiser: Pay for approved ad via Paystack
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    # Get the ad
+    ad = await db.ads.find_one({"id": ad_id, "advertiser_id": user["id"]}, {"_id": 0})
+    if not ad:
+        raise HTTPException(status_code=404, detail="Ad not found or access denied")
+    
+    if ad["status"] != AdStatus.APPROVED.value:
+        raise HTTPException(status_code=400, detail="Ad must be approved before payment")
+    
+    # Get package for pricing
+    package = await db.ad_packages.find_one({"id": ad.get("package_id")}, {"_id": 0})
+    amount = package["price"] if package else ad.get("total_cost", 1000)
+    
+    # Format phone
+    phone = phone_number.replace(" ", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    
+    # Generate reference
+    reference = f"CAIWAVE-AD-{ad_id[:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    
+    # Create transaction
+    transaction_id = str(uuid.uuid4())
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": user.get("email", f"{phone}@caiwave.com"),
+        "phone_number": phone,
+        "amount": amount,
+        "currency": "KES",
+        "payment_type": "advertising",
+        "ad_id": ad_id,
+        "advertiser_id": user["id"],
+        "status": "pending",
+        "provider": "paystack",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.paystack_transactions.insert_one(transaction_record)
+    
+    # Initialize payment
+    init_request = TransactionInitRequest(
+        email=user.get("email", f"{phone}@caiwave.com"),
+        amount=amount,
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": "advertising",
+            "ad_id": ad_id,
+            "advertiser_id": user["id"]
+        }
+    )
+    
+    result = await paystack_service.initialize_transaction(init_request)
+    
+    if not result.get("status"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initialize payment"))
+    
+    await db.paystack_transactions.update_one(
+        {"id": transaction_id},
+        {"$set": {
+            "authorization_url": result["data"]["authorization_url"],
+            "access_code": result["data"]["access_code"]
+        }}
+    )
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "reference": reference,
+        "amount": amount,
+        "authorization_url": result["data"]["authorization_url"],
+        "message": f"Complete payment of KES {amount} for your ad: {ad['title']}"
+    }
+
+
+@paystack_router.post("/client/pay-wifi")
+async def client_pay_wifi_paystack(
+    hotspot_id: str = Body(...),
+    package_id: str = Body(...),
+    phone_number: str = Body(...),
+    email: str = Body("guest@caiwave.com")
+):
+    """
+    WiFi Client: Pay for WiFi package via Paystack M-Pesa (no auth required)
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    # Validate hotspot and package
+    hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
+    if not hotspot:
+        raise HTTPException(status_code=404, detail="Hotspot not found")
+    
+    package = await db.packages.find_one({"id": package_id, "is_active": True}, {"_id": 0})
+    if not package:
+        raise HTTPException(status_code=404, detail="Package not found or inactive")
+    
+    amount = package["price"]
+    
+    # Format phone
+    phone = phone_number.replace(" ", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    
+    # Get hotspot owner's subaccount for revenue split
+    owner = await db.users.find_one({"id": hotspot.get("owner_id")}, {"_id": 0})
+    subaccount_code = owner.get("paystack_subaccount_code") if owner else None
+    
+    # Generate reference
+    reference = f"CAIWAVE-WIFI-{hotspot_id[:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    
+    # Create transaction
+    transaction_id = str(uuid.uuid4())
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": email,
+        "phone_number": phone,
+        "amount": amount,
+        "currency": "KES",
+        "payment_type": "wifi",
+        "hotspot_id": hotspot_id,
+        "package_id": package_id,
+        "subaccount_code": subaccount_code,
+        "status": "pending",
+        "provider": "paystack",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.paystack_transactions.insert_one(transaction_record)
+    
+    # Initialize payment with subaccount for revenue split
+    init_request = TransactionInitRequest(
+        email=email,
+        amount=amount,
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": "wifi",
+            "hotspot_id": hotspot_id,
+            "package_id": package_id,
+            "phone_number": phone
+        },
+        subaccount_code=subaccount_code
+    )
+    
+    result = await paystack_service.initialize_transaction(init_request)
+    
+    if not result.get("status"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initialize payment"))
+    
+    await db.paystack_transactions.update_one(
+        {"id": transaction_id},
+        {"$set": {
+            "authorization_url": result["data"]["authorization_url"],
+            "access_code": result["data"]["access_code"]
+        }}
+    )
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "reference": reference,
+        "amount": amount,
+        "package_name": package["name"],
+        "duration": package["duration_minutes"],
+        "authorization_url": result["data"]["authorization_url"],
+        "message": f"Pay KES {amount} for {package['name']} ({package['duration_minutes']} minutes)"
+    }
+
+
+@paystack_router.post("/verify/{reference}")
+async def verify_paystack_payment(reference: str):
+    """
+    Verify a Paystack payment and process if successful
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    # Get our transaction record
+    transaction = await db.paystack_transactions.find_one({"reference": reference}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Verify with Paystack
+    result = await paystack_service.verify_transaction(reference)
+    
+    if not result.get("status"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Verification failed"))
+    
+    paystack_data = result.get("data", {})
+    payment_status = paystack_data.get("status")
+    
+    if payment_status == "success":
+        # Update transaction
+        await db.paystack_transactions.update_one(
+            {"reference": reference},
+            {"$set": {
+                "status": "completed",
+                "paystack_reference": paystack_data.get("reference"),
+                "paystack_transaction_id": paystack_data.get("id"),
+                "paid_at": paystack_data.get("paid_at"),
+                "channel": paystack_data.get("channel"),
+                "completed_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        # Process based on payment type
+        payment_type = transaction.get("payment_type")
+        
+        if payment_type == "subscription":
+            await handle_paystack_subscription_success(transaction, paystack_data)
+        elif payment_type == "advertising":
+            await handle_paystack_ad_success(transaction, paystack_data)
+        elif payment_type == "wifi":
+            wifi_creds = await handle_paystack_wifi_success(transaction, paystack_data)
+            return {
+                "success": True,
+                "status": "completed",
+                "payment_type": payment_type,
+                "wifi_credentials": wifi_creds,
+                "message": "Payment successful! Use these credentials to connect to WiFi."
+            }
+        
+        return {
+            "success": True,
+            "status": "completed",
+            "payment_type": payment_type,
+            "message": "Payment verified and processed successfully"
+        }
+    
+    elif payment_status == "pending":
+        return {
+            "success": False,
+            "status": "pending",
+            "message": "Payment is still pending. Please complete the payment."
+        }
+    
+    else:
+        await db.paystack_transactions.update_one(
+            {"reference": reference},
+            {"$set": {"status": "failed", "failure_reason": paystack_data.get("gateway_response")}}
+        )
+        return {
+            "success": False,
+            "status": "failed",
+            "message": paystack_data.get("gateway_response", "Payment failed")
+        }
+
+
+@paystack_router.post("/webhook")
+async def paystack_webhook(request: Request):
+    """
+    Handle Paystack webhook events
+    """
+    # Get raw body for signature verification
+    raw_body = await request.body()
+    signature = request.headers.get("x-paystack-signature", "")
+    
+    # Verify signature if webhook secret is configured
+    if PAYSTACK_WEBHOOK_SECRET:
+        if not paystack_service.verify_webhook_signature(raw_body, signature):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    try:
+        payload = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    
+    event = payload.get("event")
+    data = payload.get("data", {})
+    
+    logging.info(f"Paystack webhook received: {event}")
+    
+    if event == "charge.success":
+        reference = data.get("reference")
+        
+        # Find our transaction
+        transaction = await db.paystack_transactions.find_one({"reference": reference}, {"_id": 0})
+        
+        if transaction and transaction["status"] != "completed":
+            # Update status
+            await db.paystack_transactions.update_one(
+                {"reference": reference},
+                {"$set": {
+                    "status": "completed",
+                    "paystack_transaction_id": data.get("id"),
+                    "paid_at": data.get("paid_at"),
+                    "channel": data.get("channel"),
+                    "completed_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            
+            # Process based on type
+            payment_type = transaction.get("payment_type")
+            if payment_type == "subscription":
+                await handle_paystack_subscription_success(transaction, data)
+            elif payment_type == "advertising":
+                await handle_paystack_ad_success(transaction, data)
+            elif payment_type == "wifi":
+                await handle_paystack_wifi_success(transaction, data)
+    
+    return {"status": "ok"}
+
+
+@paystack_router.post("/subaccount/create")
+async def create_paystack_subaccount(
+    request: PaystackSubaccountRequest,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
+):
+    """
+    Create a Paystack subaccount for a hotspot owner
+    This enables automatic revenue splitting on WiFi payments
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
+    subaccount_request = SubaccountCreateRequest(
+        business_name=request.business_name,
+        settlement_bank=request.bank_code,
+        account_number=request.account_number,
+        percentage_charge=request.percentage_charge,
+        primary_contact_email=request.email,
+        primary_contact_phone=request.phone
+    )
+    
+    result = await paystack_service.create_subaccount(subaccount_request)
+    
+    if not result.get("status"):
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to create subaccount"))
+    
+    subaccount_code = result["data"]["subaccount_code"]
+    
+    # Store subaccount code with the user
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {
+                "paystack_subaccount_code": subaccount_code,
+                "paystack_business_name": request.business_name,
+                "paystack_bank_code": request.bank_code,
+                "paystack_account_number": request.account_number[-4:]  # Store only last 4 digits
+            }}
+        )
+    
+    return {
+        "success": True,
+        "subaccount_code": subaccount_code,
+        "message": "Subaccount created successfully. WiFi payments will now be split automatically."
+    }
+
+
+@paystack_router.get("/transactions")
+async def list_paystack_transactions(
+    user: dict = Depends(require_admin),
+    payment_type: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 50
+):
+    """Admin: List all Paystack transactions"""
+    query = {}
+    if payment_type:
+        query["payment_type"] = payment_type
+    if status:
+        query["status"] = status
+    
+    transactions = await db.paystack_transactions.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    
+    # Stats
+    total = await db.paystack_transactions.count_documents({})
+    completed = await db.paystack_transactions.count_documents({"status": "completed"})
+    pending = await db.paystack_transactions.count_documents({"status": "pending"})
+    failed = await db.paystack_transactions.count_documents({"status": "failed"})
+    
+    return {
+        "transactions": transactions,
+        "stats": {
+            "total": total,
+            "completed": completed,
+            "pending": pending,
+            "failed": failed
+        }
+    }
+
+
+# Paystack Payment Success Handlers
+
+async def handle_paystack_subscription_success(transaction: dict, paystack_data: dict):
+    """Handle successful subscription payment via Paystack"""
+    invoice_id = transaction.get("invoice_id")
+    owner_id = transaction.get("owner_id")
+    
+    if not invoice_id:
+        logging.error(f"No invoice_id in subscription transaction: {transaction['id']}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    next_billing_end = now + timedelta(days=30)
+    
+    # Update invoice
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": InvoiceStatus.PAID.value,
+            "paid_at": now.isoformat(),
+            "payment_method": "paystack",
+            "paystack_reference": paystack_data.get("reference"),
+            "paystack_transaction_id": paystack_data.get("id")
+        }}
+    )
+    
+    # Activate owner's hotspots
+    await db.hotspots.update_many(
+        {"owner_id": owner_id},
+        {"$set": {
+            "status": HotspotStatus.ACTIVE.value,
+            "subscription_status": SubscriptionStatus.ACTIVE.value,
+            "subscription_end_date": next_billing_end.isoformat()
+        }}
+    )
+    
+    logging.info(f"Subscription activated for owner {owner_id}, Invoice: {invoice_id}")
+
+
+async def handle_paystack_ad_success(transaction: dict, paystack_data: dict):
+    """Handle successful ad payment via Paystack"""
+    ad_id = transaction.get("ad_id")
+    
+    if not ad_id:
+        logging.error(f"No ad_id in advertising transaction: {transaction['id']}")
+        return
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get ad and package
+    ad = await db.ads.find_one({"id": ad_id}, {"_id": 0})
+    if not ad:
+        logging.error(f"Ad not found: {ad_id}")
+        return
+    
+    package = await db.ad_packages.find_one({"id": ad.get("package_id")})
+    duration_days = package["duration_days"] if package else 30
+    expires_at = now + timedelta(days=duration_days)
+    
+    # Update ad
+    await db.ads.update_one(
+        {"id": ad_id},
+        {"$set": {
+            "status": AdStatus.ACTIVE.value,
+            "starts_at": now.isoformat(),
+            "expires_at": expires_at.isoformat(),
+            "payment_status": "paid",
+            "payment_method": "paystack",
+            "paystack_reference": paystack_data.get("reference")
+        }}
+    )
+    
+    logging.info(f"Ad activated: {ad_id}, expires: {expires_at}")
+
+
+async def handle_paystack_wifi_success(transaction: dict, paystack_data: dict):
+    """Handle successful WiFi payment via Paystack"""
+    hotspot_id = transaction.get("hotspot_id")
+    package_id = transaction.get("package_id")
+    phone_number = transaction.get("phone_number")
+    amount = transaction.get("amount")
+    
+    if not all([hotspot_id, package_id]):
+        logging.error(f"Missing data in WiFi transaction: {transaction['id']}")
+        return None
+    
+    # Get hotspot and package
+    hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
+    package = await db.packages.find_one({"id": package_id}, {"_id": 0})
+    
+    if not hotspot or not package:
+        logging.error(f"Hotspot or package not found for WiFi payment")
+        return None
+    
+    now = datetime.now(timezone.utc)
+    
+    # Calculate revenue sharing
+    revenue = await calculate_dynamic_revenue(hotspot_id, amount)
+    
+    # Create payment record
+    payment = Payment(
+        hotspot_id=hotspot_id,
+        package_id=package_id,
+        phone_number=phone_number,
+        amount=amount,
+        method=PaymentMethod.PAYSTACK,
+        status=PaymentStatus.COMPLETED,
+        owner_share=revenue.owner_share,
+        platform_share=revenue.platform_share
+    )
+    
+    payment_dict = payment.model_dump()
+    payment_dict["created_at"] = payment_dict["created_at"].isoformat()
+    payment_dict["completed_at"] = now.isoformat()
+    payment_dict["paystack_reference"] = paystack_data.get("reference")
+    await db.payments.insert_one(payment_dict)
+    
+    # Generate WiFi credentials
+    username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
+    
+    # Create session
+    session = Session(
+        package_id=package_id,
+        hotspot_id=hotspot_id,
+        phone_number=phone_number,
+        username=username,
+        password=password,
+        payment_id=payment.id,
+        expires_at=now + timedelta(minutes=package["duration_minutes"])
+    )
+    
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session_dict["started_at"].isoformat()
+    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+    await db.sessions.insert_one(session_dict)
+    
+    # Update payment with session ID
+    await db.payments.update_one(
+        {"id": payment.id},
+        {"$set": {"session_id": session.id}}
+    )
+    
+    # Update hotspot stats
+    await db.hotspots.update_one(
+        {"id": hotspot_id},
+        {"$inc": {"total_revenue": amount, "total_sessions": 1}}
+    )
+    
+    # Store credentials in transaction
+    await db.paystack_transactions.update_one(
+        {"id": transaction["id"]},
+        {"$set": {
+            "wifi_username": username,
+            "wifi_password": password,
+            "session_id": session.id,
+            "expires_at": session_dict["expires_at"]
+        }}
+    )
+    
+    logging.info(f"WiFi access granted - Session: {session.id}, Username: {username}")
+    
+    return {
+        "username": username,
+        "password": password,
+        "expires_at": session_dict["expires_at"],
+        "duration_minutes": package["duration_minutes"]
     }
 
 # ==================== Payments Routes ====================
