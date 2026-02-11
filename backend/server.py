@@ -98,8 +98,9 @@ app = FastAPI(
     description="ISP-grade Wi-Fi hotspot billing and advertising platform for www.caiwave.com"
 )
 
-# Mount static files for ad media
-app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR.parent)), name="uploads")
+# Mount static files for ad media UNDER /api prefix for proper routing
+# Files will be accessible at /api/uploads/ads/images/filename.png
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR.parent)), name="uploads")
 
 # Create routers
 api_router = APIRouter(prefix="/api")
