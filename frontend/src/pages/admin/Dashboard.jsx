@@ -1820,6 +1820,7 @@ const CampaignsPage = () => {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -1828,6 +1829,7 @@ const CampaignsPage = () => {
     target_regions: [],
     target_hotspot_ids: [],
     assigned_ad_ids: [],
+    image_url: "",
   });
   const [availableAds, setAvailableAds] = useState([]);
   const user = getUser();
@@ -1861,6 +1863,33 @@ const CampaignsPage = () => {
     }
   };
 
+  const handleImageUpload = async (campaignId, file) => {
+    if (!file) return;
+    
+    setUploadingImage(campaignId);
+    const formDataUpload = new FormData();
+    formDataUpload.append("image", file);
+    
+    try {
+      const response = await axios.post(
+        `${API_URL}/campaigns/${campaignId}/upload-image`,
+        formDataUpload,
+        {
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+      toast.success("Image uploaded successfully!");
+      fetchCampaigns();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload image");
+    } finally {
+      setUploadingImage(null);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -1884,7 +1913,7 @@ const CampaignsPage = () => {
       
       setShowCreate(false);
       setEditingCampaign(null);
-      setFormData({ name: "", description: "", start_date: "", end_date: "", target_regions: [], target_hotspot_ids: [], assigned_ad_ids: [] });
+      setFormData({ name: "", description: "", start_date: "", end_date: "", target_regions: [], target_hotspot_ids: [], assigned_ad_ids: [], image_url: "" });
       fetchCampaigns();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to save campaign");
