@@ -56,36 +56,65 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Date Filtering**: Today's ads vs Yesterday's ads tabs
 - **CAIWAVE TV Contact**: WhatsApp button (https://wa.me/254738570630)
 
-### Phase 6: M-Pesa STK Push Integration ✅ COMPLETE (NEW)
+### Phase 7: Paystack Integration ✅ COMPLETE (Feb 11, 2026)
 
-**Three Payment Flows:**
+**Replaced M-Pesa Daraja with Paystack for all payments:**
 
 | Role | Endpoint | Post-Payment Action |
 |------|----------|---------------------|
-| Hotspot Owner | `/api/mpesa/owner/pay-subscription` | Activates subscription |
-| Advertiser | `/api/mpesa/advertiser/pay-ad` | Ad goes live |
-| WiFi Client | `/api/mpesa/client/pay-wifi` | Grants WiFi access |
+| Hotspot Owner | `/api/paystack/owner/pay-subscription` | Activates subscription |
+| Advertiser | `/api/paystack/advertiser/pay-ad` | Ad goes live |
+| WiFi Client | `/api/paystack/client/pay-wifi` | Grants WiFi access |
 
-**Current Configuration (Sandbox):**
+**Configuration (LIVE):**
 ```env
-MPESA_ENV=sandbox
-MPESA_SHORTCODE=174379
-MPESA_CONSUMER_KEY=7ONektuabEWBEDGNKM4UgvdBb9le0XdIG3Q0PMfHfqnq3MeM
+PAYSTACK_SECRET_KEY=sk_live_301cc85e6d03476c35e41ce1f20a2352be75b432
+PAYSTACK_PUBLIC_KEY=pk_live_485228adec2487e9d81fe542775f148c9ff43606
+PAYSTACK_ENVIRONMENT=live
 ```
 
-**Production Credentials (Ready to switch):**
-```env
-MPESA_SHORTCODE=6386009
-MPESA_TILL_NUMBER=8573842
-```
+**Features:**
+- M-Pesa mobile money payments (STK Push via Paystack)
+- Card payments
+- Subaccount support for revenue splitting (hotspot owners)
+- Webhook handling for payment confirmations
 
-**Documentation**: `/app/memory/MPESA_INTEGRATION.md`
+### Phase 8: MikroTik Auto-Configuration ✅ COMPLETE (Feb 11, 2026)
+
+**Centipaid-style MikroTik onboarding workflow:**
+- Owner clicks "Add MikroTik" in dashboard
+- System generates secure auto-configuration script
+- Script configures: Hotspot, RADIUS, Anti-sharing, DNS, Firewall
+- Connection confirmation and status tracking
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mikrotik-onboard/register` | POST | Register router & generate script |
+| `/api/mikrotik-onboard/confirm` | POST | Confirm connection |
+| `/api/mikrotik-onboard/routers` | GET | List registered routers |
+| `/api/mikrotik-onboard/routers/{id}/script` | GET | Regenerate script |
 
 ---
 
 ## Key API Endpoints
 
-### M-Pesa Payments (NEW)
+### Paystack Payments (PRIMARY)
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/paystack/config` | GET | No | Get Paystack config |
+| `/api/paystack/banks` | GET | No | List Kenya banks |
+| `/api/paystack/initialize` | POST | No | Initialize payment |
+| `/api/paystack/charge-mobile` | POST | No | M-Pesa STK Push |
+| `/api/paystack/owner/pay-subscription` | POST | Owner | Pay subscription |
+| `/api/paystack/advertiser/pay-ad` | POST | Advertiser | Pay for ad |
+| `/api/paystack/client/pay-wifi` | POST | No | Pay for WiFi |
+| `/api/paystack/verify/{reference}` | POST | No | Verify payment |
+| `/api/paystack/webhook` | POST | No | Paystack webhook |
+| `/api/paystack/subaccount/create` | POST | Owner/Admin | Create subaccount |
+| `/api/paystack/transactions` | GET | Admin | List transactions |
+
+### M-Pesa (LEGACY - Deprecated)
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/mpesa/stk-push` | POST | No | Generic STK Push |
@@ -93,9 +122,6 @@ MPESA_TILL_NUMBER=8573842
 | `/api/mpesa/advertiser/pay-ad` | POST | Advertiser | Pay for ad |
 | `/api/mpesa/client/pay-wifi` | POST | No | Pay for WiFi |
 | `/api/mpesa/callback` | POST | No | Safaricom callback |
-| `/api/mpesa/status/{checkout_id}` | GET | No | Check status |
-| `/api/mpesa/wifi-credentials/{checkout_id}` | GET | No | Get WiFi credentials |
-| `/api/mpesa/transactions` | GET | Admin | List transactions |
 | `/api/mpesa/config-status` | GET | Admin | Config status |
 
 ### Subscription & Billing
