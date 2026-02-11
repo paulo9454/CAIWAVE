@@ -1,7 +1,7 @@
-# CAIWAVE Wi-Fi Hotspot Platform - PRD v7.1
+# CAIWAVE Wi-Fi Hotspot Platform - PRD v8.0
 
 ## Project Overview
-Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, Subscription & Billing System, and **M-Pesa Daraja STK Push payments**.
+Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, Subscription & Billing System, and **Paystack payments (M-Pesa + Card)**.
 
 **Domain**: www.caiwave.com
 
@@ -15,8 +15,8 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Frontend**: React + TailwindCSS + Shadcn UI
 - **Database**: MongoDB
 - **Auth**: JWT-based multi-role
-- **Payments**: M-Pesa Daraja API (LIVE sandbox integration)
-- **Router**: MikroTik via FreeRADIUS (structure ready)
+- **Payments**: Paystack (M-Pesa + Card) - LIVE integration
+- **Router**: MikroTik via FreeRADIUS + Auto-Configuration
 
 ---
 
@@ -32,8 +32,8 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Subsidized Uptime** (Admin Only)
 
 ### Phase 3: Integrations ✅ COMPLETE
-- **M-Pesa Daraja** - LIVE STK Push integration
-- **MikroTik / RADIUS** - FreeRADIUS structure ready
+- **Paystack Payments** - LIVE M-Pesa + Card integration (replaced M-Pesa Daraja)
+- **MikroTik / RADIUS** - Auto-configuration with script generation
 
 ### Phase 4: Package-Based Advertising ✅ COMPLETE
 | Package | Coverage | Duration | Price (KES) |
