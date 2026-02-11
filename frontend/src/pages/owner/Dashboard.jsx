@@ -115,7 +115,7 @@ const SubscriptionBanner = ({ subscription, onPayNow }) => {
   );
 };
 
-// Payment Modal Component
+// Payment Modal Component (Paystack)
 const PaymentModal = ({ invoice, onClose, onSuccess }) => {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -135,9 +135,18 @@ const PaymentModal = ({ invoice, onClose, onSuccess }) => {
       );
       
       if (response.data.success) {
-        toast.success(response.data.message);
-        onSuccess();
-        onClose();
+        if (response.data.authorization_url) {
+          // Redirect to Paystack payment page
+          toast.success("Redirecting to payment page...");
+          window.open(response.data.authorization_url, "_blank");
+          onClose();
+          // Show instructions
+          toast.info("Complete payment in the new tab, then refresh this page");
+        } else {
+          toast.success(response.data.message);
+          onSuccess();
+          onClose();
+        }
       } else {
         toast.error(response.data.message || "Payment failed");
       }
@@ -174,7 +183,7 @@ const PaymentModal = ({ invoice, onClose, onSuccess }) => {
         </div>
         
         <div className="mb-6">
-          <label className="block text-sm text-neutral-400 mb-2">M-Pesa Phone Number</label>
+          <label className="block text-sm text-neutral-400 mb-2">Phone Number (for payment confirmation)</label>
           <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg">
             <span className="px-4 text-neutral-500">+254</span>
             <input
@@ -182,12 +191,12 @@ const PaymentModal = ({ invoice, onClose, onSuccess }) => {
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
               className="flex-1 bg-transparent px-2 py-3 focus:outline-none"
-              placeholder="712345678"
+              placeholder="724825975"
               data-testid="subscription-phone-input"
             />
           </div>
           <p className="text-xs text-neutral-500 mt-2">
-            An STK Push will be sent to this number
+            You'll be redirected to Paystack to complete payment via M-Pesa or Card
           </p>
         </div>
         
@@ -205,8 +214,8 @@ const PaymentModal = ({ invoice, onClose, onSuccess }) => {
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <Phone className="w-4 h-4 mr-2" />
-                Pay via M-Pesa
+                <CreditCard className="w-4 h-4 mr-2" />
+                Pay with Paystack
               </>
             )}
           </Button>
