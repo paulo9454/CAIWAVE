@@ -615,6 +615,7 @@ class CampaignBase(BaseModel):
     assigned_ad_ids: List[str] = Field(default_factory=list)
     stream_id: Optional[str] = None  # Link to CAIWAVE TV stream
     subsidized_uptime_id: Optional[str] = None  # Link to subsidized uptime
+    image_url: Optional[str] = None  # Campaign banner/thumbnail image
 
 class CampaignCreate(CampaignBase):
     pass
