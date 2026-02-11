@@ -650,7 +650,7 @@ const AdApprovalPage = () => {
                   </div>
 
                   {/* Ad Content */}
-                  <div className="space-y-3">
+                  <div className="space-y-3 p-6">
                     {/* Title & Type */}
                     <div>
                       <h3 className="font-semibold text-lg">{ad.title}</h3>
