@@ -40,11 +40,13 @@ load_dotenv(ROOT_DIR / '.env')
 UPLOAD_DIR = ROOT_DIR / "uploads" / "ads"
 UPLOAD_DIR_IMAGES = UPLOAD_DIR / "images"
 UPLOAD_DIR_VIDEOS = UPLOAD_DIR / "videos"
+UPLOAD_DIR_CAMPAIGNS = ROOT_DIR / "uploads" / "campaigns"
 UPLOAD_DIR_IMAGES.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR_VIDEOS.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR_CAMPAIGNS.mkdir(parents=True, exist_ok=True)
 
 # Media validation constants
-MAX_IMAGE_SIZE = 2 * 1024 * 1024  # 2MB (600x600 recommended)
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB for campaigns
 MAX_VIDEO_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_VIDEO_DURATION = 15  # seconds
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
