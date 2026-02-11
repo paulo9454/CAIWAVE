@@ -163,6 +163,7 @@ class PaymentStatus(str, Enum):
 
 class PaymentMethod(str, Enum):
     MPESA = "mpesa"
+    PAYSTACK = "paystack"
     BANK = "bank"
     VOUCHER = "voucher"
     FREE_AD = "free_ad"
