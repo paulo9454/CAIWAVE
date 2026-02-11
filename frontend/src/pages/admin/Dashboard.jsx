@@ -1728,10 +1728,26 @@ const AllHotspotsPage = () => {
 
 // Users Management Component
 const UsersPage = () => {
-  const [users] = useState([
-    { id: "1", name: "CAIWAVE Admin", email: "admin@caiwave.com", role: "super_admin", is_active: true },
-  ]);
-  const [loading] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/users/`, {
+          headers: { Authorization: `Bearer ${getAuthToken()}` }
+        });
+        setUsers(response.data || []);
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+        // Don't show mock data - just empty state
+        setUsers([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   return (
     <div className="space-y-6" data-testid="users-page">
