@@ -592,7 +592,9 @@ const AdApprovalPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {getFilteredAds().map((ad) => {
               const statusInfo = getStatusBadge(ad);
-              const mediaUrl = ad.media_url ? `${API_URL.replace('/api', '')}${ad.media_url}` : null;
+              // media_url now contains /api/uploads/... so we use the base URL
+              const baseUrl = API_URL.replace('/api', '');
+              const mediaUrl = ad.media_url ? `${baseUrl}${ad.media_url}` : null;
               const liveStatus = getAdLiveStatus(ad);
               
               return (
