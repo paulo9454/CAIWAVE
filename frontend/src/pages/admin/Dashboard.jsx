@@ -2018,66 +2018,152 @@ const CampaignsPage = () => {
         </div>
       )}
 
-      <div className="dashboard-card overflow-hidden">
+      {/* Campaign Cards with Images */}
+      <div className="space-y-4">
         {loading ? (
-          <div className="text-center py-8 text-neutral-400">Loading campaigns...</div>
+          <div className="dashboard-card text-center py-8 text-neutral-400">Loading campaigns...</div>
         ) : campaigns.length === 0 ? (
-          <div className="text-center py-8">
+          <div className="dashboard-card text-center py-8">
             <Target className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
             <p className="text-neutral-400">No campaigns yet. Create your first campaign.</p>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Campaign</th>
-                <th>Status</th>
-                <th>Duration</th>
-                <th>Regions</th>
-                <th>Performance</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map((campaign) => (
-                <tr key={campaign.id}>
-                  <td>
-                    <div className="font-medium">{campaign.name}</div>
-                    <div className="text-neutral-500 text-xs">{campaign.description}</div>
-                  </td>
-                  <td>
-                    <span className={`px-2 py-1 rounded-md text-xs ${getStatusBadge(campaign.status)}`}>
-                      {campaign.status}
-                    </span>
-                  </td>
-                  <td className="text-neutral-400 text-sm">
-                    {new Date(campaign.start_date).toLocaleDateString()} - {new Date(campaign.end_date).toLocaleDateString()}
-                  </td>
-                  <td className="text-neutral-400 text-sm">
-                    {campaign.target_regions?.join(", ") || "All"}
-                  </td>
-                  <td>
-                    <div className="text-sm">
-                      <span className="text-blue-400">{campaign.total_impressions || 0}</span> views
-                      <span className="mx-2">·</span>
-                      <span className="text-green-400">{campaign.total_clicks || 0}</span> clicks
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {campaigns.map((campaign) => {
+              const baseUrl = API_URL.replace('/api', '');
+              const imageUrl = campaign.image_url ? `${baseUrl}${campaign.image_url}` : null;
+              
+              return (
+                <div key={campaign.id} className="dashboard-card p-0 overflow-hidden hover:border-neutral-600 transition-colors">
+                  {/* Campaign Image */}
+                  <div className="relative w-full h-48 bg-neutral-900">
+                    {imageUrl ? (
+                      <img 
+                        src={imageUrl} 
+                        alt={campaign.name} 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentElement.classList.add('flex', 'items-center', 'justify-center');
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900">
+                        <Target className="w-12 h-12 text-neutral-600 mb-2" />
+                        <span className="text-neutral-500 text-sm">No image</span>
+                      </div>
+                    )}
+                    
+                    {/* Status Badge */}
+                    <div className="absolute top-3 left-3">
+                      <span className={`px-2 py-1 rounded-md text-xs font-medium ${getStatusBadge(campaign.status)}`}>
+                        {campaign.status.toUpperCase()}
+                      </span>
                     </div>
-                  </td>
-                  <td>
-                    <div className="flex gap-2">
+                    
+                    {/* Upload Image Button */}
+                    <label className="absolute bottom-3 right-3 cursor-pointer">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden"
+                        onChange={(e) => handleImageUpload(campaign.id, e.target.files[0])}
+                        disabled={uploadingImage === campaign.id}
+                      />
+                      <span className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg flex items-center gap-1">
+                        {uploadingImage === campaign.id ? (
+                          <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Plus className="w-3 h-3" />
+                        )}
+                        {imageUrl ? 'Change' : 'Add'} Image
+                      </span>
+                    </label>
+                  </div>
+                  
+                  {/* Campaign Content */}
+                  <div className="p-4 space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-lg">{campaign.name}</h3>
+                      {campaign.description && (
+                        <p className="text-neutral-400 text-sm mt-1 line-clamp-2">{campaign.description}</p>
+                      )}
+                    </div>
+                    
+                    {/* Date Range */}
+                    <div className="flex items-center gap-2 text-sm text-neutral-400">
+                      <Calendar className="w-4 h-4" />
+                      <span>
+                        {new Date(campaign.start_date).toLocaleDateString()} - {new Date(campaign.end_date).toLocaleDateString()}
+                      </span>
+                    </div>
+                    
+                    {/* Target Regions */}
+                    {campaign.target_regions?.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {campaign.target_regions.slice(0, 3).map((region, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-xs rounded">
+                            {region}
+                          </span>
+                        ))}
+                        {campaign.target_regions.length > 3 && (
+                          <span className="px-2 py-0.5 bg-neutral-700 text-neutral-400 text-xs rounded">
+                            +{campaign.target_regions.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Performance Stats */}
+                    <div className="flex items-center gap-4 text-sm pt-2 border-t border-neutral-800">
+                      <div className="flex items-center gap-1">
+                        <Eye className="w-4 h-4 text-blue-400" />
+                        <span className="text-blue-400">{campaign.total_impressions || 0}</span>
+                        <span className="text-neutral-500">views</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <MousePointer className="w-4 h-4 text-green-400" />
+                        <span className="text-green-400">{campaign.total_clicks || 0}</span>
+                        <span className="text-neutral-500">clicks</span>
+                      </div>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-2">
                       {campaign.status === "draft" && (
-                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(campaign.id, "active")} className="text-green-400 border-green-400/30">
+                        <Button size="sm" onClick={() => handleStatusChange(campaign.id, "active")} className="flex-1 bg-green-600 hover:bg-green-700">
                           <Play className="w-3 h-3 mr-1" /> Activate
                         </Button>
                       )}
                       {campaign.status === "active" && (
-                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(campaign.id, "paused")} className="text-yellow-400 border-yellow-400/30">
+                        <Button size="sm" onClick={() => handleStatusChange(campaign.id, "paused")} className="flex-1 bg-yellow-600 hover:bg-yellow-700">
                           <Pause className="w-3 h-3 mr-1" /> Pause
                         </Button>
                       )}
                       {campaign.status === "paused" && (
-                        <Button size="sm" variant="outline" onClick={() => handleStatusChange(campaign.id, "active")} className="text-green-400 border-green-400/30">
+                        <Button size="sm" onClick={() => handleStatusChange(campaign.id, "active")} className="flex-1 bg-green-600 hover:bg-green-700">
                           <Play className="w-3 h-3 mr-1" /> Resume
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => openEdit(campaign)} className="border-neutral-700">
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" className="text-red-400 border-red-400/30" onClick={() => handleDelete(campaign.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// CAIWAVE TV Streams Page (ADMIN ONLY)
                         </Button>
                       )}
                       <Button size="sm" variant="ghost" onClick={() => openEdit(campaign)}>
