@@ -60,13 +60,19 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'caiwave-secret-key-change-in-producti
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
-# M-Pesa Configuration (Daraja API)
+# M-Pesa Configuration (Daraja API) - DEPRECATED, using Paystack now
 MPESA_CONSUMER_KEY = os.environ.get('MPESA_CONSUMER_KEY', '')
 MPESA_CONSUMER_SECRET = os.environ.get('MPESA_CONSUMER_SECRET', '')
 MPESA_SHORTCODE = os.environ.get('MPESA_SHORTCODE', '')
 MPESA_PASSKEY = os.environ.get('MPESA_PASSKEY', '')
 MPESA_CALLBACK_URL = os.environ.get('MPESA_CALLBACK_URL', '')
-MPESA_ENV = os.environ.get('MPESA_ENV', 'sandbox')  # 'sandbox' or 'production'
+MPESA_ENV = os.environ.get('MPESA_ENV', 'sandbox')
+
+# Paystack Configuration (Primary Payment Gateway)
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
+PAYSTACK_PUBLIC_KEY = os.environ.get('PAYSTACK_PUBLIC_KEY', '')
+PAYSTACK_WEBHOOK_SECRET = os.environ.get('PAYSTACK_WEBHOOK_SECRET', '')
+PAYSTACK_ENVIRONMENT = os.environ.get('PAYSTACK_ENVIRONMENT', 'live')
 
 # SMS Configuration
 SMS_PROVIDER = os.environ.get('SMS_PROVIDER', 'africas_talking')  # 'africas_talking', 'centipid', etc.
