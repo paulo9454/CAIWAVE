@@ -952,6 +952,7 @@ const OwnerDashboard = () => {
   const navigation = [
     { name: "Overview", href: "/owner", icon: LayoutDashboard },
     { name: "Hotspots", href: "/owner/hotspots", icon: Radio },
+    { name: "MikroTik Setup", href: "/owner/mikrotik", icon: Zap },
     { name: "Billing", href: "/owner/billing", icon: FileText },
     { name: "Payments", href: "/owner/payments", icon: CreditCard },
     { name: "Analytics", href: "/owner/analytics", icon: BarChart3 },
