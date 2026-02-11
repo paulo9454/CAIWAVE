@@ -3700,6 +3700,53 @@ async def delete_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
     return {"status": "deleted"}
 
+
+@campaigns_router.post("/{campaign_id}/upload-image")
+async def upload_campaign_image(
+    campaign_id: str,
+    image: UploadFile = File(...),
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Upload campaign banner/thumbnail image - Admin only"""
+    # Verify campaign exists
+    campaign = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Validate file type
+    if image.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid image type. Allowed: {ALLOWED_IMAGE_TYPES}")
+    
+    # Read and validate size
+    content = await image.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail=f"Image too large. Max size: {MAX_IMAGE_SIZE // (1024*1024)}MB")
+    
+    # Generate unique filename
+    file_ext = os.path.splitext(image.filename)[1].lower() or ".jpg"
+    unique_filename = f"{campaign_id}_{uuid.uuid4()}{file_ext}"
+    upload_path = UPLOAD_DIR_CAMPAIGNS / unique_filename
+    
+    # Save file
+    with open(upload_path, "wb") as f:
+        f.write(content)
+    
+    # Generate URL
+    image_url = f"/api/uploads/campaigns/{unique_filename}"
+    
+    # Update campaign with image URL
+    await db.campaigns.update_one(
+        {"id": campaign_id},
+        {"$set": {"image_url": image_url, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {
+        "success": True,
+        "image_url": image_url,
+        "message": "Campaign image uploaded successfully"
+    }
+
+
 # ==================== CAIWAVE TV Stream Routes (ADMIN ONLY) ====================
 
 @streams_router.get("/")
