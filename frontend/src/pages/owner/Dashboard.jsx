@@ -671,6 +671,398 @@ const HotspotsPage = () => {
   );
 };
 
+// MikroTik Setup Component
+const MikroTikSetupPage = () => {
+  const [hotspots, setHotspots] = useState([]);
+  const [routers, setRouters] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddRouter, setShowAddRouter] = useState(false);
+  const [selectedHotspot, setSelectedHotspot] = useState("");
+  const [routerName, setRouterName] = useState("");
+  const [generatedScript, setGeneratedScript] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const token = getAuthToken();
+      const headers = { Authorization: `Bearer ${token}` };
+      
+      const [hotspotsRes, routersRes] = await Promise.all([
+        axios.get(`${API_URL}/hotspots`, { headers }),
+        axios.get(`${API_URL}/mikrotik-onboard/routers`, { headers }),
+      ]);
+      
+      setHotspots(hotspotsRes.data);
+      setRouters(routersRes.data);
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegisterRouter = async () => {
+    if (!selectedHotspot || !routerName.trim()) {
+      toast.error("Please select a hotspot and enter router name");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const response = await axios.post(
+        `${API_URL}/mikrotik-onboard/register`,
+        {
+          name: routerName.trim(),
+          hotspot_id: selectedHotspot,
+        },
+        { headers: { Authorization: `Bearer ${getAuthToken()}` } }
+      );
+      
+      setGeneratedScript(response.data);
+      toast.success("Configuration script generated!");
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to generate script");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleConfirmConnection = async (router) => {
+    setConfirming(true);
+    try {
+      await axios.post(
+        `${API_URL}/mikrotik-onboard/confirm`,
+        {
+          router_id: router.id,
+          nas_identifier: router.nas_identifier,
+        },
+        { headers: { Authorization: `Bearer ${getAuthToken()}` } }
+      );
+      
+      toast.success("Router connection confirmed!");
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to confirm connection");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard!");
+  };
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      pending_configuration: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Pending Setup" },
+      configured: { bg: "bg-blue-500/10", text: "text-blue-400", label: "Configured" },
+      connected: { bg: "bg-green-500/10", text: "text-green-400", label: "Connected" },
+      offline: { bg: "bg-red-500/10", text: "text-red-400", label: "Offline" },
+      error: { bg: "bg-red-500/10", text: "text-red-400", label: "Error" },
+    };
+    return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="mikrotik-setup-page">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">MikroTik Setup</h1>
+          <p className="text-neutral-400 mt-1">Configure your MikroTik routers for CAIWAVE integration</p>
+        </div>
+        <Button
+          onClick={() => setShowAddRouter(true)}
+          className="bg-blue-600 hover:bg-blue-700"
+          data-testid="add-mikrotik-btn"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Add MikroTik
+        </Button>
+      </div>
+
+      {/* Setup Instructions */}
+      <div className="dashboard-card">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <Zap className="w-5 h-5 text-blue-400" />
+          Quick Setup Guide
+        </h2>
+        <div className="grid md:grid-cols-4 gap-4">
+          <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
+            <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-blue-400 font-bold">1</span>
+            </div>
+            <h4 className="font-medium text-sm">Reset Router</h4>
+            <p className="text-xs text-neutral-500 mt-1">System reset for fresh install</p>
+          </div>
+          <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
+            <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-blue-400 font-bold">2</span>
+            </div>
+            <h4 className="font-medium text-sm">Configure Internet</h4>
+            <p className="text-xs text-neutral-500 mt-1">DHCP Client on ether1</p>
+          </div>
+          <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
+            <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-blue-400 font-bold">3</span>
+            </div>
+            <h4 className="font-medium text-sm">Run Script</h4>
+            <p className="text-xs text-neutral-500 mt-1">Paste in Terminal</p>
+          </div>
+          <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
+            <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
+              <CheckCircle className="w-5 h-5 text-green-400" />
+            </div>
+            <h4 className="font-medium text-sm">Confirm</h4>
+            <p className="text-xs text-neutral-500 mt-1">Verify connection</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Registered Routers */}
+      <div className="dashboard-card">
+        <h2 className="font-semibold mb-4">Registered Routers ({routers.length})</h2>
+        
+        {routers.length === 0 ? (
+          <div className="text-center py-12">
+            <Radio className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
+            <p className="text-neutral-400">No routers registered yet</p>
+            <Button
+              onClick={() => setShowAddRouter(true)}
+              variant="outline"
+              className="mt-4 border-neutral-700"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Your First Router
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {routers.map((router) => {
+              const statusBadge = getStatusBadge(router.status);
+              const hotspot = hotspots.find(h => h.id === router.hotspot_id);
+              
+              return (
+                <div
+                  key={router.id}
+                  className="p-4 bg-neutral-800/50 rounded-lg border border-neutral-700"
+                  data-testid={`router-${router.id}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${router.connection_confirmed ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                      <h3 className="font-semibold">{router.name}</h3>
+                      <span className={`text-xs px-2 py-1 rounded ${statusBadge.bg} ${statusBadge.text}`}>
+                        {statusBadge.label}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!router.connection_confirmed && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleConfirmConnection(router)}
+                          disabled={confirming}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Confirm
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-neutral-500">Hotspot</p>
+                      <p className="font-medium">{hotspot?.name || "Unknown"}</p>
+                    </div>
+                    <div>
+                      <p className="text-neutral-500">NAS Identifier</p>
+                      <p className="font-mono text-xs">{router.nas_identifier}</p>
+                    </div>
+                    <div>
+                      <p className="text-neutral-500">Created</p>
+                      <p>{new Date(router.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-neutral-500">Last Seen</p>
+                      <p>{router.last_seen ? new Date(router.last_seen).toLocaleString() : "Never"}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add Router Modal */}
+      {showAddRouter && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-neutral-800">
+            <div className="p-6 border-b border-neutral-800 flex items-center justify-between">
+              <h2 className="text-xl font-semibold">Add MikroTik Router</h2>
+              <button
+                onClick={() => {
+                  setShowAddRouter(false);
+                  setGeneratedScript(null);
+                  setRouterName("");
+                  setSelectedHotspot("");
+                }}
+                className="p-2 hover:bg-neutral-800 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              {!generatedScript ? (
+                <>
+                  {/* Router Name Input */}
+                  <div>
+                    <label className="block text-sm text-neutral-400 mb-2">Router Name</label>
+                    <input
+                      type="text"
+                      value={routerName}
+                      onChange={(e) => setRouterName(e.target.value)}
+                      placeholder="e.g., Main Office Router"
+                      className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      data-testid="router-name-input"
+                    />
+                  </div>
+                  
+                  {/* Hotspot Selection */}
+                  <div>
+                    <label className="block text-sm text-neutral-400 mb-2">Select Hotspot</label>
+                    <select
+                      value={selectedHotspot}
+                      onChange={(e) => setSelectedHotspot(e.target.value)}
+                      className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
+                      data-testid="hotspot-select"
+                    >
+                      <option value="">Choose a hotspot...</option>
+                      {hotspots.map((h) => (
+                        <option key={h.id} value={h.id}>{h.name} - {h.location_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {/* Generate Button */}
+                  <Button
+                    onClick={handleRegisterRouter}
+                    disabled={generating || !selectedHotspot || !routerName.trim()}
+                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    data-testid="generate-script-btn"
+                  >
+                    {generating ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Generate Configuration Script
+                      </>
+                    )}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  {/* Script Generated Success */}
+                  <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-400 mb-2">
+                      <CheckCircle className="w-5 h-5" />
+                      <span className="font-semibold">Script Generated Successfully!</span>
+                    </div>
+                    <p className="text-sm text-neutral-400">
+                      Copy the script below and paste it into your MikroTik Terminal.
+                    </p>
+                  </div>
+                  
+                  {/* Credentials Info */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="p-4 bg-neutral-800/50 rounded-lg">
+                      <p className="text-neutral-500 text-sm">NAS Identifier</p>
+                      <p className="font-mono text-sm mt-1">{generatedScript.nas_identifier}</p>
+                    </div>
+                    <div className="p-4 bg-neutral-800/50 rounded-lg">
+                      <p className="text-neutral-500 text-sm">RADIUS Secret</p>
+                      <p className="font-mono text-sm mt-1 blur-sm hover:blur-none transition-all cursor-pointer">
+                        {generatedScript.radius_secret}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Instructions */}
+                  <div>
+                    <h3 className="font-semibold mb-3">Instructions</h3>
+                    <ol className="space-y-2 text-sm text-neutral-400">
+                      {generatedScript.instructions.map((instruction, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs flex-shrink-0">
+                            {i + 1}
+                          </span>
+                          {instruction.replace(/^\d+\.\s*/, '')}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                  
+                  {/* Script Box */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold">Configuration Script</h3>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(generatedScript.script)}
+                        className="border-neutral-700"
+                      >
+                        Copy Script
+                      </Button>
+                    </div>
+                    <div className="bg-neutral-950 rounded-lg p-4 max-h-64 overflow-y-auto">
+                      <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono">
+                        {generatedScript.script}
+                      </pre>
+                    </div>
+                  </div>
+                  
+                  {/* Close Button */}
+                  <Button
+                    onClick={() => {
+                      setShowAddRouter(false);
+                      setGeneratedScript(null);
+                      setRouterName("");
+                      setSelectedHotspot("");
+                    }}
+                    variant="outline"
+                    className="w-full border-neutral-700"
+                  >
+                    Close
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Payments Page Component
 const PaymentsPage = () => {
   const [payments, setPayments] = useState([]);
