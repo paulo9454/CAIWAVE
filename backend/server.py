@@ -2244,7 +2244,7 @@ async def owner_pay_subscription_paystack(
         # Find unpaid invoice or create new one
         invoice = await db.invoices.find_one({
             "owner_id": user["id"],
-            "status": InvoiceStatus.PENDING.value
+            "status": InvoiceStatus.UNPAID.value
         }, {"_id": 0})
         
         if not invoice:
@@ -2256,7 +2256,7 @@ async def owner_pay_subscription_paystack(
                 "type": "subscription",
                 "amount": 500.0,  # KES 500 monthly subscription
                 "currency": "KES",
-                "status": InvoiceStatus.PENDING.value,
+                "status": InvoiceStatus.UNPAID.value,
                 "due_date": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
                 "created_at": datetime.now(timezone.utc).isoformat()
             }
