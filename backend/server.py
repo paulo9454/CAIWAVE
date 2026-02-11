@@ -5312,7 +5312,7 @@ async def pay_invoice(
     payment_request: InvoicePaymentRequest,
     user: dict = Depends(require_role([UserRole.HOTSPOT_OWNER, UserRole.SUPER_ADMIN]))
 ):
-    """Pay invoice via M-Pesa STK Push"""
+    """Pay invoice via Paystack"""
     invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -5324,8 +5324,19 @@ async def pay_invoice(
     if invoice["status"] == InvoiceStatus.PAID.value:
         raise HTTPException(status_code=400, detail="Invoice already paid")
     
-    # Initiate M-Pesa payment
-    if not mpesa_service.is_configured():
+    # Format phone number
+    phone = payment_request.phone_number.replace(" ", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    elif not phone.startswith("254"):
+        phone = "254" + phone
+    
+    # Get user email
+    owner = await db.users.find_one({"id": invoice["owner_id"]}, {"_id": 0})
+    email = owner.get("email", f"{phone}@caiwave.com") if owner else f"{phone}@caiwave.com"
+    
+    # Check if Paystack is configured
+    if not paystack_service.is_configured():
         # Simulate payment success for demo
         now = datetime.now(timezone.utc)
         next_billing_end = now + timedelta(days=30)
@@ -5335,8 +5346,8 @@ async def pay_invoice(
             {"$set": {
                 "status": InvoiceStatus.PAID.value,
                 "paid_at": now.isoformat(),
-                "payment_method": "mpesa_simulated",
-                "mpesa_receipt_number": f"SIM{uuid.uuid4().hex[:10].upper()}"
+                "payment_method": "paystack_simulated",
+                "paystack_reference": f"SIM{uuid.uuid4().hex[:10].upper()}"
             }}
         )
         
@@ -5352,33 +5363,77 @@ async def pay_invoice(
         
         return {
             "success": True,
-            "message": "Payment simulated (M-Pesa not configured). Subscription activated!",
+            "message": "Payment simulated (Paystack not configured). Subscription activated!",
             "invoice_id": invoice_id
         }
     
-    # Real M-Pesa STK Push
-    result = await mpesa_service.stk_push(
-        phone_number=payment_request.phone_number,
-        amount=int(invoice["amount"]),
-        account_ref=invoice["invoice_number"],
-        description="CAIWAVE Hotspot Subscription"
+    # Generate reference
+    reference = f"CAIWAVE-INV-{invoice_id[:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    
+    # Create Paystack transaction record
+    transaction_id = str(uuid.uuid4())
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": email,
+        "phone_number": phone,
+        "amount": invoice["amount"],
+        "currency": "KES",
+        "payment_type": "subscription",
+        "invoice_id": invoice_id,
+        "owner_id": invoice["owner_id"],
+        "status": "pending",
+        "provider": "paystack",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.paystack_transactions.insert_one(transaction_record)
+    
+    # Initialize Paystack payment
+    init_request = TransactionInitRequest(
+        email=email,
+        amount=invoice["amount"],
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": "subscription",
+            "invoice_id": invoice_id,
+            "owner_id": invoice["owner_id"],
+            "phone_number": phone
+        }
     )
     
-    if result.get("ResponseCode") == "0":
-        # Store checkout request ID
+    result = await paystack_service.initialize_transaction(init_request)
+    
+    if result.get("status"):
+        # Store authorization URL
         await db.invoices.update_one(
             {"id": invoice_id},
-            {"$set": {"mpesa_checkout_id": result.get("CheckoutRequestID")}}
+            {"$set": {
+                "paystack_reference": reference,
+                "paystack_authorization_url": result["data"]["authorization_url"]
+            }}
         )
+        
+        await db.paystack_transactions.update_one(
+            {"id": transaction_id},
+            {"$set": {
+                "authorization_url": result["data"]["authorization_url"],
+                "access_code": result["data"]["access_code"]
+            }}
+        )
+        
         return {
             "success": True,
-            "message": "STK Push sent. Check your phone to complete payment.",
-            "checkout_request_id": result.get("CheckoutRequestID")
+            "message": "Payment initialized. Complete payment via the link below.",
+            "authorization_url": result["data"]["authorization_url"],
+            "reference": reference,
+            "transaction_id": transaction_id
         }
     else:
         return {
             "success": False,
-            "message": result.get("errorMessage", "Failed to initiate payment")
+            "message": result.get("message", "Failed to initialize payment")
         }
 
 @invoices_router.post("/admin/create")
