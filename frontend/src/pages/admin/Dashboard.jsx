@@ -702,6 +702,22 @@ const AdApprovalPage = () => {
                       </div>
                     )}
 
+                    {/* Click-through URL */}
+                    {ad.click_url && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <ExternalLink className="w-4 h-4 text-neutral-500" />
+                        <a 
+                          href={ad.click_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 truncate"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {ad.click_url.replace(/^https?:\/\//, '').slice(0, 35)}...
+                        </a>
+                      </div>
+                    )}
+
                     {/* Stats for active/ended ads */}
                     {(ad.status === "active" || liveStatus?.status === "ended") && (
                       <div className="flex gap-4 py-2 border-t border-neutral-800">
