@@ -110,6 +110,7 @@ subsidized_router = APIRouter(prefix="/subsidized-uptime", tags=["Subsidized Upt
 analytics_router = APIRouter(prefix="/analytics", tags=["Analytics"])
 locations_router = APIRouter(prefix="/locations", tags=["Locations"])
 radius_router = APIRouter(prefix="/radius", tags=["RADIUS"])
+mikrotik_onboard_router = APIRouter(prefix="/mikrotik-onboard", tags=["MikroTik Onboarding"])
 notifications_router = APIRouter(prefix="/notifications", tags=["Notifications"])
 settings_router = APIRouter(prefix="/settings", tags=["Settings"])
 vouchers_router = APIRouter(prefix="/vouchers", tags=["Vouchers"])
