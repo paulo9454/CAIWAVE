@@ -4413,6 +4413,11 @@ async def root():
         "domain": "www.caiwave.com"
     }
 
+# Root-level health check for Kubernetes
+@app.get("/health")
+async def root_health_check():
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
 @api_router.get("/health")
 async def health_check():
     return {
