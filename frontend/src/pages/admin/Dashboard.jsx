@@ -2164,27 +2164,6 @@ const CampaignsPage = () => {
 };
 
 // CAIWAVE TV Streams Page (ADMIN ONLY)
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(campaign)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-red-400" onClick={() => handleDelete(campaign.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// CAIWAVE TV Streams Page (ADMIN ONLY)
 const CaiwaveTVPage = () => {
   const [streams, setStreams] = useState([]);
   const [loading, setLoading] = useState(true);
