@@ -527,7 +527,6 @@ const HotspotsPage = () => {
         location_name: "",
         ward: "",
         constituency: "",
-        mikrotik_ip: "",
       });
       fetchHotspots();
     } catch (error) {
