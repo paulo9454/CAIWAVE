@@ -496,7 +496,9 @@ const HotspotsPage = () => {
 
   const fetchHotspots = async () => {
     try {
-      const response = await axios.get(`${API_URL}/hotspots`);
+      const response = await axios.get(`${API_URL}/hotspots/`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      });
       setHotspots(response.data);
     } catch (error) {
       console.error("Failed to fetch hotspots:", error);
