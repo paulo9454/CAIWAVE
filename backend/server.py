@@ -499,8 +499,9 @@ class Ad(BaseModel):
     media_size_bytes: int = 0
     duration_seconds: int = 0  # For videos
     
-    # Optional link
+    # Contact options
     click_url: Optional[str] = None
+    whatsapp_number: Optional[str] = None  # Format: 254XXXXXXXXX
     
     # Coverage selection by advertiser (validated by admin)
     targeting: AdTargeting = Field(default_factory=AdTargeting)
