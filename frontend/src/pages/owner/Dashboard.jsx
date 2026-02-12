@@ -26,25 +26,18 @@ import {
   Phone,
   Calendar,
   Zap,
-  MapPin,
-  Trophy,
-  Activity,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
+import AreaAnalyticsPage from "./AreaAnalytics";
 
 // Subscription Status Banner Component
 const SubscriptionBanner = ({ subscription, onPayNow }) => {
