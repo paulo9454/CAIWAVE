@@ -39,14 +39,19 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - Ads rotate automatically every 5 seconds
 - WhatsApp and Website click-through buttons shown for ads
 - WiFi packages displayed for purchase
-- CAIWAVE TV streams preview
 
 **Advertiser Dashboard Ad Visibility Fix:**
 - Fixed video ad preview in AdCard component
 - Added play button overlay for video ads
-- Implemented `preload="auto"` and `onCanPlay` handlers
-- Added error state handling for failed video loads
 - Video plays on hover, pauses on mouse leave
+
+**WhatsApp wa.me Links:**
+- Admin dashboard now shows WhatsApp contact links for ads with phone numbers
+- Green WhatsApp icon with clickable wa.me link format
+
+**Backend Analytics APIs Added:**
+- `GET /api/analytics/area-stats` - Area-based connection statistics
+- `GET /api/analytics/hotspot-rankings` - Hotspot performance rankings
 
 ---
 
@@ -59,13 +64,11 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 | `/api/packages/` | GET | Get WiFi packages |
 | `/api/streams/live` | GET | Get live CAIWAVE TV streams |
 
-### Paystack Payments (PRIMARY)
+### Analytics Endpoints (NEW)
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
-| `/api/paystack/config` | GET | No | Get Paystack config |
-| `/api/paystack/owner/pay-subscription` | POST | Owner | Pay subscription |
-| `/api/paystack/advertiser/pay-ad` | POST | Advertiser | Pay for ad |
-| `/api/paystack/client/pay-wifi` | POST | No | Pay for WiFi |
+| `/api/analytics/area-stats` | GET | Owner/Admin | Area-based connection stats |
+| `/api/analytics/hotspot-rankings` | GET | Owner/Admin | Hotspot performance rankings |
 
 ---
 
@@ -74,47 +77,22 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 - **Hotspot Owner**: owner@caiwave.com / owner123
 - **Advertiser**: advertiser@caiwave.com / advertiser123
 
-## Key Files
-- **Backend**: `/app/backend/server.py`
-- **Frontend Captive Portal**: `/app/frontend/src/pages/CaptivePortal.jsx`
-- **Frontend Advertiser**: `/app/frontend/src/pages/advertiser/Dashboard.jsx`
-- **Frontend Admin**: `/app/frontend/src/pages/admin/Dashboard.jsx`
-- **Frontend Owner**: `/app/frontend/src/pages/owner/Dashboard.jsx`
-
----
-
-## Testing Status (Feb 12, 2026)
-- ✅ Homepage loads correctly (no dark screen)
-- ✅ Captive Portal shows ads and WiFi packages
-- ✅ Login works for all user roles
-- ✅ Advertiser Dashboard shows stats and ad cards
-- ✅ Video ad preview with play button overlay
-- ✅ 100% frontend test pass rate
-
 ---
 
 ## Future Tasks (Backlog)
 
-### P0 - Critical
-- None (all critical issues resolved)
-
 ### P1 - High Priority
-- Add "Click to WhatsApp" wa.me link feature for ads
-- Add analytics to Hotspot Owner dashboard (area-based connection data)
+- Owner Dashboard Analytics UI (backend ready, frontend placeholder)
 - Partner Onboarding Wizard
 
 ### P2 - Medium Priority
 - Two-Factor Authentication (2FA)
 - Final admin role protection audit
 - Voucher Printing System
-- Invoice PDF/CSV Export
-- SMS notification integration
 
 ### P3 - Low Priority
 - Equipment Marketplace UI
 - System Audit Logs
-- Backend route modularization
-- Frontend component modularization
 
 ---
 
