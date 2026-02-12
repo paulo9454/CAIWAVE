@@ -196,6 +196,7 @@ const AdUploadForm = ({ onSuccess }) => {
     title: "",
     ad_type: "image",
     click_url: "",
+    whatsapp_number: "",
   });
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
