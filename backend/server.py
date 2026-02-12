@@ -3244,6 +3244,7 @@ async def upload_ad(
     ad_type: AdType = Form(...),
     package_id: str = Form(...),
     click_url: Optional[str] = Form(None),
+    whatsapp_number: Optional[str] = Form(None),
     constituencies: Optional[str] = Form(None),  # JSON array string
     counties: Optional[str] = Form(None),  # JSON array string for county/national scope
     media: UploadFile = File(...),
