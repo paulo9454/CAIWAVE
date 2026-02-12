@@ -1807,16 +1807,7 @@ const OwnerDashboard = () => {
             <Route path="mikrotik" element={<MikroTikSetupPage />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="payments" element={<PaymentsPage />} />
-            <Route
-              path="analytics"
-              element={
-                <div className="text-center py-12">
-                  <BarChart3 className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Analytics</h2>
-                  <p className="text-neutral-400">Detailed analytics coming soon</p>
-                </div>
-              }
-            />
+            <Route path="analytics" element={<AreaAnalyticsPage />} />
             <Route
               path="settings"
               element={
