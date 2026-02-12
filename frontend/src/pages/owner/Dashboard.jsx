@@ -26,16 +26,24 @@ import {
   Phone,
   Calendar,
   Zap,
+  MapPin,
+  Trophy,
+  Activity,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 // Subscription Status Banner Component
