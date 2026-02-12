@@ -9,22 +9,8 @@ import {
   BarChart3,
   Trophy,
 } from "lucide-react";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
 import { getAuthToken } from "../../lib/auth";
 import { API_URL, formatCurrency } from "../../lib/utils";
-
-const AREA_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4"];
 
 const AreaAnalyticsPage = () => {
   const [areaStats, setAreaStats] = useState(null);
@@ -63,15 +49,6 @@ const AreaAnalyticsPage = () => {
       </div>
     );
   }
-
-  const chartData = areaStats?.areas.slice(0, 6).map((area, idx) => ({
-    name: area.constituency.length > 12 ? area.constituency.slice(0, 10) + "..." : area.constituency,
-    fullName: area.constituency,
-    sessions: area.total_sessions,
-    revenue: area.total_revenue,
-    hotspots: area.hotspot_count,
-    fill: AREA_COLORS[idx % AREA_COLORS.length],
-  })) || [];
 
   return (
     <div className="space-y-6" data-testid="analytics-page">
@@ -128,92 +105,37 @@ const AreaAnalyticsPage = () => {
         </div>
       </div>
 
-      {/* Charts Grid */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Sessions by Area Bar Chart */}
-        <div className="dashboard-card">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-blue-400" />
-            Connections by Area
-          </h2>
-          {chartData.length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                  <XAxis type="number" stroke="#71717a" fontSize={12} />
-                  <YAxis 
-                    type="category" 
-                    dataKey="name" 
-                    stroke="#71717a" 
-                    fontSize={11} 
-                    width={80}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: "8px",
-                    }}
-                    formatter={(value, name) => [value.toLocaleString(), name === "sessions" ? "Sessions" : name]}
-                    labelFormatter={(label, payload) => payload[0]?.payload?.fullName || label}
-                  />
-                  <Bar dataKey="sessions" radius={[0, 4, 4, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-neutral-500">
-              No area data available
-            </div>
-          )}
-        </div>
-
-        {/* Revenue Pie Chart */}
-        <div className="dashboard-card">
-          <h2 className="font-semibold mb-4 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-400" />
-            Revenue Distribution
-          </h2>
-          {chartData.length > 0 ? (
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    dataKey="revenue"
-                    nameKey="fullName"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={{ stroke: "#525252" }}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#18181b",
-                      border: "1px solid #27272a",
-                      borderRadius: "8px",
-                    }}
-                    formatter={(value) => formatCurrency(value)}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-neutral-500">
-              No revenue data available
-            </div>
-          )}
-        </div>
+      {/* Area Progress Bars */}
+      <div className="dashboard-card">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-blue-400" />
+          Connections by Area
+        </h2>
+        {areaStats?.areas.length > 0 ? (
+          <div className="space-y-4">
+            {areaStats.areas.slice(0, 6).map((area, idx) => {
+              const maxSessions = Math.max(...areaStats.areas.map(a => a.total_sessions));
+              const percentage = maxSessions > 0 ? (area.total_sessions / maxSessions) * 100 : 0;
+              const colors = ["bg-blue-500", "bg-purple-500", "bg-green-500", "bg-yellow-500", "bg-red-500", "bg-cyan-500"];
+              return (
+                <div key={area.constituency}>
+                  <div className="flex justify-between mb-1 text-sm">
+                    <span className="font-medium">{area.constituency}</span>
+                    <span className="text-neutral-400">{area.total_sessions.toLocaleString()} sessions</span>
+                  </div>
+                  <div className="h-3 bg-neutral-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full ${colors[idx % colors.length]} rounded-full transition-all duration-500`}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-neutral-500">No area data available</div>
+        )}
       </div>
 
       {/* Area Details Table */}
@@ -234,7 +156,6 @@ const AreaAnalyticsPage = () => {
                   <th className="py-3 px-4">Active</th>
                   <th className="py-3 px-4">Sessions</th>
                   <th className="py-3 px-4">Revenue</th>
-                  <th className="py-3 px-4">Avg/Hotspot</th>
                 </tr>
               </thead>
               <tbody>
@@ -261,11 +182,6 @@ const AreaAnalyticsPage = () => {
                     <td className="py-3 px-4 font-semibold text-green-400">
                       {formatCurrency(area.total_revenue)}
                     </td>
-                    <td className="py-3 px-4 text-neutral-400">
-                      {area.hotspot_count > 0 
-                        ? Math.round(area.total_sessions / area.hotspot_count).toLocaleString() 
-                        : 0} sessions
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -281,7 +197,7 @@ const AreaAnalyticsPage = () => {
       </div>
 
       {/* Selected Area Ward Details */}
-      {selectedArea && selectedArea.wards.length > 0 && (
+      {selectedArea && selectedArea.wards && selectedArea.wards.length > 0 && (
         <div className="dashboard-card">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <Activity className="w-5 h-5 text-blue-400" />
@@ -318,7 +234,7 @@ const AreaAnalyticsPage = () => {
       )}
 
       {/* Top Performing Hotspots */}
-      {rankings?.rankings.length > 0 && (
+      {rankings?.rankings && rankings.rankings.length > 0 && (
         <div className="dashboard-card">
           <h2 className="font-semibold mb-4 flex items-center gap-2">
             <Trophy className="w-5 h-5 text-yellow-400" />
