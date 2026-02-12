@@ -4019,6 +4019,157 @@ class RADIUSConfigUpdate(BaseModel):
     radius_acct_port: int = 1813
     radius_coa_port: int = 3799
 
+# RADIUS Authentication Models (for FreeRADIUS REST module)
+class RADIUSAuthorizeRequest(BaseModel):
+    username: str
+    password: str = ""
+    nas_ip: str = ""
+    called_station: str = ""
+
+class RADIUSAccountingRequest(BaseModel):
+    username: str
+    session_id: str = ""
+    status_type: str = ""  # Start, Stop, Interim-Update
+    nas_ip: str = ""
+    session_time: int = 0
+    input_octets: int = 0
+    output_octets: int = 0
+
+@radius_router.post("/authorize")
+async def radius_authorize(request: RADIUSAuthorizeRequest):
+    """FreeRADIUS calls this endpoint to authenticate WiFi users"""
+    
+    # Find active WiFi session with these credentials
+    session = await db.wifi_sessions.find_one({
+        "username": request.username,
+        "status": {"$in": ["active", "pending"]}
+    }, {"_id": 0})
+    
+    if not session:
+        return {"reply": "Access-Reject", "reply-message": "Invalid credentials or no active session"}
+    
+    # Verify password
+    if session.get("password") and session.get("password") != request.password:
+        return {"reply": "Access-Reject", "reply-message": "Invalid password"}
+    
+    # Check if session expired
+    if session.get("expires_at"):
+        expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
+        if expires_at < datetime.now(timezone.utc):
+            await db.wifi_sessions.update_one(
+                {"username": request.username},
+                {"$set": {"status": "expired"}}
+            )
+            return {"reply": "Access-Reject", "reply-message": "Session expired"}
+        
+        # Calculate remaining time
+        remaining_seconds = int((expires_at - datetime.now(timezone.utc)).total_seconds())
+    else:
+        remaining_seconds = 3600  # Default 1 hour
+    
+    # Get package details for rate limit
+    rate_limit = session.get("rate_limit", "2M/2M")
+    
+    # Return access granted with session attributes
+    return {
+        "reply": "Access-Accept",
+        "Session-Timeout": remaining_seconds,
+        "Acct-Interim-Interval": 300,
+        "Mikrotik-Rate-Limit": rate_limit,
+        "Reply-Message": f"Welcome! Session valid for {remaining_seconds // 60} minutes"
+    }
+
+@radius_router.post("/accounting")
+async def radius_accounting(request: RADIUSAccountingRequest):
+    """FreeRADIUS calls this to track session usage (start/stop/interim)"""
+    
+    session = await db.wifi_sessions.find_one({"username": request.username}, {"_id": 0})
+    
+    if not session:
+        return {"status": "error", "message": "Session not found"}
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    if request.status_type.lower() in ["start", "1"]:
+        # Session started - user connected
+        await db.wifi_sessions.update_one(
+            {"username": request.username},
+            {"$set": {
+                "radius_session_id": request.session_id,
+                "connected_at": now,
+                "nas_ip": request.nas_ip,
+                "status": "connected"
+            }}
+        )
+        
+        # Increment impression for ads shown during connection
+        await db.ads.update_many(
+            {"status": "active"},
+            {"$inc": {"impressions": 1}}
+        )
+        
+    elif request.status_type.lower() in ["stop", "2"]:
+        # Session ended - user disconnected
+        await db.wifi_sessions.update_one(
+            {"username": request.username},
+            {"$set": {
+                "disconnected_at": now,
+                "total_session_time": request.session_time,
+                "total_upload_bytes": request.input_octets,
+                "total_download_bytes": request.output_octets,
+                "status": "completed"
+            }}
+        )
+        
+        # Update hotspot statistics
+        if session.get("hotspot_id"):
+            await db.hotspots.update_one(
+                {"id": session["hotspot_id"]},
+                {"$inc": {
+                    "total_sessions": 1,
+                    "total_data_used": request.input_octets + request.output_octets
+                }}
+            )
+        
+    elif request.status_type.lower() in ["interim-update", "3"]:
+        # Periodic update during active session
+        await db.wifi_sessions.update_one(
+            {"username": request.username},
+            {"$set": {
+                "current_session_time": request.session_time,
+                "current_upload_bytes": request.input_octets,
+                "current_download_bytes": request.output_octets,
+                "last_accounting_update": now
+            }}
+        )
+    
+    return {"status": "ok", "message": f"Accounting {request.status_type} processed"}
+
+@radius_router.post("/post-auth")
+async def radius_post_auth(request: dict):
+    """Called after FreeRADIUS makes authentication decision - for logging"""
+    log_entry = {
+        "id": str(uuid4()),
+        "username": request.get("username", "unknown"),
+        "nas_ip": request.get("nas_ip", ""),
+        "session_id": request.get("session_id", ""),
+        "result": request.get("result", "unknown"),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    await db.radius_auth_logs.insert_one(log_entry)
+    return {"status": "ok"}
+
+@radius_router.get("/auth-logs")
+async def get_radius_auth_logs(
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN])),
+    limit: int = 100
+):
+    """Get recent RADIUS authentication logs"""
+    logs = await db.radius_auth_logs.find(
+        {}, {"_id": 0}
+    ).sort("timestamp", -1).limit(limit).to_list(limit)
+    return logs
+
 @radius_router.get("/config")
 async def get_radius_config(user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))):
     """Get RADIUS/FreeRADIUS configuration status"""
