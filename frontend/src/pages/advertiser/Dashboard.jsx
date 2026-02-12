@@ -641,6 +641,8 @@ const AdUploadForm = ({ onSuccess }) => {
 
 // Ad Card Component
 const AdCard = ({ ad, onPayClick, onDelete }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const badge = getStatusBadge(ad.status);
   const baseUrl = API_URL.replace('/api', '');
   const mediaUrl = ad.media_url ? `${baseUrl}${ad.media_url}` : null;
@@ -658,16 +660,34 @@ const AdCard = ({ ad, onPayClick, onDelete }) => {
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           ) : (
-            <video 
-              src={mediaUrl} 
-              className="w-full h-full object-cover"
-              muted
-              preload="metadata"
-              playsInline
-              onMouseEnter={(e) => e.target.play().catch(() => {})}
-              onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
-              onLoadedMetadata={(e) => { e.target.currentTime = 0.1; }}
-            />
+            <div className="relative w-full h-full group">
+              <video 
+                src={mediaUrl} 
+                className="w-full h-full object-cover bg-neutral-800"
+                muted
+                preload="auto"
+                playsInline
+                onCanPlay={(e) => { if (!isPlaying) e.target.currentTime = 0.1; }}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onError={() => setVideoError(true)}
+                onMouseEnter={(e) => e.target.play().catch(() => {})}
+                onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0.1; }}
+              />
+              {/* Video play overlay */}
+              {!isPlaying && !videoError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
+                  <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-sm">
+                    <Play className="w-7 h-7 text-white ml-1" fill="white" />
+                  </div>
+                </div>
+              )}
+              {videoError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900">
+                  <FileVideo className="w-12 h-12 text-neutral-600" />
+                </div>
+              )}
+            </div>
           )
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-neutral-800 to-neutral-900">
