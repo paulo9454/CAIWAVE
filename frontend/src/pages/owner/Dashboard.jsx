@@ -510,7 +510,7 @@ const HotspotsPage = () => {
     try {
       const user = getUser();
       await axios.post(
-        `${API_URL}/hotspots`,
+        `${API_URL}/hotspots/`,
         {
           ...formData,
           owner_id: user.id,
