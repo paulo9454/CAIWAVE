@@ -12,7 +12,7 @@ import requests
 import os
 import json
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave-adserve.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://adspot-wifi.preview.emergentagent.com')
 
 # Test credentials
 ADMIN_EMAIL = "admin@caiwave.com"
