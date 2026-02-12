@@ -28,6 +28,7 @@ import {
   Package,
   MapPin,
   CreditCard,
+  MessageCircle,
   ChevronRight,
   Phone,
   Building2,
