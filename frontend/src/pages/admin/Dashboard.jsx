@@ -720,6 +720,22 @@ const AdApprovalPage = () => {
                       </div>
                     )}
 
+                    {/* WhatsApp Contact */}
+                    {ad.whatsapp_number && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <MessageCircle className="w-4 h-4 text-green-500" />
+                        <a 
+                          href={`https://wa.me/${ad.whatsapp_number}`}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-green-400 hover:text-green-300"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          +{ad.whatsapp_number}
+                        </a>
+                      </div>
+                    )}
+
                     {/* Stats for active/ended ads */}
                     {(ad.status === "active" || liveStatus?.status === "ended") && (
                       <div className="flex gap-4 py-2 border-t border-neutral-800">
