@@ -37,7 +37,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import AreaAnalyticsPage from "./AreaAnalytics";
 
 // Subscription Status Banner Component
 const SubscriptionBanner = ({ subscription, onPayNow }) => {
