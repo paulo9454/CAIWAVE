@@ -4993,6 +4993,114 @@ async def get_hotspot_revenue(
         "total_payments": len(payments)
     }
 
+@analytics_router.get("/area-stats")
+async def get_area_stats(user: dict = Depends(get_current_user)):
+    """Get area-based connection statistics for hotspot owners"""
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        # Get owner's hotspots
+        hotspots = await db.hotspots.find(
+            {"owner_id": user["id"]}, 
+            {"_id": 0}
+        ).to_list(1000)
+    elif user["role"] == UserRole.SUPER_ADMIN.value:
+        # Admin sees all hotspots
+        hotspots = await db.hotspots.find({}, {"_id": 0}).to_list(1000)
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Group by constituency/ward
+    area_stats = {}
+    for h in hotspots:
+        constituency = h.get("constituency", "Unknown")
+        ward = h.get("ward", "Unknown")
+        area_key = f"{constituency}"
+        
+        if area_key not in area_stats:
+            area_stats[area_key] = {
+                "constituency": constituency,
+                "hotspot_count": 0,
+                "total_sessions": 0,
+                "total_revenue": 0,
+                "active_hotspots": 0,
+                "wards": {}
+            }
+        
+        area_stats[area_key]["hotspot_count"] += 1
+        area_stats[area_key]["total_sessions"] += h.get("total_sessions", 0)
+        area_stats[area_key]["total_revenue"] += h.get("total_revenue", 0)
+        if h.get("status") == HotspotStatus.ACTIVE.value:
+            area_stats[area_key]["active_hotspots"] += 1
+        
+        # Track ward-level stats
+        if ward not in area_stats[area_key]["wards"]:
+            area_stats[area_key]["wards"][ward] = {
+                "ward": ward,
+                "hotspot_count": 0,
+                "total_sessions": 0,
+                "total_revenue": 0
+            }
+        area_stats[area_key]["wards"][ward]["hotspot_count"] += 1
+        area_stats[area_key]["wards"][ward]["total_sessions"] += h.get("total_sessions", 0)
+        area_stats[area_key]["wards"][ward]["total_revenue"] += h.get("total_revenue", 0)
+    
+    # Convert to list sorted by sessions (most active areas first)
+    result = sorted(
+        area_stats.values(), 
+        key=lambda x: x["total_sessions"], 
+        reverse=True
+    )
+    
+    # Convert ward dicts to lists
+    for area in result:
+        area["wards"] = sorted(
+            area["wards"].values(),
+            key=lambda x: x["total_sessions"],
+            reverse=True
+        )
+    
+    return {
+        "areas": result,
+        "total_areas": len(result),
+        "total_hotspots": sum(a["hotspot_count"] for a in result),
+        "total_sessions": sum(a["total_sessions"] for a in result),
+        "total_revenue": sum(a["total_revenue"] for a in result)
+    }
+
+@analytics_router.get("/hotspot-rankings")
+async def get_hotspot_rankings(user: dict = Depends(get_current_user)):
+    """Get hotspot performance rankings for owner dashboard"""
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        hotspots = await db.hotspots.find(
+            {"owner_id": user["id"]}, 
+            {"_id": 0}
+        ).to_list(1000)
+    elif user["role"] == UserRole.SUPER_ADMIN.value:
+        hotspots = await db.hotspots.find({}, {"_id": 0}).to_list(1000)
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Sort by sessions (most connections first)
+    ranked = sorted(hotspots, key=lambda x: x.get("total_sessions", 0), reverse=True)
+    
+    return {
+        "rankings": [
+            {
+                "rank": i + 1,
+                "id": h["id"],
+                "name": h.get("name", "Unknown"),
+                "location_name": h.get("location_name", ""),
+                "constituency": h.get("constituency", "Unknown"),
+                "ward": h.get("ward", "Unknown"),
+                "total_sessions": h.get("total_sessions", 0),
+                "total_revenue": h.get("total_revenue", 0),
+                "status": h.get("status", "unknown"),
+                "is_active": h.get("is_active", False)
+            }
+            for i, h in enumerate(ranked[:20])  # Top 20
+        ],
+        "total_hotspots": len(hotspots)
+    }
+
 # ==================== Settings Routes ====================
 
 @settings_router.get("/")
