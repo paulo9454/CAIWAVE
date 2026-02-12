@@ -510,10 +510,16 @@ const HotspotsPage = () => {
     e.preventDefault();
     try {
       const user = getUser();
-      await axios.post(`${API_URL}/hotspots`, {
-        ...formData,
-        owner_id: user.id,
-      });
+      await axios.post(
+        `${API_URL}/hotspots`,
+        {
+          ...formData,
+          owner_id: user.id,
+        },
+        {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        }
+      );
       toast.success("Hotspot created successfully");
       setShowForm(false);
       setFormData({
@@ -526,7 +532,7 @@ const HotspotsPage = () => {
       });
       fetchHotspots();
     } catch (error) {
-      toast.error("Failed to create hotspot");
+      toast.error(error.response?.data?.detail || "Failed to create hotspot");
     }
   };
 
