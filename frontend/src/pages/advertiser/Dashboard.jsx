@@ -662,8 +662,11 @@ const AdCard = ({ ad, onPayClick, onDelete }) => {
               src={mediaUrl} 
               className="w-full h-full object-cover"
               muted
-              onMouseEnter={(e) => e.target.play()}
+              preload="metadata"
+              playsInline
+              onMouseEnter={(e) => e.target.play().catch(() => {})}
               onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
+              onLoadedMetadata={(e) => { e.target.currentTime = 0.1; }}
             />
           )
         ) : (
