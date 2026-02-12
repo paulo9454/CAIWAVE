@@ -330,7 +330,7 @@ const AdUploadForm = ({ onSuccess }) => {
         setSelectedPackage(null);
         setSelectedCounty("");
         setSelectedConstituencies([]);
-        setFormData({ title: "", ad_type: "image", click_url: "" });
+        setFormData({ title: "", ad_type: "image", click_url: "", whatsapp_number: "" });
         setFile(null);
         setPreview(null);
         if (onSuccess) onSuccess();
