@@ -3364,6 +3364,7 @@ async def upload_ad(
         media_size_bytes=file_size,
         duration_seconds=duration_seconds,
         click_url=click_url,
+        whatsapp_number=whatsapp_number,
         targeting=targeting,
         status=AdStatus.PENDING_APPROVAL,
         is_active=False
