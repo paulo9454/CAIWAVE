@@ -1,4 +1,4 @@
-# CAIWAVE Wi-Fi Hotspot Platform - PRD v9.0
+# CAIWAVE Wi-Fi Hotspot Platform - PRD v9.1
 
 ## Project Overview
 Production-ready Wi-Fi hotspot billing, advertising, and premium live access platform (CAIWAVE). Features ISP-grade MikroTik integration, Package-Based Advertising System, admin-controlled campaigns, CAIWAVE TV streaming service, Subscription & Billing System, and **Paystack payments (M-Pesa + Card)**.
@@ -20,55 +20,69 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 
 ---
 
-## What's Been Implemented
+## Complete Feature List
 
-### Phase 1-7: Previously Completed ✅
-- Branding (CAIWAVE)
-- Admin Features (Campaigns, CAIWAVE TV, Subsidized Uptime)
-- Paystack Payments (M-Pesa + Card)
-- MikroTik Integration
-- Package-Based Advertising
-- Subscription & Billing
-- Enhanced Ad Management
+### ✅ MikroTik & RADIUS Integration
+| Feature | Status | Endpoint |
+|---------|--------|----------|
+| Router Registration | ✅ Done | `POST /api/mikrotik/register-router` |
+| Config Script Generation | ✅ Done | Auto-generated on registration |
+| RADIUS Authorization | ✅ Done | `POST /api/radius/authorize` |
+| RADIUS Accounting | ✅ Done | `POST /api/radius/accounting` |
+| Post-Auth Logging | ✅ Done | `POST /api/radius/post-auth` |
+| NAS Client Management | ✅ Done | `/api/radius/nas-clients` |
+| Auth Logs | ✅ Done | `GET /api/radius/auth-logs` |
 
-### Phase 8: Captive Portal & Ad Visibility Fixes ✅ (Feb 12, 2026)
+### ✅ Captive Portal & Ads
+| Feature | Status |
+|---------|--------|
+| Ad Display (Images) | ✅ Working |
+| Ad Display (Videos) | ✅ Working |
+| Auto-Rotation (5s) | ✅ Working |
+| WhatsApp Click-to-Chat | ✅ Working |
+| Website Click-Through | ✅ Working |
+| WiFi Package Purchase | ✅ Working |
+| CAIWAVE TV Preview | ✅ Working |
 
-**Captive Portal Implementation:**
-- Fixed API endpoint from `/api/ads/public/active` to `/api/ads/active`
-- Captive Portal at `/portal/:hotspotId` now displays active ads
-- Ads rotate automatically every 5 seconds
-- WhatsApp and Website click-through buttons shown for ads
-- WiFi packages displayed for purchase
+### ✅ Payment System (Paystack)
+| Feature | Status |
+|---------|--------|
+| M-Pesa Integration | ✅ Live |
+| Card Payments | ✅ Live |
+| Owner Subscriptions | ✅ Working |
+| Advertiser Payments | ✅ Working |
+| WiFi Package Sales | ✅ Working |
 
-**Advertiser Dashboard Ad Visibility Fix:**
-- Fixed video ad preview in AdCard component
-- Added play button overlay for video ads
-- Video plays on hover, pauses on mouse leave
-
-**WhatsApp wa.me Links:**
-- Admin dashboard now shows WhatsApp contact links for ads with phone numbers
-- Green WhatsApp icon with clickable wa.me link format
-
-**Backend Analytics APIs Added:**
-- `GET /api/analytics/area-stats` - Area-based connection statistics
-- `GET /api/analytics/hotspot-rankings` - Hotspot performance rankings
+### ✅ User Dashboards
+| Dashboard | Features |
+|-----------|----------|
+| Admin | Hotspots, Users, Ads, Campaigns, CAIWAVE TV, Settings |
+| Owner | Hotspots, MikroTik Setup, Billing, Payments, Analytics (placeholder) |
+| Advertiser | Ad Creation, Performance Stats, Payment History |
 
 ---
 
 ## Key API Endpoints
 
-### Public Endpoints
+### RADIUS Endpoints (FreeRADIUS Integration)
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/ads/active` | GET | Get active ads for captive portal |
-| `/api/packages/` | GET | Get WiFi packages |
-| `/api/streams/live` | GET | Get live CAIWAVE TV streams |
+| `/api/radius/authorize` | POST | Authenticate WiFi user |
+| `/api/radius/accounting` | POST | Track session start/stop/update |
+| `/api/radius/post-auth` | POST | Log authentication results |
+| `/api/radius/auth-logs` | GET | View auth logs (admin) |
+| `/api/radius/nas-clients` | GET/POST | Manage NAS clients |
 
-### Analytics Endpoints (NEW)
-| Endpoint | Method | Auth | Description |
-|----------|--------|------|-------------|
-| `/api/analytics/area-stats` | GET | Owner/Admin | Area-based connection stats |
-| `/api/analytics/hotspot-rankings` | GET | Owner/Admin | Hotspot performance rankings |
+### Analytics Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/analytics/area-stats` | GET | Area-based connection stats |
+| `/api/analytics/hotspot-rankings` | GET | Hotspot performance rankings |
+
+---
+
+## Documentation
+- **FreeRADIUS Setup Guide**: `/app/docs/FREERADIUS_SETUP.md`
 
 ---
 
@@ -82,13 +96,13 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 ## Future Tasks (Backlog)
 
 ### P1 - High Priority
-- Owner Dashboard Analytics UI (backend ready, frontend placeholder)
+- Owner Dashboard Analytics UI (backend ready)
 - Partner Onboarding Wizard
 
 ### P2 - Medium Priority
 - Two-Factor Authentication (2FA)
-- Final admin role protection audit
 - Voucher Printing System
+- SMS Notifications
 
 ### P3 - Low Priority
 - Equipment Marketplace UI
@@ -96,4 +110,4 @@ Production-ready Wi-Fi hotspot billing, advertising, and premium live access pla
 
 ---
 
-## Last Updated: February 12, 2026 - Version 9.0
+## Last Updated: February 12, 2026 - Version 9.1
