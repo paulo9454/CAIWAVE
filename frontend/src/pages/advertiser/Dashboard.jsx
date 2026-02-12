@@ -306,6 +306,7 @@ const AdUploadForm = ({ onSuccess }) => {
     uploadData.append("ad_type", formData.ad_type);
     uploadData.append("package_id", selectedPackage.id);
     uploadData.append("click_url", formData.click_url || "");
+    uploadData.append("whatsapp_number", formData.whatsapp_number ? `254${formData.whatsapp_number}` : "");
     uploadData.append("media", file);
     
     // Add coverage data
