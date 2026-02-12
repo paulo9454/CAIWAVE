@@ -54,7 +54,7 @@ const CaptivePortal = () => {
       setPackages(packagesRes.data.filter(p => p.is_active));
 
       // Fetch active ads
-      const adsRes = await axios.get(`${API_URL}/ads/public/active`);
+      const adsRes = await axios.get(`${API_URL}/ads/active`);
       setAds(adsRes.data || []);
 
       // Fetch live streams
