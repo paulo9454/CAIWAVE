@@ -574,7 +574,7 @@ const AdUploadForm = ({ onSuccess }) => {
 
             {/* Optional Click URL */}
             <div>
-              <label className="block text-sm text-neutral-400 mb-2">Click-through URL (optional)</label>
+              <label className="block text-sm text-neutral-400 mb-2">Website URL (optional)</label>
               <input
                 type="url"
                 value={formData.click_url}
@@ -583,6 +583,23 @@ const AdUploadForm = ({ onSuccess }) => {
                 placeholder="https://your-website.com"
                 data-testid="ad-url-input"
               />
+            </div>
+
+            {/* WhatsApp Number */}
+            <div>
+              <label className="block text-sm text-neutral-400 mb-2">WhatsApp Number (optional but recommended)</label>
+              <div className="flex items-center bg-neutral-900 border border-neutral-700 rounded-lg">
+                <span className="px-4 text-neutral-500">+254</span>
+                <input
+                  type="tel"
+                  value={formData.whatsapp_number}
+                  onChange={(e) => setFormData({ ...formData, whatsapp_number: e.target.value.replace(/\D/g, '').slice(0, 9) })}
+                  className="flex-1 bg-transparent px-2 py-3 focus:outline-none"
+                  placeholder="7XXXXXXXX"
+                  data-testid="ad-whatsapp-input"
+                />
+              </div>
+              <p className="text-xs text-neutral-500 mt-1">Clients can click to chat with you directly on WhatsApp</p>
             </div>
 
             <div className="flex justify-between">
