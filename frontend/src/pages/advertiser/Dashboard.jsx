@@ -758,44 +758,32 @@ const AdCard = ({ ad, onPayClick, onDelete }) => {
             <p className="text-sm text-neutral-300 mt-1">{ad.rejection_reason}</p>
           </div>
         )}
-          
-          {/* Actions */}
-          <div className="flex gap-2 mt-4">
-            {ad.status === "approved" && (
-              <Button
-                size="sm"
-                onClick={() => onPayClick(ad)}
-                className="bg-green-600 hover:bg-green-700"
-                data-testid={`pay-btn-${ad.id}`}
-              >
-                <CreditCard className="w-4 h-4 mr-2" />
-                Pay Now
-              </Button>
-            )}
-            {ad.status === "pending_approval" && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onDelete(ad.id)}
-                className="border-red-500/50 text-red-400 hover:bg-red-500/10"
-                data-testid={`delete-btn-${ad.id}`}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Cancel
-              </Button>
-            )}
-            {ad.click_url && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => window.open(ad.click_url, '_blank')}
-                className="border-neutral-700"
-              >
-                <ExternalLink className="w-4 h-4 mr-2" />
-                View Link
-              </Button>
-            )}
-          </div>
+        
+        {/* Actions */}
+        <div className="flex gap-2 pt-3 border-t border-neutral-800">
+          {ad.status === "approved" && (
+            <Button
+              size="sm"
+              onClick={() => onPayClick(ad)}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid={`pay-btn-${ad.id}`}
+            >
+              <CreditCard className="w-4 h-4 mr-2" />
+              Pay Now
+            </Button>
+          )}
+          {ad.status === "pending_approval" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onDelete(ad.id)}
+              className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+              data-testid={`delete-btn-${ad.id}`}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Cancel
+            </Button>
+          )}
         </div>
       </div>
     </div>
