@@ -578,7 +578,7 @@ const HotspotsPage = () => {
                 value={formData.ssid}
                 onChange={(e) => setFormData({ ...formData, ssid: e.target.value })}
                 className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="e.g., cainet-shop_FREE WIFI"
+                placeholder="e.g., CAIWAVE_Shop"
                 required
               />
             </div>
@@ -595,20 +595,11 @@ const HotspotsPage = () => {
                 required
               />
             </div>
-            <div>
-              <label className="text-sm text-neutral-400">MikroTik IP (Optional)</label>
-              <input
-                type="text"
-                value={formData.mikrotik_ip}
-                onChange={(e) =>
-                  setFormData({ ...formData, mikrotik_ip: e.target.value })
-                }
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md font-mono"
-                placeholder="192.168.88.1"
-              />
-            </div>
           </div>
-          <div className="flex gap-3">
+          <p className="text-sm text-neutral-500 mt-2">
+            After creating your hotspot, go to "MikroTik Setup" to configure your router.
+          </p>
+          <div className="flex gap-3 mt-4">
             <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
               Create Hotspot
             </Button>
