@@ -1085,7 +1085,7 @@ const PaymentsPage = () => {
 
   const fetchPayments = async () => {
     try {
-      const response = await axios.get(`${API_URL}/payments`);
+      const response = await axios.get(`${API_URL}/payments/`);
       setPayments(response.data);
     } catch (error) {
       console.error("Failed to fetch payments:", error);
