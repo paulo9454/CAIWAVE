@@ -1477,27 +1477,17 @@ RADIUS_ACCT_PORT=1813`}
           <div className="dashboard-card">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="font-semibold text-lg">MikroTik NAS Clients</h3>
-                <p className="text-neutral-400 text-sm">Registered routers that can authenticate with RADIUS</p>
+                <h3 className="font-semibold text-lg">Registered RADIUS Clients</h3>
+                <p className="text-neutral-400 text-sm">All MikroTik routers registered by hotspot owners</p>
               </div>
-              <Button onClick={() => { setShowAddNAS(true); setEditingNAS(null); setNasForm({ name: "", ip_address: "", secret: "", nastype: "mikrotik", location: "", description: "" }); }} data-testid="add-nas-btn">
-                <Plus className="w-4 h-4 mr-2" /> Add Router
-              </Button>
             </div>
 
-            {showAddNAS && (
-              <div className="bg-neutral-900 rounded-lg p-4 mb-4">
-                <h4 className="font-medium mb-4">{editingNAS ? "Edit NAS Client" : "Add New MikroTik Router"}</h4>
-                <form onSubmit={handleAddNAS} className="space-y-4">
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-neutral-400 mb-1">Router Name*</label>
-                      <input type="text" value={nasForm.name} onChange={(e) => setNasForm({ ...nasForm, name: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="Office Router" />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-neutral-400 mb-1">IP Address*</label>
-                      <input type="text" value={nasForm.ip_address} onChange={(e) => setNasForm({ ...nasForm, ip_address: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="192.168.88.1" />
-                    </div>
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4 mb-4">
+              <p className="text-blue-400 text-sm">
+                <strong>Note:</strong> Hotspot owners register their MikroTik routers from their dashboard. 
+                As admin, you can view and manage all registered routers here.
+              </p>
+            </div>
                     <div>
                       <label className="block text-sm text-neutral-400 mb-1">RADIUS Secret*</label>
                       <input type="text" value={nasForm.secret} onChange={(e) => setNasForm({ ...nasForm, secret: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="shared_secret" />
