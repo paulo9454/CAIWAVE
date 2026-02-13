@@ -1339,43 +1339,57 @@ const IntegrationSettingsPage = () => {
         ))}
       </div>
 
-      {/* M-Pesa Tab */}
-      {activeTab === "mpesa" && (
+      {/* Paystack Tab */}
+      {activeTab === "paystack" && (
         <div className="space-y-6">
           <div className="dashboard-card">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-500" />
+                <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center">
+                  <CreditCard className="w-6 h-6 text-blue-500" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg">M-Pesa Daraja API</h3>
-                  <p className="text-neutral-400 text-sm">Safaricom STK Push for mobile payments</p>
+                  <h3 className="font-semibold text-lg">Paystack Payment Gateway</h3>
+                  <p className="text-neutral-400 text-sm">Accept M-Pesa, Cards, and Bank payments</p>
                 </div>
               </div>
               <span className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                mpesaStatus?.configured 
+                paystackStatus?.configured 
                   ? "bg-green-500/10 text-green-400 border border-green-500/30" 
                   : "bg-yellow-500/10 text-yellow-400 border border-yellow-500/30"
               }`}>
-                {mpesaStatus?.configured ? "✓ Configured" : "⚠ Not Configured"}
+                {paystackStatus?.configured ? "✓ Live Mode" : "⚠ Not Configured"}
               </span>
             </div>
 
-            {mpesaStatus?.configured ? (
+            {paystackStatus?.configured ? (
               <div className="bg-neutral-900 rounded-lg p-4 space-y-3">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <span className="text-neutral-500 text-sm">Environment</span>
-                    <p className="font-medium">{mpesaStatus.environment || "sandbox"}</p>
+                    <p className="font-medium text-green-400">{paystackStatus.environment || "live"}</p>
                   </div>
                   <div>
-                    <span className="text-neutral-500 text-sm">Shortcode</span>
-                    <p className="font-medium">{mpesaStatus.shortcode || "Not set"}</p>
+                    <span className="text-neutral-500 text-sm">Public Key</span>
+                    <p className="font-medium font-mono text-xs">{paystackStatus.public_key?.slice(0, 20)}...</p>
                   </div>
                 </div>
                 <div className="pt-2 border-t border-neutral-800">
-                  <span className="text-green-400 text-sm">✓ Ready to accept payments</span>
+                  <span className="text-green-400 text-sm">✓ Ready to accept M-Pesa, Cards & Bank payments</span>
+                </div>
+                <div className="grid md:grid-cols-3 gap-3 pt-2">
+                  <div className="bg-green-500/10 rounded-lg p-3 text-center">
+                    <p className="text-green-400 font-medium">M-Pesa</p>
+                    <p className="text-xs text-neutral-400">STK Push</p>
+                  </div>
+                  <div className="bg-blue-500/10 rounded-lg p-3 text-center">
+                    <p className="text-blue-400 font-medium">Cards</p>
+                    <p className="text-xs text-neutral-400">Visa, Mastercard</p>
+                  </div>
+                  <div className="bg-purple-500/10 rounded-lg p-3 text-center">
+                    <p className="text-purple-400 font-medium">Bank</p>
+                    <p className="text-xs text-neutral-400">Direct Transfer</p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -1383,9 +1397,8 @@ const IntegrationSettingsPage = () => {
                 <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
                   <h4 className="font-medium text-blue-400 mb-2">Setup Instructions</h4>
                   <ol className="text-sm text-neutral-400 space-y-2 list-decimal list-inside">
-                    <li>Go to <a href="https://developer.safaricom.co.ke" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Safaricom Daraja Portal</a></li>
-                    <li>Create an app to get Consumer Key & Secret</li>
-                    <li>Get Lipa Na M-Pesa credentials (Shortcode & Passkey)</li>
+                    <li>Go to <a href="https://dashboard.paystack.com" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">Paystack Dashboard</a></li>
+                    <li>Get your API keys from Settings → API Keys</li>
                     <li>Add credentials to <code className="bg-neutral-800 px-1 rounded">backend/.env</code></li>
                   </ol>
                 </div>
@@ -1393,21 +1406,11 @@ const IntegrationSettingsPage = () => {
                 <div className="bg-neutral-900 rounded-lg p-4">
                   <p className="text-neutral-400 text-sm mb-2">Required environment variables:</p>
                   <pre className="text-xs text-green-400 font-mono bg-neutral-950 p-3 rounded overflow-x-auto">
-{`# M-Pesa Daraja Configuration
-MPESA_ENV=sandbox
-MPESA_CONSUMER_KEY=your_consumer_key
-MPESA_CONSUMER_SECRET=your_consumer_secret
-MPESA_SHORTCODE=174379
-MPESA_PASSKEY=your_passkey
-MPESA_CALLBACK_URL=https://your-domain.com/api/mpesa/callback`}
+{`# Paystack Configuration
+PAYSTACK_SECRET_KEY=sk_live_xxxxx
+PAYSTACK_PUBLIC_KEY=pk_live_xxxxx
+PAYSTACK_ENVIRONMENT=live`}
                   </pre>
-                </div>
-
-                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
-                  <p className="text-yellow-400 text-sm">
-                    <strong>Note:</strong> For testing, use ngrok to create a public HTTPS callback URL:
-                    <code className="ml-2 bg-neutral-800 px-2 py-0.5 rounded">ngrok http 8001</code>
-                  </p>
                 </div>
               </div>
             )}
@@ -1415,7 +1418,7 @@ MPESA_CALLBACK_URL=https://your-domain.com/api/mpesa/callback`}
         </div>
       )}
 
-      {/* RADIUS / MikroTik Tab */}
+      {/* RADIUS Server Tab */}
       {activeTab === "radius" && (
         <div className="space-y-6">
           {/* RADIUS Status */}
