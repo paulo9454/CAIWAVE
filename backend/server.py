@@ -97,7 +97,8 @@ RADIUS_ACCT_PORT = int(os.environ.get('RADIUS_ACCT_PORT', '1813'))
 app = FastAPI(
     title="CAIWAVE Wi-Fi Hotspot Billing Platform", 
     version="2.1.0",
-    description="ISP-grade Wi-Fi hotspot billing and advertising platform for www.caiwave.com"
+    description="ISP-grade Wi-Fi hotspot billing and advertising platform for www.caiwave.com",
+    redirect_slashes=False
 )
 
 # Mount static files for ad media UNDER /api prefix for proper routing
