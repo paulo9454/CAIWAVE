@@ -1186,8 +1186,8 @@ const RevenueSettingsPage = () => {
 
 // Integration Settings Page
 const IntegrationSettingsPage = () => {
-  const [activeTab, setActiveTab] = useState("mpesa");
-  const [mpesaStatus, setMpesaStatus] = useState(null);
+  const [activeTab, setActiveTab] = useState("paystack");
+  const [paystackStatus, setPaystackStatus] = useState(null);
   const [radiusConfig, setRadiusConfig] = useState(null);
   const [nasClients, setNasClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1209,8 +1209,8 @@ const IntegrationSettingsPage = () => {
 
   const fetchAllConfigs = async () => {
     try {
-      const [mpesa, radius, nas] = await Promise.all([
-        axios.get(`${API_URL}/mpesa/config-status`, {
+      const [paystack, radius, nas] = await Promise.all([
+        axios.get(`${API_URL}/paystack/config`, {
           headers: { Authorization: `Bearer ${getAuthToken()}` },
         }).catch(() => ({ data: { configured: false } })),
         axios.get(`${API_URL}/radius/config`, {
@@ -1220,7 +1220,7 @@ const IntegrationSettingsPage = () => {
           headers: { Authorization: `Bearer ${getAuthToken()}` },
         }).catch(() => ({ data: [] })),
       ]);
-      setMpesaStatus(mpesa.data);
+      setPaystackStatus(paystack.data);
       setRadiusConfig(radius.data);
       setNasClients(nas.data);
     } catch (error) {
