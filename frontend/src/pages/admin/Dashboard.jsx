@@ -1320,8 +1320,8 @@ const IntegrationSettingsPage = () => {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-neutral-800 pb-2">
         {[
-          { id: "mpesa", label: "M-Pesa Daraja", icon: DollarSign },
-          { id: "radius", label: "MikroTik / RADIUS", icon: Radio },
+          { id: "paystack", label: "Paystack Payments", icon: CreditCard },
+          { id: "radius", label: "RADIUS Server", icon: Radio },
           { id: "sms", label: "SMS Gateway", icon: Bell },
         ].map((tab) => (
           <button
