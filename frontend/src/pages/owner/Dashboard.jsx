@@ -250,7 +250,7 @@ const DashboardOverview = () => {
       
       const [statsRes, hotspotsRes, subscriptionRes] = await Promise.all([
         axios.get(`${API_URL}/analytics/dashboard`, { headers }),
-        axios.get(`${API_URL}/hotspots`, { headers }),
+        axios.get(`${API_URL}/hotspots/`, { headers }),
         axios.get(`${API_URL}/subscriptions/status`, { headers }),
       ]);
       setStats(statsRes.data);
@@ -704,7 +704,7 @@ const MikroTikSetupPage = () => {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [hotspotsRes, routersRes] = await Promise.all([
-        axios.get(`${API_URL}/hotspots`, { headers }),
+        axios.get(`${API_URL}/hotspots/`, { headers }),
         axios.get(`${API_URL}/mikrotik-onboard/routers`, { headers }),
       ]);
       
