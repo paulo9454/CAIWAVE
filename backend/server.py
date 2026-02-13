@@ -1207,7 +1207,6 @@ async def update_package(
 # ==================== Hotspots Routes ====================
 
 @hotspots_router.get("/", response_model=List[Hotspot])
-@hotspots_router.get("", response_model=List[Hotspot], include_in_schema=False)
 async def get_hotspots(
     user: dict = Depends(get_current_user),
     owner_id: Optional[str] = None
