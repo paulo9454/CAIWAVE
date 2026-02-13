@@ -1488,22 +1488,6 @@ RADIUS_ACCT_PORT=1813`}
                 As admin, you can view and manage all registered routers here.
               </p>
             </div>
-                    <div>
-                      <label className="block text-sm text-neutral-400 mb-1">RADIUS Secret*</label>
-                      <input type="text" value={nasForm.secret} onChange={(e) => setNasForm({ ...nasForm, secret: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" required placeholder="shared_secret" />
-                    </div>
-                    <div>
-                      <label className="block text-sm text-neutral-400 mb-1">Location</label>
-                      <input type="text" value={nasForm.location} onChange={(e) => setNasForm({ ...nasForm, location: e.target.value })} className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-2" placeholder="Nairobi CBD" />
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <Button type="submit">{editingNAS ? "Update" : "Add Router"}</Button>
-                    <Button type="button" variant="outline" onClick={() => { setShowAddNAS(false); setEditingNAS(null); }}>Cancel</Button>
-                  </div>
-                </form>
-              </div>
-            )}
 
             {nasClients.length === 0 ? (
               <div className="text-center py-8">
