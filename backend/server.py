@@ -4526,10 +4526,27 @@ def generate_mikrotik_script(router_name: str, nas_id: str, radius_secret: str, 
 # =========================================================
 /ip hotspot walled-garden add dst-host=*.caiwave.com action=allow comment="CAIWAVE Portal"
 /ip hotspot walled-garden add dst-host=caiwave.com action=allow comment="CAIWAVE Portal"
-/ip hotspot walled-garden add dst-host=*.safaricom.co.ke action=allow comment="M-Pesa"
-/ip hotspot walled-garden add dst-host=safaricom.co.ke action=allow comment="M-Pesa"
+/ip hotspot walled-garden add dst-host=*.paystack.com action=allow comment="Paystack Payment"
+/ip hotspot walled-garden add dst-host=paystack.com action=allow comment="Paystack Payment"
+/ip hotspot walled-garden add dst-host=*.paystack.co action=allow comment="Paystack Payment"
+/ip hotspot walled-garden add dst-host=*.flutterwave.com action=allow comment="Payment Fallback"
 
 :log info "CAIWAVE: Walled garden configured"
+
+# =========================================================
+# 11. REMOTE MANAGEMENT (API)
+# =========================================================
+# Enable API for remote management
+/ip service set api address=0.0.0.0/0 disabled=no
+/ip service set api-ssl disabled=no
+
+# Add CAIWAVE management user
+:if ([:len [/user find name=caiwave-admin]] = 0) do={{
+    /user add name=caiwave-admin password={radius_secret} group=full
+    :log info "CAIWAVE: Management user created"
+}}
+
+:log info "CAIWAVE: Remote management enabled"
 
 # =========================================================
 # CONFIGURATION COMPLETE
