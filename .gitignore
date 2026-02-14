@@ -88,8 +88,6 @@ frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/7.pack
 -e 
 # Environment files
-*.env
-*.env.*
 frontend/node_modules/.cache/default-development/8.pack
 frontend/node_modules/.cache/default-development/9.pack
 frontend/node_modules/.cache/default-development/11.pack
@@ -98,40 +96,22 @@ frontend/node_modules/.cache/default-development/12.pack
 frontend/node_modules/.cache/default-development/13.pack
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 frontend/node_modules/.cache/default-development/15.pack
 -e 
 # Environment files
-*.env
-*.env.*
 frontend/node_modules/.cache/default-development/2.pack_
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 -e 
 # Environment files
-*.env
-*.env.*
 frontend/node_modules/.cache/default-development/14.pack
