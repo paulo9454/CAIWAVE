@@ -5401,9 +5401,34 @@ async def get_portal_data(hotspot_id: str):
 async def create_free_session(
     hotspot_id: str,
     ad_id: str,
-    user_mac: Optional[str] = None
+    user_mac: Optional[str] = None,
+    user_ip: Optional[str] = None
 ):
-    """Create a free session after watching an ad"""
+    """Create a free session after watching an ad - MAX 2 per user"""
+    
+    # Use MAC or IP to identify user
+    user_identifier = user_mac or user_ip or "unknown"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Check how many free sessions user has claimed today
+    free_session_count = await db.sessions.count_documents({
+        "is_free": True,
+        "hotspot_id": hotspot_id,
+        "$or": [
+            {"user_mac": user_identifier},
+            {"user_ip": user_identifier}
+        ],
+        "started_at": {"$regex": f"^{today}"}
+    })
+    
+    MAX_FREE_ADS = 2
+    
+    if free_session_count >= MAX_FREE_ADS:
+        raise HTTPException(
+            status_code=403, 
+            detail=f"You've used your {MAX_FREE_ADS} free ad sessions today. Please purchase a package to continue browsing."
+        )
+    
     # Verify ad is active
     ad = await db.ads.find_one(
         {"id": ad_id, "status": AdStatus.ACTIVE.value},
@@ -5430,7 +5455,7 @@ async def create_free_session(
     session = Session(
         package_id="free",
         hotspot_id=hotspot_id,
-        user_mac=user_mac,
+        user_mac=user_identifier,
         username=username,
         password=password,
         is_free=True,
@@ -5440,8 +5465,11 @@ async def create_free_session(
     session_dict = session.model_dump()
     session_dict["started_at"] = session_dict["started_at"].isoformat()
     session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+    session_dict["user_ip"] = user_identifier  # Store for tracking
     
     await db.sessions.insert_one(session_dict)
+    
+    remaining_free = MAX_FREE_ADS - free_session_count - 1
     
     return {
         "session_id": session.id,
@@ -5449,7 +5477,38 @@ async def create_free_session(
         "password": session.password,
         "expires_at": session.expires_at.isoformat(),
         "duration_minutes": 15,
-        "message": "Enjoy 15 minutes of free WiFi! Watch another ad for more free time."
+        "free_sessions_used": free_session_count + 1,
+        "free_sessions_remaining": remaining_free,
+        "message": f"Enjoy 15 minutes of free WiFi! {'Watch 1 more ad for extra time.' if remaining_free > 0 else 'Purchase a package for more time.'}"
+    }
+
+@api_router.get("/portal/free-session-status")
+async def get_free_session_status(
+    hotspot_id: str,
+    user_mac: Optional[str] = None,
+    user_ip: Optional[str] = None
+):
+    """Check how many free sessions a user has remaining"""
+    user_identifier = user_mac or user_ip or "unknown"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    free_session_count = await db.sessions.count_documents({
+        "is_free": True,
+        "hotspot_id": hotspot_id,
+        "$or": [
+            {"user_mac": user_identifier},
+            {"user_ip": user_identifier}
+        ],
+        "started_at": {"$regex": f"^{today}"}
+    })
+    
+    MAX_FREE_ADS = 2
+    
+    return {
+        "free_sessions_used": free_session_count,
+        "free_sessions_remaining": max(0, MAX_FREE_ADS - free_session_count),
+        "max_free_sessions": MAX_FREE_ADS,
+        "can_get_free": free_session_count < MAX_FREE_ADS
     }
 
 # ==================== Marketplace Routes ====================
