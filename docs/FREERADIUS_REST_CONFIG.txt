@@ -5,7 +5,7 @@
 # This configuration enables FreeRADIUS to authenticate users
 # by calling CAIWAVE's REST API endpoints.
 #
-# Your CAIWAVE API URL: https://adspot-wifi.preview.emergentagent.com/api
+# Your CAIWAVE API URL: https://hotspot-paystack.preview.emergentagent.com/api
 # (Replace with your production URL after deployment)
 #
 # ============================================================
@@ -26,7 +26,7 @@
 
 rest {
     # CAIWAVE API Base URL - UPDATE THIS TO YOUR PRODUCTION URL
-    connect_uri = "https://adspot-wifi.preview.emergentagent.com/api"
+    connect_uri = "https://hotspot-paystack.preview.emergentagent.com/api"
     
     # Connection settings
     connect_timeout = 4.0
@@ -147,7 +147,7 @@ rest {
 # ============================================================
 # 
 # 1. First, create a free WiFi session in CAIWAVE portal
-#    - Go to: https://adspot-wifi.preview.emergentagent.com/portal/demo
+#    - Go to: https://hotspot-paystack.preview.emergentagent.com/portal/demo
 #    - Click "Get Free WiFi"
 #    - Note the username and password
 #

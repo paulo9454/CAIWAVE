@@ -1,145 +1,160 @@
 <analysis>**original_problem_statement**: The user wants to build a production-ready, ISP-grade Wi-Fi hotspot billing and advertising platform named **CAIWAVE**.
 
-**PRODUCT REQUIREMENTS (abridged, full version in )**:
--   **Platform Name**: CAIWAVE
--   **Core Functionality**:
-    1.  **Package-Based Advertising System**: Advertisers select pre-defined packages (e.g., Small, Large, Wide Area), upload media, and the Super Admin approves it. Payment via M-Pesa is required before the ad goes live.
-    2.  **Hotspot Owner Subscription & Billing**: Hotspot owners are billed KES 500 per hotspot per month after a 14-day free trial. The system must handle invoicing, payment reminders (future), and access enforcement (suspending overdue hotspots).
--   **Core Integrations**:
-    -   **Payments**: M-Pesa Daraja API (STK Push).
-    -   **Routers**: MikroTik integration via FreeRADIUS (scaffolding exists).
-    -   **Notifications**: SMS (Africa's Talking) and WhatsApp (placeholders).
--   **User Roles**: Super Admin (CAIWAVE), Hotspot Owner (Partner), Advertiser, Wi-Fi End User.
+Recent user requests have focused on:
+1.  **MikroTik & FreeRADIUS Integration (CRITICAL)**: Connect the CAIWAVE application to the user's existing MikroTik router and FreeRADIUS server to create a fully functional captive portal hotspot. This is the main focus and is currently blocked.
+2.  **Paystack STK Push**: Fix the payment flow so that M-Pesa payments trigger an STK push to the user's phone instead of a redirect.
+3.  **Free WiFi for Ads**: Implement a feature where users can watch an ad to get free internet access, with a configurable limit.
+4.  **Deployment**: Ensure the application is deployable and resolve any underlying issues preventing it.
+5.  **Owner Analytics**: Add analytics to the Hotspot Owner dashboard.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack application built with React, FastAPI, and MongoDB. The platform has been fully rebranded to CAIWAVE.
-
-Key implemented features include:
--   **Package-Based Advertising**: A complete, tested system allowing advertisers to purchase pre-defined advertising packages. The flow (package selection -> media upload -> admin approval -> M-Pesa payment -> activation) is fully functional.
--   **Subscription & Billing System**: A complete, tested system for managing Hotspot Owner subscriptions. It includes a 14-day free trial, automatic invoice generation, and UIs for both owners (to view status and pay) and admins (to manage all invoices).
--   **M-Pesa Daraja STK Push Integration**: A comprehensive, role-based integration with the Safaricom sandbox environment is complete. It handles payments for Owner Subscriptions, Advertiser Ads, and Wi-Fi Client access. It includes role-specific initiation endpoints and a unified callback handler. The integration is fully tested and documented.
+The CAIWAVE application (React, FastAPI, MongoDB) is largely feature-complete but is blocked by a configuration issue on the user's external hardware.
+-   **Captive Portal**: Fully functional, displays rotating ads (images/videos), and offers a Watch Ad for Free WiFi feature.
+-   **Free WiFi Ad Feature**: Implemented. Users get 15 minutes of free WiFi after watching an ad, with a hardcoded limit of 2 free sessions per user.
+-   **Paystack Payments**: The integration was fixed to correctly use the  method, successfully sending M-Pesa STK push notifications. The user's live keys have been configured.
+-   **RADIUS Integration**: Backend endpoints (, ) have been created and are ready to handle authentication requests from a FreeRADIUS server. The system was successfully configured to use the user's RADIUS server details.
+-   **UI/UX Fixes**: The Admin dashboard now correctly shows a Paystack integration tab instead of the old M-Pesa. Role clarifications between Admin (global RADIUS management) and Owner (their own routers) have been made in the UI.
+-   **Deployment Readiness**: Several deployment blockers were resolved, including a  loop,  issues preventing  files from being included, and missing environment variables.
 
 **Last working item**:
-- **Last item agent was working**: Integrating M-Pesa Daraja STK Push payments for all user roles (Hotspot Owner, Advertiser, Wi-Fi Client) using the provided sandbox credentials.
-- **Status**: USER VERIFICATION PENDING
-- **Agent Testing Done**: Y (Extensively tested via curl and confirmed with the testing agent, which ran 20/20 successful tests).
-- **Which testing method agent to use?**: manual testing by curl. The user should be informed that to test the callback functionality, the  in  must be set to a public URL (e.g., from ngrok).
-- **User Testing Done**: N
+- **Last item agent was working**: Actively debugging the user's MikroTik router configuration. The latest problem identified is that clients connecting to the hotspot's WiFi are stuck obtaining IP address because the DHCP server on the router is marked as . This is due to the  interface not being in a Running state.
+- **Status**: BLOCKED
+- **Agent Testing Done**: N/A (The issue is on the user's external hardware, not the application code).
+- **Which testing method agent to use?**: Manual testing by user. The next agent must continue to guide the user through MikroTik RouterOS command-line diagnostics.
+- **User Testing Done**: N (The user is actively participating in the debug session but is unable to resolve the hardware issue).
 
 **All Pending/In progress Issue list**:
-There are no known bugs or pending issues.
+  - Issue 1: MikroTik hotspot fails to assign IP addresses to connecting clients. (P0 - CRITICAL BLOCKER)
+
+  **Issues Detail**:
+  - **Issue 1**: MikroTik hotspot fails to assign IP addresses to connecting clients.
+     - **Attempted fixes**: A long series of diagnostics and fixes were attempted on the user's MikroTik router via commands. This included:
+        - Enabling disabled NAT rules.
+        - Creating an open wireless security profile.
+        - Fixing an IP conflict in the DHCP pool.
+        - Toggling  on the  interface.
+        - Re-linking the DHCP server to the correct address pool.
+        The current state is that the DHCP server is  because the  interface is not running.
+     - **Next debug checklist**:
+        1.  Guide the user to run  to confirm  has no R (Running) flag.
+        2.  Ask the user to run  to check for errors related to the wireless interface.
+        3.  Guide the user to try forcing the interface on with  and checking the status again.
+        4.  If it still fails, investigate regulatory/country settings or frequency issues.
+     - **Why fix this issue and what will be achieved with the fix?**: This is the final barrier to a fully operational system. Fixing this will allow the user's hardware to correctly redirect WiFi clients to the CAIWAVE captive portal, completing the entire end-to-end user flow.
+     - **Status**: BLOCKED
+     - **Is recurring issue?** Y (The MikroTik configuration has been a recurring multi-step debugging process).
+     - **Should Test frontend/backend/both after fix?**: Manual testing by user on their own device.
+     - **Blocked on other issue**: None.
 
 **In progress Task List**:
-There are no tasks currently in progress.
+  - None. All development work is paused to resolve the user's hardware configuration issue.
 
 **Upcoming and Future Tasks**
 - **Upcoming Tasks**:
-    -   **P1: Partner Onboarding Wizard**: Create a guided setup flow for new Hotspot Owners to configure their MikroTik routers and payment details.
-    -   **P2: Voucher Printing System**: Allow Hotspot Owners to generate and print pre-paid Wi-Fi access vouchers from their dashboard.
+    - **P1**: Re-implement Owner Dashboard Analytics. The backend endpoint  is complete. The frontend component caused a Maximum call stack size exceeded error and was reverted. It should be created in a new, separate file (e.g., ).
+    - **P2**: Implement Two-Factor Authentication (2FA).
+    - **P2**: Partner Onboarding Wizard.
+    - **P2**: Voucher Printing System.
 - **Future Tasks**:
-    -   Equipment Marketplace UI (Shop Equipment).
-    -   System Audit Logs for critical actions.
-    -   Two-Factor Authentication (2FA) for enhanced security.
-    -   Automated SMS/WhatsApp payment reminders for expiring trials and overdue invoices.
+    - Equipment Marketplace UI.
+    - System Audit Logs.
+    - Automated SMS/WhatsApp payment reminders.
 
 **Completed work in this session**
-- **Package-Based Advertising System**: Replaced the previous ad system. Implemented backend models, services, and API endpoints. Rewrote the advertiser dashboard and updated the admin dashboard.
-- **Subscription & Billing System**: Implemented backend models (, ), services, and API endpoints for managing hotspot owner subscriptions, trials, and payments. Created new UI components in the owner and admin dashboards.
-- **M-Pesa Daraja Integration**: Fully implemented and tested the STK Push payment flow for all roles using the provided sandbox credentials. This included creating role-specific endpoints, a unified callback handler, and robust error handling.
-- **Landing Page Updates**: Removed no monthly subscription messaging and updated feature descriptions to align with the new billing model.
-- **Bug Fixes**: Resolved several  serialization errors in the backend that occurred when returning documents from MongoDB after database operations.
-- **Documentation**: Created  explaining how to configure and test the M-Pesa integration.
+- **Paystack STK Push Fix**: Resolved the M-Pesa payment issue by switching from  to  and correcting the phone number format.
+- **Free WiFi for Ads Feature**: Implemented a flow where users get 15 minutes of free internet after watching an ad, limited to two times per user.
+- **RADIUS Integration**: Added backend endpoints for RADIUS  and  and configured the application with the user's FreeRADIUS server details.
+- **Captive Portal Ad Fix**: Fixed an issue where ads were not showing on the captive portal due to an incorrect API endpoint.
+- **Advertiser Video Ad Fix**: Fixed a UI bug where video ads on the Advertiser Dashboard would not show a preview.
+- **UI & Role Clarification**: Replaced the legacy M-Pesa tab with Paystack in the Admin dashboard and clarified the different MikroTik management roles for Admins and Owners.
+- **Deployment Readiness**: Resolved multiple deployment blockers related to environment variables and redirects.
+- **Extensive MikroTik Debugging**: Provided step-by-step guidance to diagnose and attempt to fix the user's hardware configuration.
 
 **Earlier issues found/mentioned but not fixed**
-None.
+   - **Owner Dashboard Analytics UI**: A component  was added to . This caused the app to crash with a Maximum call stack size exceeded error, likely due to the file's enormous size. The component and its route were removed to restore functionality. The backend API is ready, but the frontend needs to be re-implemented correctly in a separate file.
 
 **Known issue recurrence from previous fork**
-N/A
+  - **MikroTik/Deployment Complexity**: The integration with external hardware (MikroTik) continues to be the most complex and time-consuming part of the project, requiring extensive user-in-the-loop debugging.
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
-- **Frontend**: React, Tailwind CSS, Shadcn UI
-- **Backend**: Python, FastAPI
+- **Backend**: FastAPI
+- **Frontend**: React, Tailwind CSS
 - **Database**: MongoDB
-- **Authentication**: JSON Web Tokens (JWT)
-- **Payments**: M-Pesa Daraja API (STK Push) via Safaricom Sandbox.
+- **Integrations**: Paystack (STK Push), MikroTik RouterOS (CLI configuration), FreeRADIUS (with REST module).
 
 **key DB schema**
--   **AdPackage**: 
--   **Ad**: (updated to include  and coverage details)
--   **Invoice**: 
--   **Subscription**: 
--   **MpesaTransaction**: 
+-   : A  counter was added to documents in this collection to enforce the 2-ad limit. The RADIUS endpoint was updated to query this collection.
 
 **changes in tech stack**
-None.
+- No changes, but a deep, hands-on integration with MikroTik RouterOS and FreeRADIUS was performed.
 
 **All files of reference**
--   **Heavily Modified:**
-    -   : Massively expanded with logic for package advertising, subscriptions, and a full M-Pesa service integration.
-    -   : Updated for ad approval and a new invoice management page.
-    -   : Completely rewritten for the new package-based advertising flow.
-    -   : Overhauled to include subscription status, billing information, and payment modals.
-    -   : Text updated to reflect the new monthly subscription model.
-    -   : Updated with M-Pesa sandbox credentials.
--   **Newly Created:**
-    -   : Documentation for M-Pesa configuration.
+-   : For RADIUS endpoints, free session logic, and Paystack endpoint fixes.
+-   : For the  implementation.
+-   : For the UI implementation of the free ad-watching feature.
+-   : This file is the source of the reverted analytics feature and needs refactoring.
+-   : Contains the user's production keys for Paystack and RADIUS configuration.
+-   : New documentation file.
+-   : New documentation file.
 
 **Areas that need refactoring**:
--   ****: This file has grown to over 4,000 lines. It urgently needs to be broken down into a proper Python package structure (e.g., , , ).
--   ** & **: These monolithic dashboard files are becoming unmanageable and should be broken down into smaller, reusable components and pages.
+-   ****: This file is over 1800 lines long and has caused build failures. It is a major piece of technical debt. Any new functionality for the owner dashboard, starting with the , MUST be created in a separate component file and routed accordingly.
 
 **key api endpoints**
--   **M-Pesa (New/Updated)**:
-    -   
-    -   
-    -   
-    -    (Public, for Safaricom)
-    -    (Admin)
--   **Subscriptions & Invoices (New)**:
-    -    (Owner)
-    -    (Admin)
--   **Ad Packages (New)**:
-    -   
+-   : For FreeRADIUS to check user credentials against CAIWAVE's database.
+-   : For FreeRADIUS to log session start/stop times.
+-   : Called by the captive portal to grant a user a free 15-minute session.
 
 **Critical Info for New Agent**
--   **M-Pesa Sandbox Testing**: The M-Pesa integration is fully functional but points to the Safaricom sandbox. To receive payment confirmation callbacks, you **must** expose the application's port 8001 to a public URL (using  or a similar tool) and set that URL in the  variable in . Detailed instructions are in .
--   **Monolithic Codebase**: Be aware that the main backend file () and the primary frontend dashboard files are extremely large. Proposing a refactoring task before starting the next major feature is highly recommended to improve maintainability.
--   **Database Seeding**: The seed data ( endpoint) is crucial for setting up test users (admin, advertiser, owner). For payment testing, you may need to manually clear the  and  collections in the database before reseeding to get a clean state.
+-   **The primary task is to help the user fix their MikroTik router.** The CAIWAVE application code is likely fine. You must resume the debugging conversation, focusing on why the  interface is not in a 'Running' state.
+-   **Do not attempt to modify the application code to solve the MikroTik issue.** This is a hardware/configuration problem on the user's end. Guide them using RouterOS commands.
+-   **The Owner Analytics feature needs to be re-implemented.** The backend is ready. The frontend component must be built in a *new file*, not added to the bloated .
+-   The user has provided live keys for Paystack and their RADIUS server details, which are stored in .
+-   The user seems confused about Deploy vs Redeploy. The app is already deployed; they just need to Redeploy to push updates.
 
 **documents and test reports created in this job**
--    (Updated)
--    (New)
 -   
 -   
 -   
 
 **Last 10 User Messages and any pending HUMAN messages**
-The last set of user messages defined the full requirements for the M-Pesa Daraja STK Push integration, including sandbox credentials, roles, and expected behavior, which has now been implemented.
+1.  **User**: My MikroTik is configured. What now? (PENDING)
+2.  **Agent**: Provided next steps to configure walled garden and redirect.
+3.  **User**: Shared MikroTik config output showing empty walled garden. (RESOLVED)
+4.  **Agent**: Provided commands to set up walled garden and redirect to CAIWAVE.
+5.  **User**: Chose Option B: Direct redirect to CAIWAVE portal. (RESOLVED)
+6.  **Agent**: Provided script to create the  redirect file on MikroTik.
+7.  **User**: WiFi connects but doesn't redirect. (IN PROGRESS)
+8.  **Agent**: Diagnosed disabled NAT rules and incorrect wireless security profile. Provided fix.
+9.  **User**: Still not redirecting. (IN PROGRESS)
+10. **User**: Now stuck on obtaining IP address. (IN PROGRESS)
 
 **Project Health Check:**
--   **Broken**: None.
--   **Mocked**: The M-Pesa integration is **not** mocked; it is a live integration with the Safaricom sandbox. Other integrations like MikroTik and SMS/WhatsApp remain as placeholders.
+-   **Broken**:
+    -   The entire end-to-end hotspot functionality is broken due to the user's MikroTik router failing to assign IP addresses.
+-   **Mocked**:
+    -   None.
 
 **3rd Party Integrations**
--   **M-Pesa Daraja (Payments)**: Fully integrated with the sandbox environment. Ready for testing and production credential swap.
--   **MikroTik (RADIUS)**: Placeholder structures and UI exist. Not functional.
--   **SMS/WhatsApp Notifications**: Not yet started.
+-   **Paystack (Payments)**: Live integration using user's keys. Confirmed working for M-Pesa STK Push.
+-   **MikroTik (Networking)**: Deep integration being configured. Currently non-functional on user's hardware.
+-   **FreeRADIUS (Authentication)**: Configured with user's server details and REST module instructions provided. Awaiting functional MikroTik to test end-to-end.
 
 **Testing status**
--   **Testing agent used after significant changes**: YES (Used for Package-Ads, Subscriptions, and M-Pesa features).
+-   **Testing agent used after significant changes**: YES (once, for UI fixes).
 -   **Troubleshoot agent used after agent stuck in loop**: NO
 -   **Test files created**: None.
--   **Known regressions**: None.
+-   **Known regressions**: The Owner Analytics UI was removed to fix a build crash.
 
 **Credentials to test flow:**
--   **Admin**:  / 
--   **Advertiser**:  / 
--   **Hotspot Owner**:  / 
+-   **Admin**: Use  with  from .
+-   **Paystack**: Live keys are in . Do not perform real transactions without user permission.
+-   **RADIUS**: User's server details are in .
 
 **What agent forgot to execute**
-Nothing. The agent successfully completed all requested tasks, including implementing three major features (Package-Ads, Subscriptions, M-Pesa), fixing bugs, and creating documentation.</analysis>
+- The agent correctly identified that the  file was too large and causing errors, but instead of refactoring the new analytics component into a separate file, they simply reverted the changes. This fixed the immediate crash but left the requested feature unimplemented.</analysis>
