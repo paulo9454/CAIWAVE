@@ -252,11 +252,89 @@ const CaptivePortal = () => {
           </div>
         )}
 
+        {/* Free WiFi Section - After watching ad */}
+        {currentAd && !freeSession && (
+          <div className="bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-xl border border-green-700/50 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-lg text-green-400 flex items-center gap-2">
+                  <Wifi className="w-5 h-5" />
+                  Get 15 Minutes FREE WiFi!
+                </h3>
+                <p className="text-green-300/70 text-sm mt-1">
+                  Watch the ad above and tap below to get free internet access
+                </p>
+              </div>
+              <Button
+                onClick={handleGetFreeWifi}
+                disabled={gettingFreeWifi}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3"
+              >
+                {gettingFreeWifi ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 mr-2" />
+                    Get Free WiFi
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Free Session Credentials - Show after getting free WiFi */}
+        {freeSession && (
+          <div className="bg-gradient-to-r from-blue-900/50 to-indigo-900/50 rounded-xl border border-blue-700/50 p-6">
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Wifi className="w-8 h-8 text-green-400" />
+              </div>
+              <h3 className="font-bold text-xl text-green-400">🎉 You're Connected!</h3>
+              <p className="text-neutral-300 mt-1">Enjoy {freeSession.duration_minutes} minutes of free WiFi</p>
+            </div>
+            
+            <div className="bg-neutral-900/50 rounded-lg p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-neutral-400">Username:</span>
+                <code className="bg-neutral-800 px-3 py-1 rounded text-green-400 font-mono">
+                  {freeSession.username}
+                </code>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-neutral-400">Password:</span>
+                <code className="bg-neutral-800 px-3 py-1 rounded text-green-400 font-mono">
+                  {freeSession.password}
+                </code>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-neutral-400">Expires:</span>
+                <span className="text-yellow-400">
+                  {new Date(freeSession.expires_at).toLocaleTimeString()}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 text-center">
+              <p className="text-sm text-neutral-400">
+                Want more time? Purchase a package below or watch another ad!
+              </p>
+              <Button
+                onClick={() => setFreeSession(null)}
+                variant="outline"
+                className="mt-2"
+              >
+                Watch Another Ad
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* WiFi Packages */}
         <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
           <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
             <Zap className="w-5 h-5 text-yellow-400" />
-            Choose Your Package
+            {freeSession ? "Need More Time? Upgrade!" : "Choose Your Package"}
           </h2>
           
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
