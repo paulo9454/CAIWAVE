@@ -369,16 +369,24 @@ const CaptivePortal = () => {
             </div>
 
             <div className="mt-4 text-center">
-              <p className="text-sm text-neutral-400">
-                Want more time? Purchase a package below or watch another ad!
-              </p>
-              <Button
-                onClick={() => setFreeSession(null)}
-                variant="outline"
-                className="mt-2"
-              >
-                Watch Another Ad
-              </Button>
+              {freeSessionStatus.can_get_free ? (
+                <>
+                  <p className="text-sm text-neutral-400">
+                    Want more time? Watch another ad ({freeSessionStatus.free_sessions_remaining} left) or purchase a package!
+                  </p>
+                  <Button
+                    onClick={() => setFreeSession(null)}
+                    variant="outline"
+                    className="mt-2"
+                  >
+                    Watch Another Ad
+                  </Button>
+                </>
+              ) : (
+                <p className="text-sm text-orange-400">
+                  You've used all free ad sessions. Purchase a package below for more time!
+                </p>
+              )}
             </div>
           </div>
         )}
