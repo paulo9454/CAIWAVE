@@ -96,9 +96,8 @@ const CaptivePortal = () => {
         email: email || `254${phone}@caiwave.com`
       });
 
-      if (response.data.success && response.data.authorization_url) {
-        toast.success("Redirecting to payment...");
-        window.location.href = response.data.authorization_url;
+      if (response.data.success) {
+        toast.success(response.data.message || "STK Push sent! Check your phone.");
       } else {
         toast.error(response.data.message || "Payment failed");
       }
@@ -106,6 +105,39 @@ const CaptivePortal = () => {
       toast.error(error.response?.data?.detail || "Failed to initiate payment");
     } finally {
       setPaying(false);
+    }
+  };
+
+  // Handle "Watch Ad for Free WiFi" - gives 15 minutes free
+  const [gettingFreeWifi, setGettingFreeWifi] = useState(false);
+  const [freeSession, setFreeSession] = useState(null);
+
+  const handleGetFreeWifi = async () => {
+    if (!currentAd) {
+      toast.error("Please wait for ad to load");
+      return;
+    }
+
+    setGettingFreeWifi(true);
+    try {
+      const response = await axios.post(`${API_URL}/portal/free-session`, null, {
+        params: {
+          hotspot_id: hotspotId || "demo",
+          ad_id: currentAd.id
+        }
+      });
+
+      if (response.data.session_id) {
+        setFreeSession(response.data);
+        toast.success(`🎉 You got ${response.data.duration_minutes} minutes free WiFi!`);
+        
+        // Track ad click
+        await axios.post(`${API_URL}/ads/${currentAd.id}/click`).catch(() => {});
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to get free WiFi");
+    } finally {
+      setGettingFreeWifi(false);
     }
   };
 
