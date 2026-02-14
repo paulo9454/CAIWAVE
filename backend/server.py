@@ -2484,10 +2484,14 @@ async def client_pay_wifi_paystack(
     
     await db.paystack_transactions.insert_one(transaction_record)
     
-    # Initialize payment with subaccount for revenue split
-    init_request = TransactionInitRequest(
+    # Use Mobile Money Charge for direct STK Push
+    from services.paystack import MobileMoneyChargeRequest
+    
+    charge_request = MobileMoneyChargeRequest(
         email=email,
         amount=amount,
+        phone_number=phone,
+        provider="mpesa",
         reference=reference,
         metadata={
             "transaction_id": transaction_id,
@@ -2495,20 +2499,19 @@ async def client_pay_wifi_paystack(
             "hotspot_id": hotspot_id,
             "package_id": package_id,
             "phone_number": phone
-        },
-        subaccount_code=subaccount_code
+        }
     )
     
-    result = await paystack_service.initialize_transaction(init_request)
+    result = await paystack_service.charge_mobile_money(charge_request)
     
     if not result.get("status"):
-        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initialize payment"))
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to send STK Push"))
     
     await db.paystack_transactions.update_one(
         {"id": transaction_id},
         {"$set": {
-            "authorization_url": result["data"]["authorization_url"],
-            "access_code": result["data"]["access_code"]
+            "paystack_reference": result.get("data", {}).get("reference"),
+            "status": "pending_confirmation"
         }}
     )
     
@@ -2519,8 +2522,7 @@ async def client_pay_wifi_paystack(
         "amount": amount,
         "package_name": package["name"],
         "duration": package["duration_minutes"],
-        "authorization_url": result["data"]["authorization_url"],
-        "message": f"Pay KES {amount} for {package['name']} ({package['duration_minutes']} minutes)"
+        "message": f"STK Push sent to {phone}. Enter your M-Pesa PIN to pay KES {amount} for {package['name']}"
     }
 
 
