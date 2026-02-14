@@ -5426,7 +5426,7 @@ async def create_free_session(
         hotspot.get("username_prefix", "") if hotspot else ""
     )
     
-    # Create 30-minute free session
+    # Create 15-minute free session after watching ad
     session = Session(
         package_id="free",
         hotspot_id=hotspot_id,
@@ -5434,7 +5434,7 @@ async def create_free_session(
         username=username,
         password=password,
         is_free=True,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=30)
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )
     
     session_dict = session.model_dump()
@@ -5448,7 +5448,8 @@ async def create_free_session(
         "username": session.username,
         "password": session.password,
         "expires_at": session.expires_at.isoformat(),
-        "duration_minutes": 30
+        "duration_minutes": 15,
+        "message": "Enjoy 15 minutes of free WiFi! Watch another ad for more free time."
     }
 
 # ==================== Marketplace Routes ====================
