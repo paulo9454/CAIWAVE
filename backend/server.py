@@ -2299,10 +2299,14 @@ async def owner_pay_subscription_paystack(
     
     await db.paystack_transactions.insert_one(transaction_record)
     
-    # Initialize payment
-    init_request = TransactionInitRequest(
+    # Use Mobile Money Charge for direct STK Push
+    from services.paystack import MobileMoneyChargeRequest
+    
+    charge_request = MobileMoneyChargeRequest(
         email=owner.get("email", f"{phone}@caiwave.com"),
         amount=amount,
+        phone_number=phone,
+        provider="mpesa",
         reference=reference,
         metadata={
             "transaction_id": transaction_id,
@@ -2312,16 +2316,16 @@ async def owner_pay_subscription_paystack(
         }
     )
     
-    result = await paystack_service.initialize_transaction(init_request)
+    result = await paystack_service.charge_mobile_money(charge_request)
     
     if not result.get("status"):
-        raise HTTPException(status_code=400, detail=result.get("message", "Failed to initialize payment"))
+        raise HTTPException(status_code=400, detail=result.get("message", "Failed to send STK Push"))
     
     await db.paystack_transactions.update_one(
         {"id": transaction_id},
         {"$set": {
-            "authorization_url": result["data"]["authorization_url"],
-            "access_code": result["data"]["access_code"]
+            "paystack_reference": result.get("data", {}).get("reference"),
+            "status": "pending_confirmation"
         }}
     )
     
@@ -2330,8 +2334,7 @@ async def owner_pay_subscription_paystack(
         "transaction_id": transaction_id,
         "reference": reference,
         "amount": amount,
-        "authorization_url": result["data"]["authorization_url"],
-        "message": f"Complete payment of KES {amount} for your monthly subscription"
+        "message": f"STK Push sent to {phone}. Enter your M-Pesa PIN to complete payment of KES {amount}"
     }
 
 
