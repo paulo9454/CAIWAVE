@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { Wifi, Clock, Zap, MessageCircle, ExternalLink, Play, ChevronRight, Phone } from "lucide-react";
+import { Wifi, Clock, Zap, MessageCircle, ExternalLink, Play, ChevronRight, Phone, AlertCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { toast, Toaster } from "sonner";
 
