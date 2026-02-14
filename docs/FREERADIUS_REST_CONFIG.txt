@@ -1,0 +1,159 @@
+# ============================================================
+# CAIWAVE FreeRADIUS REST Module Configuration
+# ============================================================
+# 
+# This configuration enables FreeRADIUS to authenticate users
+# by calling CAIWAVE's REST API endpoints.
+#
+# Your CAIWAVE API URL: https://adspot-wifi.preview.emergentagent.com/api
+# (Replace with your production URL after deployment)
+#
+# ============================================================
+
+# STEP 1: Install REST module (if not already installed)
+# --------------------------------------------------------
+# Ubuntu/Debian:
+#   sudo apt install freeradius-rest
+#
+# CentOS/RHEL:
+#   sudo yum install freeradius-rest
+
+# ============================================================
+# STEP 2: Configure REST module
+# ============================================================
+# File: /etc/freeradius/3.0/mods-available/rest
+# (or /etc/raddb/mods-available/rest on CentOS)
+
+rest {
+    # CAIWAVE API Base URL - UPDATE THIS TO YOUR PRODUCTION URL
+    connect_uri = "https://adspot-wifi.preview.emergentagent.com/api"
+    
+    # Connection settings
+    connect_timeout = 4.0
+    http_timeout = 4.0
+    
+    # TLS settings (for HTTPS)
+    tls {
+        verify_cert = no
+        verify_cert_cn = no
+    }
+    
+    # ========================================
+    # AUTHORIZATION - Check if user can login
+    # ========================================
+    authorize {
+        uri = "${..connect_uri}/radius/authorize"
+        method = 'post'
+        body = 'json'
+        data = '{"username": "%{User-Name}", "password": "%{User-Password}", "nas_ip": "%{NAS-IP-Address}", "called_station": "%{Called-Station-Id}"}'
+        tls = ${..tls}
+    }
+    
+    # ========================================
+    # ACCOUNTING - Track session start/stop
+    # ========================================
+    accounting {
+        uri = "${..connect_uri}/radius/accounting"
+        method = 'post'
+        body = 'json'
+        data = '{"username": "%{User-Name}", "session_id": "%{Acct-Session-Id}", "status_type": "%{Acct-Status-Type}", "nas_ip": "%{NAS-IP-Address}", "session_time": "%{Acct-Session-Time}", "input_octets": "%{Acct-Input-Octets}", "output_octets": "%{Acct-Output-Octets}"}'
+        tls = ${..tls}
+    }
+    
+    # ========================================
+    # POST-AUTH - Log authentication results
+    # ========================================
+    post-auth {
+        uri = "${..connect_uri}/radius/post-auth"
+        method = 'post'
+        body = 'json'
+        data = '{"username": "%{User-Name}", "nas_ip": "%{NAS-IP-Address}", "result": "%{reply:Packet-Type}"}'
+        tls = ${..tls}
+    }
+}
+
+# ============================================================
+# STEP 3: Enable REST module
+# ============================================================
+# Run these commands on your FreeRADIUS server:
+#
+# cd /etc/freeradius/3.0/mods-enabled/
+# sudo ln -s ../mods-available/rest rest
+#
+# Or on CentOS:
+# cd /etc/raddb/mods-enabled/
+# sudo ln -s ../mods-available/rest rest
+
+# ============================================================
+# STEP 4: Configure default site to use REST
+# ============================================================
+# File: /etc/freeradius/3.0/sites-available/default
+# (or /etc/raddb/sites-available/default on CentOS)
+#
+# In the 'authorize' section, add:
+#
+#   authorize {
+#       rest
+#       if (ok) {
+#           update control {
+#               Auth-Type := rest
+#           }
+#       }
+#   }
+#
+# In the 'authenticate' section, add:
+#
+#   authenticate {
+#       Auth-Type rest {
+#           rest
+#       }
+#   }
+#
+# In the 'accounting' section, add:
+#
+#   accounting {
+#       rest
+#   }
+#
+# In the 'post-auth' section, add:
+#
+#   post-auth {
+#       rest
+#   }
+
+# ============================================================
+# STEP 5: Add CAIWAVE's server as authorized client
+# ============================================================
+# File: /etc/freeradius/3.0/clients.conf
+#
+# Add this entry to allow CAIWAVE to send test requests:
+#
+# client caiwave_server {
+#     ipaddr = YOUR_CAIWAVE_SERVER_IP
+#     secret = 38699171215c997c8afc515b7432c5ed
+#     shortname = caiwave
+# }
+
+# ============================================================
+# STEP 6: Restart FreeRADIUS
+# ============================================================
+# sudo systemctl restart freeradius
+#
+# Or run in debug mode to test:
+# sudo freeradius -X
+
+# ============================================================
+# TESTING
+# ============================================================
+# 
+# 1. First, create a free WiFi session in CAIWAVE portal
+#    - Go to: https://adspot-wifi.preview.emergentagent.com/portal/demo
+#    - Click "Get Free WiFi"
+#    - Note the username and password
+#
+# 2. Test authentication with radtest:
+#    radtest <username> <password> 10.5.50.254 0 38699171215c997c8afc515b7432c5ed
+#
+# Expected result: Access-Accept
+#
+# ============================================================
