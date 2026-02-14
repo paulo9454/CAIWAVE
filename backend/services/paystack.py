@@ -135,24 +135,32 @@ class PaystackService:
         """
         Charge customer via M-Pesa mobile money
         This initiates an STK Push to the customer's phone
+        
+        For Kenya M-Pesa, phone must be in E.164 format: +254XXXXXXXXX
         """
         if not self.is_configured():
             return {"status": False, "message": "Paystack not configured"}
         
-        # Format phone number (ensure 254 prefix)
-        phone = request.phone_number.replace("+", "").replace(" ", "")
-        if phone.startswith("0"):
-            phone = "254" + phone[1:]
-        elif not phone.startswith("254"):
-            phone = "254" + phone
+        # Format phone number to E.164 format (+254XXXXXXXXX)
+        phone = request.phone_number.replace(" ", "").replace("-", "")
+        if phone.startswith("+"):
+            phone = phone  # Already has +
+        elif phone.startswith("254"):
+            phone = "+" + phone
+        elif phone.startswith("0"):
+            phone = "+254" + phone[1:]
+        else:
+            phone = "+254" + phone
         
+        # Paystack charge API structure for mobile money
         payload = {
             "email": request.email,
             "amount": self._convert_to_kobo(request.amount),
             "currency": "KES",
+            "channels": ["mobile_money"],
             "mobile_money": {
                 "phone": phone,
-                "provider": request.provider
+                "provider": request.provider  # "mpesa" for Kenya
             },
             "metadata": request.metadata or {}
         }
@@ -169,6 +177,21 @@ class PaystackService:
                 )
                 result = response.json()
                 logger.info(f"Mobile money charge response: {result}")
+                
+                # If Paystack needs phone verification, handle it
+                if result.get("data", {}).get("status") == "send_phone":
+                    # Submit phone for verification
+                    submit_response = await client.post(
+                        f"{self.base_url}/charge/submit_phone",
+                        json={
+                            "phone": phone,
+                            "reference": result["data"]["reference"]
+                        },
+                        headers=self.headers
+                    )
+                    result = submit_response.json()
+                    logger.info(f"Phone submission response: {result}")
+                
                 return result
         except Exception as e:
             logger.error(f"Mobile money charge error: {e}")
