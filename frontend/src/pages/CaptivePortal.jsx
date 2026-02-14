@@ -280,31 +280,58 @@ const CaptivePortal = () => {
 
         {/* Free WiFi Section - After watching ad */}
         {currentAd && !freeSession && (
-          <div className="bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-xl border border-green-700/50 p-4">
+          <div className={`rounded-xl border p-4 ${
+            freeSessionStatus.can_get_free 
+              ? "bg-gradient-to-r from-green-900/50 to-emerald-900/50 border-green-700/50"
+              : "bg-gradient-to-r from-orange-900/50 to-red-900/50 border-orange-700/50"
+          }`}>
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-lg text-green-400 flex items-center gap-2">
-                  <Wifi className="w-5 h-5" />
-                  Get 15 Minutes FREE WiFi!
-                </h3>
-                <p className="text-green-300/70 text-sm mt-1">
-                  Watch the ad above and tap below to get free internet access
-                </p>
-              </div>
-              <Button
-                onClick={handleGetFreeWifi}
-                disabled={gettingFreeWifi}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-3"
-              >
-                {gettingFreeWifi ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                {freeSessionStatus.can_get_free ? (
+                  <>
+                    <h3 className="font-semibold text-lg text-green-400 flex items-center gap-2">
+                      <Wifi className="w-5 h-5" />
+                      Get 15 Minutes FREE WiFi!
+                    </h3>
+                    <p className="text-green-300/70 text-sm mt-1">
+                      Watch the ad above and tap to get free internet • 
+                      <span className="text-yellow-400 font-medium ml-1">
+                        {freeSessionStatus.free_sessions_remaining} free {freeSessionStatus.free_sessions_remaining === 1 ? 'session' : 'sessions'} remaining
+                      </span>
+                    </p>
+                  </>
                 ) : (
                   <>
-                    <Play className="w-5 h-5 mr-2" />
-                    Get Free WiFi
+                    <h3 className="font-semibold text-lg text-orange-400 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5" />
+                      Free Sessions Used Up
+                    </h3>
+                    <p className="text-orange-300/70 text-sm mt-1">
+                      You've watched 2 ads today. Purchase a package below to continue browsing!
+                    </p>
                   </>
                 )}
-              </Button>
+              </div>
+              {freeSessionStatus.can_get_free ? (
+                <Button
+                  onClick={handleGetFreeWifi}
+                  disabled={gettingFreeWifi}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3"
+                >
+                  {gettingFreeWifi ? (
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Play className="w-5 h-5 mr-2" />
+                      Get Free WiFi ({freeSessionStatus.free_sessions_remaining} left)
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <div className="text-center">
+                  <p className="text-orange-400 text-sm font-medium">👇 Choose a package below</p>
+                </div>
+              )}
             </div>
           </div>
         )}
