@@ -108,13 +108,34 @@ const CaptivePortal = () => {
     }
   };
 
-  // Handle "Watch Ad for Free WiFi" - gives 15 minutes free
+  // Handle "Watch Ad for Free WiFi" - gives 15 minutes free (MAX 2 per day)
   const [gettingFreeWifi, setGettingFreeWifi] = useState(false);
   const [freeSession, setFreeSession] = useState(null);
+  const [freeSessionStatus, setFreeSessionStatus] = useState({ free_sessions_remaining: 2, can_get_free: true });
+
+  // Check free session status on load
+  useEffect(() => {
+    const checkFreeStatus = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/portal/free-session-status`, {
+          params: { hotspot_id: hotspotId || "demo" }
+        });
+        setFreeSessionStatus(response.data);
+      } catch (error) {
+        console.log("Could not check free session status");
+      }
+    };
+    if (hotspotId || true) checkFreeStatus();
+  }, [hotspotId]);
 
   const handleGetFreeWifi = async () => {
     if (!currentAd) {
       toast.error("Please wait for ad to load");
+      return;
+    }
+
+    if (!freeSessionStatus.can_get_free) {
+      toast.error("You've used all your free ad sessions. Please purchase a package.");
       return;
     }
 
@@ -129,6 +150,11 @@ const CaptivePortal = () => {
 
       if (response.data.session_id) {
         setFreeSession(response.data);
+        setFreeSessionStatus({
+          free_sessions_used: response.data.free_sessions_used,
+          free_sessions_remaining: response.data.free_sessions_remaining,
+          can_get_free: response.data.free_sessions_remaining > 0
+        });
         toast.success(`🎉 You got ${response.data.duration_minutes} minutes free WiFi!`);
         
         // Track ad click
