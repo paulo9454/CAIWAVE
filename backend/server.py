@@ -4048,11 +4048,17 @@ class RADIUSAccountingRequest(BaseModel):
 async def radius_authorize(request: RADIUSAuthorizeRequest):
     """FreeRADIUS calls this endpoint to authenticate WiFi users"""
     
-    # Find active WiFi session with these credentials
-    session = await db.wifi_sessions.find_one({
-        "username": request.username,
-        "status": {"$in": ["active", "pending"]}
+    # First check 'sessions' collection (for free ad-based sessions)
+    session = await db.sessions.find_one({
+        "username": request.username
     }, {"_id": 0})
+    
+    # If not found, check 'wifi_sessions' collection (for paid sessions)
+    if not session:
+        session = await db.wifi_sessions.find_one({
+            "username": request.username,
+            "status": {"$in": ["active", "pending"]}
+        }, {"_id": 0})
     
     if not session:
         return {"reply": "Access-Reject", "reply-message": "Invalid credentials or no active session"}
