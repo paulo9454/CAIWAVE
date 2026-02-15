@@ -1319,8 +1319,9 @@ const IntegrationSettingsPage = () => {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-neutral-800 pb-2">
+      <div className="flex gap-2 border-b border-neutral-800 pb-2 overflow-x-auto">
         {[
+          { id: "quicksetup", label: "Quick Setup", icon: Zap },
           { id: "paystack", label: "Paystack Payments", icon: CreditCard },
           { id: "radius", label: "RADIUS Server", icon: Radio },
           { id: "sms", label: "SMS Gateway", icon: Bell },
@@ -1328,7 +1329,7 @@ const IntegrationSettingsPage = () => {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
               activeTab === tab.id
                 ? "bg-blue-600 text-white"
                 : "text-neutral-400 hover:bg-neutral-800"
@@ -1339,6 +1340,11 @@ const IntegrationSettingsPage = () => {
           </button>
         ))}
       </div>
+
+      {/* Quick Setup Tab */}
+      {activeTab === "quicksetup" && (
+        <QuickSetupTab radiusConfig={radiusConfig} />
+      )}
 
       {/* Paystack Tab */}
       {activeTab === "paystack" && (
