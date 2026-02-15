@@ -1635,6 +1635,16 @@ TWILIO_WHATSAPP_NUMBER=+14155238886`}
 const AllHotspotsPage = () => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newHotspot, setNewHotspot] = useState({
+    name: "",
+    ssid: "",
+    location_name: "",
+    address: "",
+    latitude: -1.2921,
+    longitude: 36.8219
+  });
 
   useEffect(() => {
     fetchHotspots();
@@ -1661,12 +1671,120 @@ const AllHotspotsPage = () => {
     }
   };
 
+  const handleCreateHotspot = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    try {
+      await axios.post(`${API_URL}/hotspots/`, newHotspot, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` }
+      });
+      toast.success("Hotspot created with lifetime subscription!");
+      setShowCreateModal(false);
+      setNewHotspot({
+        name: "",
+        ssid: "",
+        location_name: "",
+        address: "",
+        latitude: -1.2921,
+        longitude: 36.8219
+      });
+      fetchHotspots();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create hotspot");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const getSubscriptionBadge = (status) => {
+    const badges = {
+      lifetime: "bg-purple-500/10 text-purple-400 border-purple-500/30",
+      active: "bg-green-500/10 text-green-400 border-green-500/30",
+      trial: "bg-blue-500/10 text-blue-400 border-blue-500/30",
+      grace_period: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30",
+      suspended: "bg-red-500/10 text-red-400 border-red-500/30"
+    };
+    return badges[status] || "bg-neutral-500/10 text-neutral-400 border-neutral-500/30";
+  };
+
   return (
     <div className="space-y-6" data-testid="all-hotspots-page">
-      <div>
-        <h1 className="text-2xl font-bold">All Hotspots</h1>
-        <p className="text-neutral-400 mt-1">Platform-wide hotspot management</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold">All Hotspots</h1>
+          <p className="text-neutral-400 mt-1">Platform-wide hotspot management</p>
+        </div>
+        <Button onClick={() => setShowCreateModal(true)} data-testid="create-hotspot-btn">
+          <Plus className="w-4 h-4 mr-2" />
+          Create Hotspot
+        </Button>
       </div>
+
+      {/* Create Hotspot Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-neutral-900 rounded-xl p-6 w-full max-w-md border border-neutral-800">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Create New Hotspot</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-neutral-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-purple-400 mb-4">
+              Admin hotspots get lifetime subscription - no payment required!
+            </p>
+            <form onSubmit={handleCreateHotspot} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Hotspot Name *</label>
+                <Input
+                  value={newHotspot.name}
+                  onChange={(e) => setNewHotspot({...newHotspot, name: e.target.value})}
+                  placeholder="e.g., Main Office WiFi"
+                  required
+                  data-testid="hotspot-name-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">SSID (WiFi Name) *</label>
+                <Input
+                  value={newHotspot.ssid}
+                  onChange={(e) => setNewHotspot({...newHotspot, ssid: e.target.value})}
+                  placeholder="e.g., CAIWAVE_Office"
+                  required
+                  data-testid="hotspot-ssid-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Location Name *</label>
+                <Input
+                  value={newHotspot.location_name}
+                  onChange={(e) => setNewHotspot({...newHotspot, location_name: e.target.value})}
+                  placeholder="e.g., Nairobi CBD"
+                  required
+                  data-testid="hotspot-location-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Address</label>
+                <Input
+                  value={newHotspot.address}
+                  onChange={(e) => setNewHotspot({...newHotspot, address: e.target.value})}
+                  placeholder="e.g., Kimathi Street, Nairobi"
+                  data-testid="hotspot-address-input"
+                />
+              </div>
+              <div className="flex gap-4">
+                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)} className="flex-1">
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={creating} className="flex-1" data-testid="submit-hotspot-btn">
+                  {creating ? "Creating..." : "Create Hotspot"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard-card overflow-hidden">
         {loading ? (
@@ -1678,7 +1796,7 @@ const AllHotspotsPage = () => {
             <Radio className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
             <h3 className="font-semibold mb-2">No hotspots registered</h3>
             <p className="text-neutral-400 text-sm">
-              Hotspots will appear here when owners register them
+              Click "Create Hotspot" to add your first hotspot
             </p>
           </div>
         ) : (
@@ -1689,6 +1807,7 @@ const AllHotspotsPage = () => {
                 <th>SSID</th>
                 <th>Location</th>
                 <th>Status</th>
+                <th>Subscription</th>
                 <th>Revenue</th>
                 <th>Actions</th>
               </tr>
@@ -1708,6 +1827,13 @@ const AllHotspotsPage = () => {
                       }`}
                     >
                       {hotspot.status}
+                    </span>
+                  </td>
+                  <td>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs border ${getSubscriptionBadge(hotspot.subscription_status)}`}
+                    >
+                      {hotspot.subscription_status === "lifetime" ? "∞ Lifetime" : hotspot.subscription_status}
                     </span>
                   </td>
                   <td className="font-medium">
