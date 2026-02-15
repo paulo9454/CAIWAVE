@@ -48,6 +48,7 @@ import {
   StopCircle,
   ExternalLink,
   MessageCircle,
+  Copy,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import {
