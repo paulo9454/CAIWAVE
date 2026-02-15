@@ -170,6 +170,14 @@ class PaystackService:
         if request.reference:
             payload["reference"] = request.reference
         
+        # Add subaccount for split payment to hotspot owner
+        if request.subaccount_code:
+            payload["subaccount"] = request.subaccount_code
+            # Bearer determines who pays the transaction fees
+            # "subaccount" means the subaccount (owner) bears the fees from their share
+            payload["bearer"] = "subaccount"
+            logger.info(f"Split payment enabled for subaccount: {request.subaccount_code}")
+        
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
