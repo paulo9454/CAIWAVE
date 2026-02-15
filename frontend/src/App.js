@@ -9,6 +9,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import CaptivePortal from "./pages/CaptivePortal";
+import SetupWizard from "./pages/SetupWizard";
 
 // Dashboards
 import OwnerDashboard from "./pages/owner/Dashboard";
