@@ -2507,12 +2507,14 @@ async def client_pay_wifi_paystack(
         phone_number=phone,
         provider="mpesa",
         reference=reference,
+        subaccount_code=subaccount_code,  # Enable split payment to hotspot owner
         metadata={
             "transaction_id": transaction_id,
             "payment_type": "wifi",
             "hotspot_id": hotspot_id,
             "package_id": package_id,
-            "phone_number": phone
+            "phone_number": phone,
+            "owner_subaccount": subaccount_code  # Track for verification
         }
     )
     
