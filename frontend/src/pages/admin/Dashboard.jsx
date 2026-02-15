@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 import { getUser, logout, getAuthToken } from "../../lib/auth";
 import { API_URL, formatCurrency } from "../../lib/utils";
 import axios from "axios";
