@@ -26,8 +26,10 @@ import {
   Phone,
   Calendar,
   Zap,
+  Wallet,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
+import PaymentSettings from "./PaymentSettings";
 import {
   AreaChart,
   Area,
