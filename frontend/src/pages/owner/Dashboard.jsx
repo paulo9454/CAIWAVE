@@ -1491,6 +1491,10 @@ const OwnerDashboard = () => {
               }
             />
             <Route
+              path="payouts"
+              element={<PaymentSettings />}
+            />
+            <Route
               path="settings"
               element={
                 <div className="text-center py-12">
