@@ -27,6 +27,7 @@ import {
   Calendar,
   Zap,
   Wallet,
+  Copy,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import PaymentSettings from "./PaymentSettings";
