@@ -5655,10 +5655,13 @@ async def check_and_update_subscription_status(owner_id: str):
         new_status = SubscriptionStatus.SUSPENDED
         hotspot_status = HotspotStatus.SUSPENDED
     
-    # Update hotspots
+    # Update hotspots (but NOT lifetime hotspots - admin-created ones never expire)
     if new_status:
         await db.hotspots.update_many(
-            {"owner_id": owner_id},
+            {
+                "owner_id": owner_id,
+                "subscription_status": {"$ne": SubscriptionStatus.LIFETIME.value}
+            },
             {"$set": {
                 "subscription_status": new_status.value,
                 "status": hotspot_status.value
