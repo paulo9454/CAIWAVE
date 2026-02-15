@@ -2691,6 +2691,15 @@ async def create_paystack_subaccount(
     if not paystack_service.is_configured():
         raise HTTPException(status_code=503, detail="Paystack not configured")
     
+    # Fetch bank name from the banks list
+    banks_result = await paystack_service.list_banks("kenya")
+    bank_name = request.bank_code
+    if banks_result.get("status") and banks_result.get("data"):
+        for bank in banks_result["data"]:
+            if bank.get("code") == request.bank_code:
+                bank_name = bank.get("name", request.bank_code)
+                break
+    
     subaccount_request = SubaccountCreateRequest(
         business_name=request.business_name,
         settlement_bank=request.bank_code,
@@ -2714,8 +2723,8 @@ async def create_paystack_subaccount(
             {"$set": {
                 "paystack_subaccount_code": subaccount_code,
                 "paystack_business_name": request.business_name,
-                "paystack_bank_code": request.bank_code,
-                "paystack_account_number": request.account_number[-4:]  # Store only last 4 digits
+                "bank_name": bank_name,
+                "account_number": request.account_number[-4:]  # Store only last 4 digits for display
             }}
         )
     
