@@ -76,11 +76,11 @@ const PaymentSettings = () => {
         `${API_URL}/paystack/subaccount/create`,
         {
           business_name: formData.business_name,
-          settlement_bank: formData.settlement_bank,
+          bank_code: formData.settlement_bank,
           account_number: formData.account_number,
           percentage_charge: 30, // Owner gets 30% by default
-          primary_contact_email: formData.primary_contact_email || undefined,
-          primary_contact_phone: formData.primary_contact_phone || undefined,
+          email: formData.primary_contact_email || undefined,
+          phone: formData.primary_contact_phone || undefined,
         },
         {
           headers: { Authorization: `Bearer ${getAuthToken()}` }
