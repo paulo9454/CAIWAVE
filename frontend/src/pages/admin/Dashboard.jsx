@@ -3070,6 +3070,7 @@ const AdminDashboard = () => {
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Revenue Settings", href: "/admin/revenue", icon: Sliders },
     { name: "Integrations", href: "/admin/integrations", icon: Settings },
+    { name: "Setup Wizard", href: "/setup", icon: Zap },
     { name: "Marketplace", href: "/admin/marketplace", icon: ShoppingBag },
   ];
 
