@@ -807,14 +807,21 @@ const MikroTikSetupPage = () => {
           <h1 className="text-2xl font-bold">MikroTik Setup</h1>
           <p className="text-neutral-400 mt-1">Configure your MikroTik routers for CAIWAVE integration</p>
         </div>
-        <Button
-          onClick={() => setShowAddRouter(true)}
-          className="bg-blue-600 hover:bg-blue-700"
-          data-testid="add-mikrotik-btn"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add MikroTik
-        </Button>
+        <div className="flex gap-2">
+          <a href="/setup" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="border-blue-500 text-blue-400">
+              Full Setup Wizard
+            </Button>
+          </a>
+          <Button
+            onClick={() => setShowAddRouter(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+            data-testid="add-mikrotik-btn"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add MikroTik
+          </Button>
+        </div>
       </div>
 
       {/* Setup Instructions */}
