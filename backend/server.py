@@ -261,6 +261,9 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     balance: float
+    paystack_subaccount_code: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
 
 # Package Models - UPDATED PRICING
 class PackageBase(BaseModel):
