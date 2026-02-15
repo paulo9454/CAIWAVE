@@ -824,40 +824,84 @@ const MikroTikSetupPage = () => {
         </div>
       </div>
 
-      {/* Setup Instructions */}
+      {/* Quick Copy-Paste Setup */}
+      <div className="dashboard-card border-green-500/30">
+        <h2 className="font-semibold mb-4 flex items-center gap-2">
+          <Zap className="w-5 h-5 text-green-400" />
+          Quick MikroTik Setup (Copy & Paste)
+        </h2>
+        <p className="text-neutral-400 text-sm mb-4">
+          Open MikroTik Terminal (WinBox → New Terminal) and paste this script:
+        </p>
+        <div className="relative">
+          <pre className="bg-neutral-950 p-4 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-48">
+{`# CAIWAVE Quick Setup - Paste in MikroTik Terminal
+/radius remove [find comment~"CAIWAVE"]
+/radius add address=10.5.50.254 secret="YOUR_SECRET" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
+/ip hotspot profile set default use-radius=yes radius-accounting=yes
+/ip hotspot walled-garden ip remove [find comment~"CAIWAVE"]
+/ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE"
+/ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
+:put "CAIWAVE Setup Done! Test: /radius monitor 0"`}
+          </pre>
+          <Button
+            size="sm"
+            className="absolute top-2 right-2 bg-green-600 hover:bg-green-700"
+            onClick={() => {
+              navigator.clipboard.writeText(`# CAIWAVE Quick Setup - Paste in MikroTik Terminal
+/radius remove [find comment~"CAIWAVE"]
+/radius add address=10.5.50.254 secret="YOUR_SECRET" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
+/ip hotspot profile set default use-radius=yes radius-accounting=yes
+/ip hotspot walled-garden ip remove [find comment~"CAIWAVE"]
+/ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE"
+/ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
+:put "CAIWAVE Setup Done! Test: /radius monitor 0"`);
+              toast.success("Copied to clipboard!");
+            }}
+          >
+            <Copy className="w-4 h-4 mr-1" />
+            Copy
+          </Button>
+        </div>
+        <p className="text-yellow-400 text-xs mt-2">
+          ⚠️ Replace YOUR_SECRET with your actual RADIUS secret from CAIWAVE admin
+        </p>
+      </div>
+
+      {/* Setup Steps */}
       <div className="dashboard-card">
         <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-blue-400" />
-          Quick Setup Guide
+          <FileText className="w-5 h-5 text-blue-400" />
+          Setup Steps
         </h2>
         <div className="grid md:grid-cols-4 gap-4">
           <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
             <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-blue-400 font-bold">1</span>
             </div>
-            <h4 className="font-medium text-sm">Reset Router</h4>
-            <p className="text-xs text-neutral-500 mt-1">System reset for fresh install</p>
+            <h4 className="font-medium text-sm">Open WinBox</h4>
+            <p className="text-xs text-neutral-500 mt-1">Connect to MikroTik</p>
           </div>
           <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
             <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-blue-400 font-bold">2</span>
             </div>
-            <h4 className="font-medium text-sm">Configure Internet</h4>
-            <p className="text-xs text-neutral-500 mt-1">DHCP Client on ether1</p>
+            <h4 className="font-medium text-sm">New Terminal</h4>
+            <p className="text-xs text-neutral-500 mt-1">Click New Terminal</p>
           </div>
           <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
             <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-blue-400 font-bold">3</span>
             </div>
-            <h4 className="font-medium text-sm">Run Script</h4>
-            <p className="text-xs text-neutral-500 mt-1">Paste in Terminal</p>
+            <h4 className="font-medium text-sm">Paste Script</h4>
+            <p className="text-xs text-neutral-500 mt-1">Copy script above</p>
           </div>
           <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
             <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <CheckCircle className="w-5 h-5 text-green-400" />
             </div>
-            <h4 className="font-medium text-sm">Confirm</h4>
-            <p className="text-xs text-neutral-500 mt-1">Verify connection</p>
+            <h4 className="font-medium text-sm">Test</h4>
+            <p className="text-xs text-neutral-500 mt-1">/radius monitor 0</p>
           </div>
         </div>
       </div>
