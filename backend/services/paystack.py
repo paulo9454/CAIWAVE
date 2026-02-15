@@ -60,6 +60,8 @@ class MobileMoneyChargeRequest(BaseModel):
     provider: str = "mpesa"
     reference: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    subaccount_code: Optional[str] = None  # For split payments to hotspot owner
+    split_percentage: Optional[float] = None  # Owner's percentage of the transaction
 
 
 class PaystackService:
