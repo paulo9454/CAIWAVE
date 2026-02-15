@@ -4178,7 +4178,7 @@ async def radius_accounting(request: RADIUSAccountingRequest):
 async def radius_post_auth(request: dict):
     """Called after FreeRADIUS makes authentication decision - for logging"""
     log_entry = {
-        "id": str(uuid4()),
+        "id": str(uuid.uuid4()),
         "username": request.get("username", "unknown"),
         "nas_ip": request.get("nas_ip", ""),
         "session_id": request.get("session_id", ""),
