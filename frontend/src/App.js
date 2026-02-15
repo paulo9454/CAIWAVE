@@ -45,6 +45,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/portal/:hotspotId" element={<CaptivePortal />} />
+          <Route path="/setup" element={<SetupWizard />} />
           
           {/* Hotspot Owner Dashboard */}
           <Route
