@@ -1185,9 +1185,271 @@ const RevenueSettingsPage = () => {
   );
 };
 
+// Quick Setup Tab Component - Easy copy-paste commands
+const QuickSetupTab = ({ radiusConfig }) => {
+  const [copied, setCopied] = useState({});
+  const [config, setConfig] = useState({
+    radius_server_ip: radiusConfig?.host || "",
+    radius_secret: "",
+    mikrotik_ip: "",
+    hotspot_id: "",
+    hotspot_ssid: "CAIWAVE_WiFi",
+    hotspot_gateway: "192.168.88.1",
+  });
+
+  const copyToClipboard = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied({ ...copied, [key]: true });
+    toast.success("Copied to clipboard!");
+    setTimeout(() => setCopied({ ...copied, [key]: false }), 2000);
+  };
+
+  const generateSecret = () => {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  // Simple MikroTik Script
+  const getMikroTikScript = () => `# CAIWAVE MikroTik Quick Setup
+# Paste this in MikroTik Terminal (WinBox > New Terminal)
+
+# 1. Configure RADIUS
+/radius remove [find comment~"CAIWAVE"]
+/radius add address=${config.radius_server_ip || "YOUR_RADIUS_IP"} secret="${config.radius_secret || "YOUR_SECRET"}" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
+
+# 2. Configure Hotspot Profile
+/ip hotspot profile set default use-radius=yes radius-accounting=yes
+
+# 3. Create Walled Garden (allow portal access)
+/ip hotspot walled-garden ip remove [find comment~"CAIWAVE"]
+/ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE Portal"
+/ip hotspot walled-garden ip add dst-host=*.caiwave.com action=accept comment="CAIWAVE"
+/ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
+/ip hotspot walled-garden ip add dst-host=*.safaricom.co.ke action=accept comment="CAIWAVE M-Pesa"
+
+# 4. Set Login Redirect
+/ip hotspot profile set default login-by=http-chap,http-pap html-directory=hotspot
+
+:put "CAIWAVE Setup Complete! Test with: /radius monitor 0"`;
+
+  // FreeRADIUS Config
+  const getFreeRadiusConfig = () => `# CAIWAVE FreeRADIUS REST Config
+# File: /etc/freeradius/3.0/mods-available/rest
+
+rest {
+    connect_uri = "https://www.caiwave.com/api"
+    connect_timeout = 4.0
+    http_timeout = 4.0
+    
+    tls {
+        verify_cert = no
+        verify_cert_cn = no
+    }
+    
+    authorize {
+        uri = "\${..connect_uri}/radius/authorize"
+        method = 'post'
+        body = 'json'
+        data = '{"username": "%{User-Name}", "password": "%{User-Password}", "nas_ip": "%{NAS-IP-Address}"}'
+        tls = \${..tls}
+    }
+    
+    accounting {
+        uri = "\${..connect_uri}/radius/accounting"
+        method = 'post'
+        body = 'json'
+        data = '{"username": "%{User-Name}", "session_id": "%{Acct-Session-Id}", "status_type": "%{Acct-Status-Type}", "nas_ip": "%{NAS-IP-Address}", "session_time": "%{Acct-Session-Time}"}'
+        tls = \${..tls}
+    }
+}`;
+
+  // FreeRADIUS Client Config
+  const getFreeRadiusClientConfig = () => `# Add to /etc/freeradius/3.0/clients.conf
+
+client mikrotik_caiwave {
+    ipaddr = ${config.mikrotik_ip || "YOUR_MIKROTIK_IP"}
+    secret = ${config.radius_secret || "YOUR_SECRET"}
+    nastype = mikrotik
+    shortname = caiwave
+}`;
+
+  // FreeRADIUS Install Commands
+  const getFreeRadiusInstallCmds = () => `# Ubuntu/Debian FreeRADIUS Quick Install
+sudo apt update && sudo apt install -y freeradius freeradius-rest
+
+# Enable REST module
+cd /etc/freeradius/3.0/mods-enabled && sudo ln -sf ../mods-available/rest rest
+
+# After adding configs, restart:
+sudo systemctl restart freeradius
+
+# Test in debug mode:
+sudo freeradius -X`;
+
+  return (
+    <div className="space-y-6">
+      {/* Configuration Inputs */}
+      <div className="dashboard-card">
+        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-blue-400" />
+          Setup Configuration
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">FreeRADIUS Server IP</label>
+            <Input
+              value={config.radius_server_ip}
+              onChange={(e) => setConfig({...config, radius_server_ip: e.target.value})}
+              placeholder="e.g., 10.5.50.254"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">MikroTik Router IP</label>
+            <Input
+              value={config.mikrotik_ip}
+              onChange={(e) => setConfig({...config, mikrotik_ip: e.target.value})}
+              placeholder="e.g., 192.168.88.1"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">RADIUS Secret</label>
+            <div className="flex gap-2">
+              <Input
+                value={config.radius_secret}
+                onChange={(e) => setConfig({...config, radius_secret: e.target.value})}
+                placeholder="Click Generate"
+                className="font-mono text-sm"
+              />
+              <Button variant="outline" size="sm" onClick={() => setConfig({...config, radius_secret: generateSecret()})}>
+                Generate
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 1: FreeRADIUS */}
+      <div className="dashboard-card border-purple-500/30">
+        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+          <span className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center text-sm">1</span>
+          FreeRADIUS Server Setup
+        </h3>
+        <p className="text-neutral-400 text-sm mb-4">Run on your Ubuntu/Debian FreeRADIUS server</p>
+        
+        {/* Install Commands */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Install Commands</span>
+            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(getFreeRadiusInstallCmds(), 'install')}>
+              {copied['install'] ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            </Button>
+          </div>
+          <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto">
+            {getFreeRadiusInstallCmds()}
+          </pre>
+        </div>
+
+        {/* REST Config */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">REST Module Config</span>
+            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(getFreeRadiusConfig(), 'rest')}>
+              {copied['rest'] ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            </Button>
+          </div>
+          <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-48">
+            {getFreeRadiusConfig()}
+          </pre>
+        </div>
+
+        {/* Client Config */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Client Config (Add MikroTik)</span>
+            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(getFreeRadiusClientConfig(), 'client')}>
+              {copied['client'] ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+            </Button>
+          </div>
+          <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto">
+            {getFreeRadiusClientConfig()}
+          </pre>
+        </div>
+      </div>
+
+      {/* Step 2: MikroTik */}
+      <div className="dashboard-card border-green-500/30">
+        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+          <span className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-sm">2</span>
+          MikroTik Router Setup
+        </h3>
+        <p className="text-neutral-400 text-sm mb-4">Copy and paste into MikroTik Terminal (WinBox → New Terminal)</p>
+        
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium">MikroTik Script</span>
+          <Button size="sm" variant="outline" className="text-green-400 border-green-400/30" onClick={() => copyToClipboard(getMikroTikScript(), 'mikrotik')}>
+            {copied['mikrotik'] ? <CheckCircle className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+            Copy Script
+          </Button>
+        </div>
+        <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-64">
+          {getMikroTikScript()}
+        </pre>
+      </div>
+
+      {/* Step 3: Verify */}
+      <div className="dashboard-card border-blue-500/30">
+        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
+          <span className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-sm">3</span>
+          Verify Setup
+        </h3>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <h4 className="font-medium text-sm mb-2">On MikroTik:</h4>
+            <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-yellow-400 font-mono">
+{`/radius monitor 0
+/ip hotspot print
+/log print where topics~"radius"`}
+            </pre>
+          </div>
+          <div>
+            <h4 className="font-medium text-sm mb-2">On FreeRADIUS:</h4>
+            <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-yellow-400 font-mono">
+{`sudo freeradius -X
+# Watch for incoming requests`}
+            </pre>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Reference */}
+      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+        <h4 className="font-medium mb-2">Quick Reference</h4>
+        <div className="grid md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <span className="text-neutral-500">CAIWAVE API:</span>
+            <p className="font-mono text-xs">https://www.caiwave.com/api</p>
+          </div>
+          <div>
+            <span className="text-neutral-500">RADIUS Auth Port:</span>
+            <p className="font-mono">1812 (UDP)</p>
+          </div>
+          <div>
+            <span className="text-neutral-500">RADIUS Acct Port:</span>
+            <p className="font-mono">1813 (UDP)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Integration Settings Page
 const IntegrationSettingsPage = () => {
-  const [activeTab, setActiveTab] = useState("paystack");
+  const [activeTab, setActiveTab] = useState("quicksetup");
   const [paystackStatus, setPaystackStatus] = useState(null);
   const [radiusConfig, setRadiusConfig] = useState(null);
   const [nasClients, setNasClients] = useState([]);
