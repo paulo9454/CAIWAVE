@@ -1369,6 +1369,7 @@ const OwnerDashboard = () => {
     { name: "MikroTik Setup", href: "/owner/mikrotik", icon: Zap },
     { name: "Billing", href: "/owner/billing", icon: FileText },
     { name: "Payments", href: "/owner/payments", icon: CreditCard },
+    { name: "Payouts", href: "/owner/payouts", icon: Wallet },
     { name: "Analytics", href: "/owner/analytics", icon: BarChart3 },
     { name: "Settings", href: "/owner/settings", icon: Settings },
   ];
