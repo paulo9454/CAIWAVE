@@ -1238,24 +1238,36 @@ async def create_hotspot(
     hotspot_data: HotspotCreate,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
 ):
+    is_admin = user["role"] == UserRole.SUPER_ADMIN.value
+    
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         hotspot_data.owner_id = user["id"]
     elif not hotspot_data.owner_id:
         hotspot_data.owner_id = user["id"]
     
     now = datetime.now(timezone.utc)
-    trial_end = now + timedelta(days=TRIAL_DAYS)
     
     hotspot = Hotspot(**hotspot_data.model_dump())
     hotspot.status = HotspotStatus.ACTIVE  # Default to active for new hotspots
-    hotspot.subscription_status = SubscriptionStatus.TRIAL  # Start with trial
-    hotspot.trial_start_date = now
-    hotspot.trial_end_date = trial_end
+    
+    # Admin gets lifetime subscription (no payment required)
+    # Partners/Owners get trial that requires payment after trial period
+    if is_admin:
+        hotspot.subscription_status = SubscriptionStatus.LIFETIME
+        hotspot.trial_start_date = None
+        hotspot.trial_end_date = None
+    else:
+        trial_end = now + timedelta(days=TRIAL_DAYS)
+        hotspot.subscription_status = SubscriptionStatus.TRIAL
+        hotspot.trial_start_date = now
+        hotspot.trial_end_date = trial_end
     
     hotspot_dict = hotspot.model_dump()
     hotspot_dict["created_at"] = hotspot_dict["created_at"].isoformat()
-    hotspot_dict["trial_start_date"] = hotspot_dict["trial_start_date"].isoformat()
-    hotspot_dict["trial_end_date"] = hotspot_dict["trial_end_date"].isoformat()
+    if hotspot_dict.get("trial_start_date"):
+        hotspot_dict["trial_start_date"] = hotspot_dict["trial_start_date"].isoformat()
+    if hotspot_dict.get("trial_end_date"):
+        hotspot_dict["trial_end_date"] = hotspot_dict["trial_end_date"].isoformat()
     if hotspot_dict.get("last_seen"):
         hotspot_dict["last_seen"] = hotspot_dict["last_seen"].isoformat()
     if hotspot_dict.get("subscription_end_date"):
@@ -1263,9 +1275,10 @@ async def create_hotspot(
     
     await db.hotspots.insert_one(hotspot_dict)
     
-    # Create trial invoice for this hotspot
-    owner_id = hotspot_data.owner_id or user["id"]
-    await create_invoice_for_owner(owner_id, [hotspot.id], is_trial=True)
+    # Only create trial invoice for non-admin users (partners/owners)
+    if not is_admin:
+        owner_id = hotspot_data.owner_id or user["id"]
+        await create_invoice_for_owner(owner_id, [hotspot.id], is_trial=True)
     
     return hotspot
 
