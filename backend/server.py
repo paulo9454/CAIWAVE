@@ -223,6 +223,7 @@ class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
     GRACE_PERIOD = "grace_period"  # Day 15-17
     SUSPENDED = "suspended"  # Day 18+
+    LIFETIME = "lifetime"  # Admin-created hotspots - never expires
 
 # ==================== Models ====================
 
