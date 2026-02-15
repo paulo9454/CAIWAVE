@@ -87,6 +87,15 @@ const SubscriptionBanner = ({ subscription, onPayNow }) => {
           showPayButton: true,
           urgent: true
         };
+      case "lifetime":
+        return {
+          bg: "bg-purple-500/10 border-purple-500/30",
+          icon: <CheckCircle className="w-5 h-5 text-purple-400" />,
+          title: "Lifetime Access",
+          description: "You have lifetime access. No subscription fees required!",
+          showPayButton: false,
+          urgent: false
+        };
       default:
         return null;
     }
