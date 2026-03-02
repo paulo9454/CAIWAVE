@@ -4075,53 +4075,67 @@ class RADIUSAccountingRequest(BaseModel):
 @radius_router.post("/authorize")
 async def radius_authorize(request: RADIUSAuthorizeRequest):
     """FreeRADIUS calls this endpoint to authenticate WiFi users"""
-    
-    # First check 'sessions' collection (for free ad-based sessions)
+
     session = await db.sessions.find_one({
         "username": request.username
     }, {"_id": 0})
-    
-    # If not found, check 'wifi_sessions' collection (for paid sessions)
+
     if not session:
         session = await db.wifi_sessions.find_one({
             "username": request.username,
             "status": {"$in": ["active", "pending"]}
         }, {"_id": 0})
-    
+
     if not session:
-        return {"reply": "Access-Reject", "reply-message": "Invalid credentials or no active session"}
-    
-    # Verify password
+        return {
+            "control": {},
+            "reply": {
+                "Reply-Message": "Invalid credentials or no active session"
+            }
+        }
+
     if session.get("password") and session.get("password") != request.password:
-        return {"reply": "Access-Reject", "reply-message": "Invalid password"}
-    
-    # Check if session expired
+        return {
+            "control": {},
+            "reply": {
+                "Reply-Message": "Invalid password"
+            }
+        }
+
     if session.get("expires_at"):
-        expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
+        expires_at = datetime.fromisoformat(
+            session["expires_at"].replace("Z", "+00:00")
+        )
+
         if expires_at < datetime.now(timezone.utc):
             await db.wifi_sessions.update_one(
                 {"username": request.username},
                 {"$set": {"status": "expired"}}
             )
-            return {"reply": "Access-Reject", "reply-message": "Session expired"}
-        
-        # Calculate remaining time
-        remaining_seconds = int((expires_at - datetime.now(timezone.utc)).total_seconds())
-    else:
-        remaining_seconds = 3600  # Default 1 hour
-    
-    # Get package details for rate limit
-    rate_limit = session.get("rate_limit", "2M/2M")
-    
-    # Return access granted with session attributes
-    return {
-        "reply": "Access-Accept",
-        "Session-Timeout": remaining_seconds,
-        "Acct-Interim-Interval": 300,
-        "Mikrotik-Rate-Limit": rate_limit,
-        "Reply-Message": f"Welcome! Session valid for {remaining_seconds // 60} minutes"
-    }
+            return {
+                "control": {},
+                "reply": {
+                    "Reply-Message": "Session expired"
+                }
+            }
 
+        remaining_seconds = int(
+            (expires_at - datetime.now(timezone.utc)).total_seconds()
+        )
+    else:
+        remaining_seconds = 3600
+
+    rate_limit = session.get("rate_limit", "2M/2M")
+
+    return {
+        "control": {},
+        "reply": {
+            "Session-Timeout": remaining_seconds,
+            "Acct-Interim-Interval": 300,
+            "Mikrotik-Rate-Limit": rate_limit,
+            "Reply-Message": f"Welcome! Session valid for {remaining_seconds // 60} minutes"
+        }
+    }
 @radius_router.post("/accounting")
 async def radius_accounting(request: RADIUSAccountingRequest):
     """FreeRADIUS calls this to track session usage (start/stop/interim)"""
