@@ -469,6 +469,8 @@ RADIUS_COA_PORT=3799
 
 ## Part 7: Troubleshooting
 
+For a practical diagnosis workflow, see `docs/MIKROTIK_FREERADIUS_TROUBLESHOOTING.md`.
+
 ### Common Issues
 
 | Problem | Solution |

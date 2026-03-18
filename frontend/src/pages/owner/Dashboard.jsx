@@ -255,6 +255,14 @@ const DashboardOverview = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (!showAddRouter || !generatedScript) return;
+    const timer = setInterval(() => {
+      fetchData();
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [showAddRouter, generatedScript]);
+
   const fetchData = async () => {
     try {
       const token = getAuthToken();
@@ -710,6 +718,14 @@ const MikroTikSetupPage = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (!showAddRouter || !generatedScript) return;
+    const timer = setInterval(() => {
+      fetchData();
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [showAddRouter, generatedScript]);
+
   const fetchData = async () => {
     try {
       const token = getAuthToken();
@@ -989,7 +1005,10 @@ const MikroTikSetupPage = () => {
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-neutral-900 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-neutral-800">
             <div className="p-6 border-b border-neutral-800 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Add MikroTik Router</h2>
+              <div>
+                <h2 className="text-xl font-semibold">Add Mikrotik Device</h2>
+                <p className="text-sm text-neutral-400 mt-1">To proceed with onboarding, connect your Mikrotik router to enable automated provisioning and management.</p>
+              </div>
               <button
                 onClick={() => {
                   setShowAddRouter(false);
@@ -1008,15 +1027,16 @@ const MikroTikSetupPage = () => {
                 <>
                   {/* Router Name Input */}
                   <div>
-                    <label className="block text-sm text-neutral-400 mb-2">Router Name</label>
+                    <label className="block text-sm text-neutral-400 mb-2">Mikrotik Identity *</label>
                     <input
                       type="text"
                       value={routerName}
                       onChange={(e) => setRouterName(e.target.value)}
-                      placeholder="e.g., Main Office Router"
+                      placeholder="e.g., MikroTik1"
                       className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500"
                       data-testid="router-name-input"
                     />
+                    <p className="text-xs text-neutral-500 mt-1">The identity name of your MikroTik device (System → Identity)</p>
                   </div>
                   
                   {/* Hotspot Selection */}
@@ -1058,13 +1078,83 @@ const MikroTikSetupPage = () => {
                   <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
                     <div className="flex items-center gap-2 text-green-400 mb-2">
                       <CheckCircle className="w-5 h-5" />
-                      <span className="font-semibold">Script Generated Successfully!</span>
+                      <span className="font-semibold">Device Configuration Ready!</span>
                     </div>
                     <p className="text-sm text-neutral-400">
-                      Copy the script below and paste it into your MikroTik Terminal.
+                      Use the provisioning command below to register the device first. Then use Service Setup to enable PPPoE, Hotspot, and any FreeRADIUS service.
+                    </p>
+                  </div>
+
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div className="p-3 bg-neutral-800/50 rounded-lg border border-neutral-700">
+                      <p className="text-xs text-blue-400 font-semibold">1 · Connection</p>
+                      <p className="text-xs text-neutral-400 mt-1">Basic device information</p>
+                    </div>
+                    <div className="p-3 bg-neutral-800/50 rounded-lg border border-neutral-700">
+                      <p className="text-xs text-blue-400 font-semibold">2 · Device Details</p>
+                      <p className="text-xs text-neutral-400 mt-1">Run provisioning command</p>
+                    </div>
+                    <div className="p-3 bg-neutral-800/50 rounded-lg border border-neutral-700">
+                      <p className="text-xs text-blue-400 font-semibold">3 · Service Setup</p>
+                      <p className="text-xs text-neutral-400 mt-1">Configure PPPoE, Hotspot, and RADIUS</p>
+                    </div>
+                  </div>
+
+                  {/* Provisioning Command */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold">Provisioning Command</h3>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(generatedScript.provisioning_command || generatedScript.script)}
+                        className="border-neutral-700"
+                      >
+                        Click to Copy
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={fetchData}
+                        className="border-neutral-700"
+                      >
+                        Refresh Status
+                      </Button>
+                    </div>
+                    <div className="bg-neutral-950 rounded-lg p-4">
+                      <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono break-all">
+                        {generatedScript.provisioning_command || generatedScript.script}
+                      </pre>
+                    </div>
+                    <p className="text-xs text-yellow-400 mt-2">
+                      If you see "device mode not allowed", run <span className="font-mono">/system/device-mode/update mode=advanced</span>, power-cycle for 10 seconds, then retry.
                     </p>
                   </div>
                   
+                  {/* Service Setup */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold">Service Setup (PPPoE + Hotspot + Ports)</h3>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(generatedScript.service_setup_script || "")}
+                        className="border-neutral-700"
+                      >
+                        Copy Service Setup
+                      </Button>
+                    </div>
+                    <div className="bg-neutral-950 rounded-lg p-4 max-h-56 overflow-y-auto">
+                      <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono">
+                        {generatedScript.service_setup_script || "Service setup script will appear after registration."}
+                      </pre>
+                    </div>
+                    <div className="mt-2 space-y-1 text-xs text-neutral-500">
+                      <p>Edit YOUR_FREERADIUS_IP and YOUR_RADIUS_SECRET before running.</p>
+                      <p>Also review LAN/WAN interfaces, hotspot subnet, and PPPoE service/profile names to match your MikroTik.</p>
+                    </div>
+                  </div>
+
                   {/* Credentials Info */}
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="p-4 bg-neutral-800/50 rounded-lg">
@@ -1094,10 +1184,10 @@ const MikroTikSetupPage = () => {
                     </ol>
                   </div>
                   
-                  {/* Script Box */}
+                  {/* Full Script Box */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold">Configuration Script</h3>
+                      <h3 className="font-semibold">Full Configuration Script</h3>
                       <Button
                         size="sm"
                         variant="outline"

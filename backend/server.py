@@ -9,7 +9,7 @@ Refactored to use modular architecture:
 - /config.py: Configuration management
 - /database.py: MongoDB connection
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -4419,215 +4419,123 @@ def generate_nas_id(name: str) -> str:
     clean_name = "".join(c for c in name if c.isalnum())[:10].upper()
     return f"CAIWAVE-{clean_name}-{secrets_module.token_hex(4).upper()}"
 
-def generate_mikrotik_script(router_name: str, nas_id: str, radius_secret: str, radius_host: str, callback_url: str) -> str:
-    """Generate a complete MikroTik auto-configuration script"""
-    
+def generate_provisioning_token() -> str:
+    """Generate one-time provisioning token for MikroTik fetch/import flow"""
+    return secrets_module.token_urlsafe(48)
+
+
+def generate_mikrotik_script(router_name: str, nas_id: str, confirm_url: str) -> str:
+    """Generate lightweight provisioning script (no RADIUS lock-in)."""
+
     return f'''# =========================================================
-# CAIWAVE MikroTik Auto-Configuration Script
+# CAIWAVE MikroTik Provisioning Script (Generic)
 # Router: {router_name}
 # NAS Identifier: {nas_id}
 # Generated: {datetime.now(timezone.utc).isoformat()}
 # =========================================================
 
-# IMPORTANT: Run this script in MikroTik Terminal after:
-# 1. System Reset (optional but recommended for fresh install)
-# 2. DHCP Client configured on ether1 for internet
+:log info "CAIWAVE: Starting provisioning bootstrap..."
 
-:log info "CAIWAVE: Starting auto-configuration..."
-
-# =========================================================
-# 1. BASIC SYSTEM CONFIGURATION
-# =========================================================
+# 1) Set identity only (safe, vendor-agnostic)
 /system identity set name="{router_name}"
-:log info "CAIWAVE: System identity set to {router_name}"
 
-# Set system clock (NTP)
-/system ntp client set enabled=yes servers=time.google.com
+# 2) Ensure API service ports are enabled for management visibility
+/ip service set api disabled=no port=8728
+/ip service set api-ssl disabled=no port=8729
 
-# =========================================================
-# 2. BRIDGE CONFIGURATION
-# =========================================================
-# Create bridge for hotspot if not exists
-:if ([:len [/interface bridge find name=bridge-hotspot]] = 0) do={{
-    /interface bridge add name=bridge-hotspot comment="CAIWAVE Hotspot Bridge"
-    :log info "CAIWAVE: Created bridge-hotspot"
-}}
-
-# Add all ethernet ports to bridge EXCEPT ether1 (WAN)
-:foreach i in=[/interface ethernet find] do={{
-    :local ethName [/interface ethernet get $i name]
-    :if ($ethName != "ether1") do={{
-        :if ([:len [/interface bridge port find interface=$ethName]] = 0) do={{
-            /interface bridge port add bridge=bridge-hotspot interface=$ethName comment="CAIWAVE"
-            :log info ("CAIWAVE: Added " . $ethName . " to bridge-hotspot")
-        }}
-    }}
-}}
-
-# =========================================================
-# 3. IP CONFIGURATION FOR HOTSPOT
-# =========================================================
-:if ([:len [/ip address find interface=bridge-hotspot]] = 0) do={{
-    /ip address add address=10.10.0.1/24 interface=bridge-hotspot comment="CAIWAVE Hotspot Network"
-    :log info "CAIWAVE: Added IP 10.10.0.1/24 to bridge-hotspot"
-}}
-
-# DHCP Pool for hotspot clients
-:if ([:len [/ip pool find name=pool-hotspot]] = 0) do={{
-    /ip pool add name=pool-hotspot ranges=10.10.0.10-10.10.0.254
-    :log info "CAIWAVE: Created DHCP pool for hotspot"
-}}
-
-# DHCP Server for hotspot
-:if ([:len [/ip dhcp-server find name=dhcp-hotspot]] = 0) do={{
-    /ip dhcp-server add name=dhcp-hotspot interface=bridge-hotspot address-pool=pool-hotspot disabled=no
-    /ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="CAIWAVE Hotspot Network"
-    :log info "CAIWAVE: Configured DHCP server for hotspot"
-}}
-
-# =========================================================
-# 4. DNS CONFIGURATION
-# =========================================================
-/ip dns set allow-remote-requests=yes servers=8.8.8.8,8.8.4.4,1.1.1.1
-:log info "CAIWAVE: DNS configured"
-
-# =========================================================
-# 5. RADIUS CONFIGURATION
-# =========================================================
-# Remove existing CAIWAVE RADIUS config if any
-:foreach r in=[/radius find comment~"CAIWAVE"] do={{
-    /radius remove $r
-}}
-
-# Add CAIWAVE RADIUS server
-/radius add address={radius_host} secret="{radius_secret}" service=hotspot comment="CAIWAVE RADIUS Server" timeout=3s
-
-:log info "CAIWAVE: RADIUS server configured - {radius_host}"
-
-# Enable RADIUS for hotspot
-/ip hotspot profile set [find default=yes] use-radius=yes radius-interim-update=5m
-
-# =========================================================
-# 6. HOTSPOT SERVER PROFILE
-# =========================================================
-:if ([:len [/ip hotspot profile find name=caiwave-profile]] = 0) do={{
-    /ip hotspot profile add name=caiwave-profile \\
-        hotspot-address=10.10.0.1 \\
-        dns-name=wifi.caiwave.com \\
-        login-by=http-pap,http-chap \\
-        use-radius=yes \\
-        radius-accounting=yes \\
-        nas-port-type=wireless-802.11 \\
-        radius-interim-update=5m \\
-        html-directory=hotspot \\
-        rate-limit="" \\
-        http-cookie-lifetime=1d \\
-        split-user-domain=no
-    :log info "CAIWAVE: Hotspot profile created"
-}} else={{
-    /ip hotspot profile set caiwave-profile \\
-        use-radius=yes \\
-        radius-accounting=yes \\
-        radius-interim-update=5m
-    :log info "CAIWAVE: Hotspot profile updated"
-}}
-
-# =========================================================
-# 7. HOTSPOT SERVER SETUP
-# =========================================================
-:if ([:len [/ip hotspot find name=caiwave-hotspot]] = 0) do={{
-    /ip hotspot add name=caiwave-hotspot interface=bridge-hotspot \\
-        address-pool=pool-hotspot \\
-        profile=caiwave-profile \\
-        disabled=no
-    :log info "CAIWAVE: Hotspot server created"
-}} else={{
-    /ip hotspot set caiwave-hotspot profile=caiwave-profile disabled=no
-    :log info "CAIWAVE: Hotspot server updated"
-}}
-
-# Set NAS identifier
-/ip hotspot set caiwave-hotspot addresses-per-mac=1
-
-# =========================================================
-# 8. ANTI-SHARING PROTECTION
-# =========================================================
-/ip hotspot set caiwave-hotspot addresses-per-mac=1
-
-# Add connection tracking rules
-:if ([:len [/ip firewall filter find comment="CAIWAVE Anti-Sharing"]] = 0) do={{
-    /ip firewall filter add chain=forward action=drop connection-state=invalid comment="CAIWAVE Anti-Sharing"
-}}
-
-:log info "CAIWAVE: Anti-sharing protection enabled"
-
-# =========================================================
-# 9. FIREWALL RULES
-# =========================================================
-:if ([:len [/ip firewall nat find comment="CAIWAVE NAT"]] = 0) do={{
-    /ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade comment="CAIWAVE NAT"
-    :log info "CAIWAVE: NAT masquerade configured"
-}}
-
-:if ([:len [/ip firewall filter find comment="CAIWAVE Firewall"]] = 0) do={{
-    /ip firewall filter add chain=input connection-state=established,related action=accept comment="CAIWAVE Firewall"
-    /ip firewall filter add chain=input connection-state=invalid action=drop comment="CAIWAVE Firewall"
-    /ip firewall filter add chain=input protocol=icmp action=accept comment="CAIWAVE Firewall"
-    /ip firewall filter add chain=input in-interface=bridge-hotspot action=accept comment="CAIWAVE Firewall"
-    :log info "CAIWAVE: Firewall rules configured"
-}}
-
-# =========================================================
-# 10. WALLED GARDEN
-# =========================================================
-/ip hotspot walled-garden add dst-host=*.caiwave.com action=allow comment="CAIWAVE Portal"
-/ip hotspot walled-garden add dst-host=caiwave.com action=allow comment="CAIWAVE Portal"
-/ip hotspot walled-garden add dst-host=*.paystack.com action=allow comment="Paystack Payment"
-/ip hotspot walled-garden add dst-host=paystack.com action=allow comment="Paystack Payment"
-/ip hotspot walled-garden add dst-host=*.paystack.co action=allow comment="Paystack Payment"
-/ip hotspot walled-garden add dst-host=*.flutterwave.com action=allow comment="Payment Fallback"
-
-:log info "CAIWAVE: Walled garden configured"
-
-# =========================================================
-# 11. REMOTE MANAGEMENT (API)
-# =========================================================
-# Enable API for remote management
-/ip service set api address=0.0.0.0/0 disabled=no
-/ip service set api-ssl disabled=no
-
-# Add CAIWAVE management user
-:if ([:len [/user find name=caiwave-admin]] = 0) do={{
-    /user add name=caiwave-admin password={radius_secret} group=full
-    :log info "CAIWAVE: Management user created"
-}}
-
-:log info "CAIWAVE: Remote management enabled"
-
-# =========================================================
-# CONFIGURATION COMPLETE
-# =========================================================
-:log info "=========================================="
-:log info "CAIWAVE AUTO-CONFIGURATION COMPLETE!"
-:log info "=========================================="
-:log info ("NAS Identifier: " . "{nas_id}")
-:log info "Hotspot Server: caiwave-hotspot"
-:log info "Hotspot Network: 10.10.0.0/24"
-:log info "RADIUS Server: {radius_host}"
-:log info "=========================================="
+# 3) Mark onboarding as successful in CAIWAVE dashboard
+/tool fetch mode=https url="{confirm_url}" keep-result=no
 
 :put ""
 :put "==========================================="
-:put "CAIWAVE CONFIGURATION COMPLETE!"
+:put "CAIWAVE PROVISIONING COMPLETE"
 :put "==========================================="
-:put ""
 :put "NAS Identifier: {nas_id}"
-:put "RADIUS Secret: {radius_secret}"
-:put ""
-:put "Please confirm the connection in your"
-:put "CAIWAVE dashboard to complete setup."
-:put ""
+:put "Status should now show as configured in dashboard."
+:put "Next Step: Run Service Setup script for PPPoE/Hotspot + RADIUS ports."
 :put "==========================================="
+'''
+
+
+def generate_service_setup_script(radius_host: str, radius_secret: str, auth_port: int = 1812, acct_port: int = 1813) -> str:
+    """Generate editable service setup script for any FreeRADIUS provider."""
+
+    return f'''# =========================================================
+# CAIWAVE Service Setup (PPPoE + Hotspot + ANY FreeRADIUS)
+# Update interface/address/secret/ports before running.
+# =========================================================
+
+:local radiusAddress "{radius_host}"
+:local radiusSecret "{radius_secret}"
+:local radiusAuthPort {auth_port}
+:local radiusAcctPort {acct_port}
+:local lanInterface "bridge"
+:local wanInterface "ether1"
+:local hotspotAddress "10.10.0.1/24"
+:local hotspotNetwork "10.10.0.0/24"
+:local hotspotPoolStart "10.10.0.10"
+:local hotspotPoolEnd "10.10.0.254"
+:local pppoeServiceName "caiwave-pppoe"
+:local pppoeProfileName "caiwave-pppoe-profile"
+:local hotspotProfileName "caiwave-hotspot-profile"
+:local hotspotServerName "caiwave-hotspot"
+
+# Optional: clear old CAIWAVE radius entries
+:foreach r in=[/radius find comment~"CAIWAVE"] do={{ /radius remove $r }}
+
+# Add RADIUS for hotspot + PPPoE
+/radius add address=$radiusAddress secret=$radiusSecret service=hotspot,ppp authentication-port=$radiusAuthPort accounting-port=$radiusAcctPort timeout=3s comment="CAIWAVE"
+
+# PPPoE uses RADIUS
+/ppp aaa set use-radius=yes accounting=yes interim-update=5m
+
+# Create PPPoE profile if missing
+:if ([:len [/ppp profile find name=$pppoeProfileName]] = 0) do={{
+    /ppp profile add name=$pppoeProfileName use-encryption=required only-one=yes change-tcp-mss=yes comment="CAIWAVE PPPoE"
+}}
+
+# Create PPPoE server on LAN interface if missing
+:if ([:len [/interface pppoe-server server find service-name=$pppoeServiceName]] = 0) do={{
+    /interface pppoe-server server add service-name=$pppoeServiceName interface=$lanInterface default-profile=$pppoeProfileName one-session-per-host=yes authentication=pap,chap,mschap1,mschap2 disabled=no
+}}
+
+# Create hotspot address if missing
+:if ([:len [/ip address find address=$hotspotAddress interface=$lanInterface]] = 0) do={{
+    /ip address add address=$hotspotAddress interface=$lanInterface comment="CAIWAVE Hotspot"
+}}
+
+# Create hotspot pool if missing
+:if ([:len [/ip pool find name="caiwave-hotspot-pool"]] = 0) do={{
+    /ip pool add name="caiwave-hotspot-pool" ranges=($hotspotPoolStart . "-" . $hotspotPoolEnd)
+}}
+
+# Create hotspot profile if missing
+:if ([:len [/ip hotspot profile find name=$hotspotProfileName]] = 0) do={{
+    /ip hotspot profile add name=$hotspotProfileName hotspot-address=10.10.0.1 login-by=http-chap,http-pap use-radius=yes radius-accounting=yes radius-interim-update=5m html-directory=hotspot
+}} else={{
+    /ip hotspot profile set $hotspotProfileName use-radius=yes radius-accounting=yes radius-interim-update=5m
+}}
+
+# Create hotspot server if missing
+:if ([:len [/ip hotspot find name=$hotspotServerName]] = 0) do={{
+    /ip hotspot add name=$hotspotServerName interface=$lanInterface address-pool="caiwave-hotspot-pool" profile=$hotspotProfileName disabled=no
+}} else={{
+    /ip hotspot set $hotspotServerName profile=$hotspotProfileName disabled=no
+}}
+
+# Optional NAT for client internet access
+:if ([:len [/ip firewall nat find comment="CAIWAVE NAT"]] = 0) do={{
+    /ip firewall nat add chain=srcnat out-interface=$wanInterface action=masquerade comment="CAIWAVE NAT"
+}}
+
+# Recommended management ports
+/ip service set api disabled=no port=8728
+/ip service set api-ssl disabled=no port=8729
+
+:put "Service setup complete."
+:put "Verify PPPoE: /interface pppoe-server server print"
+:put "Verify Hotspot: /ip hotspot print"
+:put "Verify RADIUS: /radius monitor 0"
 '''
 
 
@@ -4656,15 +4564,18 @@ async def register_mikrotik(
     # Generate secure credentials
     radius_secret = generate_secure_secret()
     nas_id = generate_nas_id(request.name)
+    provisioning_token = generate_provisioning_token()
     
-    # Get RADIUS server configuration
-    radius_host = os.environ.get('RADIUS_HOST', 'radius.caiwave.com')
+    # Build onboarding callback URLs
     callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
-    
+
     if not callback_url:
-        # Construct from frontend URL
         frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
         callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
+
+    onboarding_base_url = callback_url.rsplit('/confirm', 1)[0]
+    confirm_command_url = f"{onboarding_base_url}/confirm-command/{provisioning_token}"
+    provision_script_url = f"{onboarding_base_url}/provision/{provisioning_token}"
     
     # Create router record
     router_id = str(uuid.uuid4())
@@ -4675,6 +4586,7 @@ async def register_mikrotik(
         "owner_id": user["id"],
         "radius_secret": radius_secret,
         "nas_identifier": nas_id,
+        "provisioning_token": provisioning_token,
         "status": "pending_configuration",
         "connection_confirmed": False,
         "detected_ports": [],
@@ -4702,13 +4614,17 @@ async def register_mikrotik(
     }
     await db.nas_clients.insert_one(nas_client)
     
-    # Generate the script
+    # Generate scripts
     script = generate_mikrotik_script(
         router_name=request.name,
         nas_id=nas_id,
-        radius_secret=radius_secret,
-        radius_host=radius_host,
-        callback_url=callback_url
+        confirm_url=confirm_command_url
+    )
+    service_setup_script = generate_service_setup_script(
+        radius_host="YOUR_FREERADIUS_IP",
+        radius_secret="YOUR_RADIUS_SECRET",
+        auth_port=1812,
+        acct_port=1813
     )
     
     return {
@@ -4716,18 +4632,82 @@ async def register_mikrotik(
         "router_name": request.name,
         "nas_identifier": nas_id,
         "radius_secret": radius_secret,
+        "provisioning_token": provisioning_token,
         "callback_url": callback_url,
+        "provisioning_script_url": provision_script_url,
+        "provisioning_command": f'/tool fetch mode=https url="{provision_script_url}" dst-path=caiwave-provision.rsc;:delay 2s;/import caiwave-provision.rsc;',
         "script": script,
+        "service_setup_script": service_setup_script,
         "instructions": [
             "1. Log into your MikroTik via Winbox or Terminal",
-            "2. Configure DHCP Client on ether1 for internet access",
-            "3. Open Terminal in MikroTik",
-            "4. Copy and paste the entire script below",
-            "5. Wait for 'CONFIGURATION COMPLETE' message",
-            "6. Return to this dashboard and click 'Confirm Connection'",
-            "7. Test by connecting a device to your hotspot"
+            "2. Open Terminal in MikroTik",
+            "3. Run the Provisioning Command (marks dashboard as configured)",
+            "4. Verify router status changes to Connected in dashboard",
+            "5. Edit Service Setup script with your FreeRADIUS details",
+            "6. Run Service Setup script to enable PPPoE + Hotspot with RADIUS"
         ]
     }
+
+
+@mikrotik_onboard_router.get("/provision/{provisioning_token}")
+async def get_mikrotik_provisioning_script(provisioning_token: str):
+    """Return router-specific MikroTik script for one-line fetch/import onboarding"""
+    router = await db.mikrotik_routers.find_one(
+        {"provisioning_token": provisioning_token},
+        {"_id": 0}
+    )
+
+    if not router:
+        raise HTTPException(status_code=404, detail="Provisioning token not found")
+
+    callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
+    if not callback_url:
+        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
+        callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
+
+    confirm_command_url = f"{callback_url.rsplit('/confirm', 1)[0]}/confirm-command/{provisioning_token}"
+    script = generate_mikrotik_script(
+        router_name=router["name"],
+        nas_id=router["nas_identifier"],
+        confirm_url=confirm_command_url
+    )
+
+    return Response(content=script, media_type="text/plain")
+
+
+@mikrotik_onboard_router.get("/confirm-command/{provisioning_token}")
+async def confirm_mikrotik_by_command(provisioning_token: str, req: Request):
+    """Mark router as configured after successful provisioning command execution."""
+    router = await db.mikrotik_routers.find_one({"provisioning_token": provisioning_token}, {"_id": 0})
+    if not router:
+        raise HTTPException(status_code=404, detail="Provisioning token not found")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    client_ip = req.client.host if req.client else "unknown"
+
+    await db.mikrotik_routers.update_one(
+        {"id": router["id"]},
+        {"$set": {
+            "status": "connected",
+            "connection_confirmed": True,
+            "configured_at": now_iso,
+            "last_seen": now_iso,
+            "detected_services": ["api", "api-ssl"],
+            "detected_ports": ["8728", "8729"]
+        }}
+    )
+
+    await db.nas_clients.update_one(
+        {"hotspot_id": router["hotspot_id"], "nas_type": "MikroTik"},
+        {"$set": {"ip_address": client_ip, "last_seen": now_iso}}
+    )
+
+    await db.hotspots.update_one(
+        {"id": router["hotspot_id"]},
+        {"$set": {"status": "active", "last_seen": now_iso, "mikrotik_connected": True}}
+    )
+
+    return {"success": True, "message": "Configuration acknowledged"}
 
 
 @mikrotik_onboard_router.post("/confirm")
@@ -4847,22 +4827,31 @@ async def regenerate_mikrotik_script(
     if user["role"] == UserRole.HOTSPOT_OWNER.value and router["owner_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    radius_host = os.environ.get('RADIUS_HOST', 'radius.caiwave.com')
     callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
-    
+    if not callback_url:
+        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
+        callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
+
+    provisioning_token = router.get("provisioning_token") or generate_provisioning_token()
+    if "provisioning_token" not in router:
+        await db.mikrotik_routers.update_one({"id": router_id}, {"$set": {"provisioning_token": provisioning_token}})
+
+    base_url = callback_url.rsplit('/confirm', 1)[0]
     script = generate_mikrotik_script(
         router_name=router["name"],
         nas_id=router["nas_identifier"],
-        radius_secret=router["radius_secret"],
-        radius_host=radius_host,
-        callback_url=callback_url
+        confirm_url=f"{base_url}/confirm-command/{provisioning_token}"
     )
-    
+
     return {
         "router_id": router_id,
         "router_name": router["name"],
         "nas_identifier": router["nas_identifier"],
-        "script": script
+        "provisioning_token": provisioning_token,
+        "provisioning_script_url": f"{base_url}/provision/{provisioning_token}",
+        "provisioning_command": f'/tool fetch mode=https url="{base_url}/provision/{provisioning_token}" dst-path=caiwave-provision.rsc;:delay 2s;/import caiwave-provision.rsc;',
+        "script": script,
+        "service_setup_script": generate_service_setup_script("YOUR_FREERADIUS_IP", "YOUR_RADIUS_SECRET", 1812, 1813)
     }
 
 

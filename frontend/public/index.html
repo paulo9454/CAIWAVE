@@ -10,34 +10,6 @@
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
-        <style>
-            /* Aggressive hide for Emergent badge */
-            #emergent-badge, 
-            [id*="emergent"], 
-            a[href*="emergent.sh"],
-            a[href*="emergent-badge"],
-            a[href*="utm_source=emergent"],
-            div[style*="position: fixed"][style*="bottom"][style*="right"],
-            a[style*="position: fixed"][style*="bottom"][style*="right"],
-            a[style*="z-index: 9999"],
-            a[style*="178px"],
-            a[style*="border-radius: 50px"][style*="position: fixed"] {
-                display: none !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
-                pointer-events: none !important;
-                width: 0 !important;
-                height: 0 !important;
-                max-width: 0 !important;
-                max-height: 0 !important;
-                overflow: hidden !important;
-                position: absolute !important;
-                left: -99999px !important;
-                top: -99999px !important;
-                transform: scale(0) !important;
-                clip: rect(0,0,0,0) !important;
-            }
-        </style>
         <!--
         manifest.json provides metadata used when your web app is installed on a
         user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
@@ -52,37 +24,6 @@
         Learn how to configure a non-root public URL by running `npm run build`.
         -->
         <title>CAIWAVE | WiFi Hotspot Billing Platform</title>
-        <script>
-            // Only load Emergent scripts in preview/iframe mode
-            if (window.self !== window.top) {
-                var emergentScript = document.createElement('script');
-                emergentScript.src = 'https://assets.emergent.sh/scripts/emergent-main.js';
-                document.head.appendChild(emergentScript);
-            }
-        </script>
-        <!--
-        These two scripts have been added for the Visual Edits, please do not edit or remove them
-        -->
-        <script>
-            // Only load visual edit scripts when inside an iframe
-            if (window.self !== window.top) {
-                // Load debug monitor script
-                var debugMonitorScript = document.createElement('script');
-                debugMonitorScript.src = 'https://assets.emergent.sh/scripts/debug-monitor.js';
-                document.head.appendChild(debugMonitorScript);
-
-                // Configure Tailwind
-                window.tailwind = window.tailwind || {};
-                tailwind.config = {
-                    corePlugins: { preflight: false },
-                };
-
-                // Load Tailwind CDN
-                var tailwindScript = document.createElement('script');
-                tailwindScript.src = 'https://cdn.tailwindcss.com';
-                document.head.appendChild(tailwindScript);
-            }
-        </script>
     </head>
     <body style="background-color: #050505 !important;">
         <noscript>You need to enable JavaScript to run this app.</noscript>
@@ -167,77 +108,6 @@
                     capturePerformance: false,
                 },
             });
-        </script>
-        <script>
-            // Aggressive removal of any external badges
-            (function() {
-                function removeBadge() {
-                    // Remove by ID
-                    const badge = document.getElementById('emergent-badge');
-                    if (badge) badge.parentNode.removeChild(badge);
-                    
-                    // Remove any link containing emergent
-                    document.querySelectorAll('a').forEach(function(el) {
-                        var href = el.getAttribute('href') || '';
-                        var text = el.textContent || '';
-                        var style = el.getAttribute('style') || '';
-                        
-                        if (href.indexOf('emergent') !== -1 || 
-                            text.indexOf('Emergent') !== -1 ||
-                            text.indexOf('Made with') !== -1 ||
-                            (style.indexOf('fixed') !== -1 && style.indexOf('bottom') !== -1 && style.indexOf('right') !== -1) ||
-                            (style.indexOf('z-index') !== -1 && style.indexOf('9999') !== -1)) {
-                            el.parentNode.removeChild(el);
-                        }
-                    });
-                    
-                    // Remove any element with emergent in id
-                    document.querySelectorAll('[id*="emergent"]').forEach(function(el) {
-                        el.parentNode.removeChild(el);
-                    });
-                }
-                
-                // Run immediately
-                removeBadge();
-                
-                // Run on DOM ready
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', removeBadge);
-                }
-                
-                // Run on load
-                window.addEventListener('load', removeBadge);
-                
-                // Run periodically
-                setInterval(removeBadge, 100);
-                
-                // Use MutationObserver to catch dynamically injected elements
-                var observer = new MutationObserver(function(mutations) {
-                    mutations.forEach(function(mutation) {
-                        mutation.addedNodes.forEach(function(node) {
-                            if (node.nodeType === 1) {
-                                var href = node.getAttribute ? node.getAttribute('href') || '' : '';
-                                var text = node.textContent || '';
-                                var style = node.getAttribute ? node.getAttribute('style') || '' : '';
-                                var id = node.id || '';
-                                
-                                if (id.indexOf('emergent') !== -1 ||
-                                    href.indexOf('emergent') !== -1 || 
-                                    text.indexOf('Made with Emergent') !== -1 ||
-                                    (style.indexOf('fixed') !== -1 && style.indexOf('9999') !== -1)) {
-                                    node.parentNode.removeChild(node);
-                                }
-                            }
-                        });
-                    });
-                    removeBadge();
-                });
-                
-                observer.observe(document.documentElement, {
-                    childList: true,
-                    subtree: true
-                });
-            })();
         </script>
     </body>
 </html>
