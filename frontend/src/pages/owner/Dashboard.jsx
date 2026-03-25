@@ -255,14 +255,6 @@ const DashboardOverview = () => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (!showAddRouter || !generatedScript) return;
-    const timer = setInterval(() => {
-      fetchData();
-    }, 8000);
-    return () => clearInterval(timer);
-  }, [showAddRouter, generatedScript]);
-
   const fetchData = async () => {
     try {
       const token = getAuthToken();
@@ -725,6 +717,7 @@ const MikroTikSetupPage = () => {
     }, 8000);
     return () => clearInterval(timer);
   }, [showAddRouter, generatedScript]);
+
 
   const fetchData = async () => {
     try {
