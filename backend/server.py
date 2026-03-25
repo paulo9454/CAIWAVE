@@ -4541,7 +4541,8 @@ def generate_service_setup_script(radius_host: str, radius_secret: str, auth_por
 
 @mikrotik_onboard_router.post("/register")
 async def register_mikrotik(
-    request: MikroTikRegisterRequest,
+    request_data: MikroTikRegisterRequest,
+    req: Request,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
 ):
     """
@@ -4554,7 +4555,7 @@ async def register_mikrotik(
     4. Returns auto-configuration script
     """
     # Verify hotspot exists and user has access
-    hotspot = await db.hotspots.find_one({"id": request.hotspot_id}, {"_id": 0})
+    hotspot = await db.hotspots.find_one({"id": request_data.hotspot_id}, {"_id": 0})
     if not hotspot:
         raise HTTPException(status_code=404, detail="Hotspot not found")
     
@@ -4563,15 +4564,15 @@ async def register_mikrotik(
     
     # Generate secure credentials
     radius_secret = generate_secure_secret()
-    nas_id = generate_nas_id(request.name)
+    nas_id = generate_nas_id(request_data.name)
     provisioning_token = generate_provisioning_token()
     
     # Build onboarding callback URLs
     callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
 
     if not callback_url:
-        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
-        callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
+        origin = str(req.base_url).rstrip('/')
+        callback_url = f"{origin}/api/mikrotik-onboard/confirm"
 
     onboarding_base_url = callback_url.rsplit('/confirm', 1)[0]
     confirm_command_url = f"{onboarding_base_url}/confirm-command/{provisioning_token}"
@@ -4581,8 +4582,8 @@ async def register_mikrotik(
     router_id = str(uuid.uuid4())
     router_record = {
         "id": router_id,
-        "name": request.name,
-        "hotspot_id": request.hotspot_id,
+        "name": request_data.name,
+        "hotspot_id": request_data.hotspot_id,
         "owner_id": user["id"],
         "radius_secret": radius_secret,
         "nas_identifier": nas_id,
@@ -4595,7 +4596,7 @@ async def register_mikrotik(
         "model": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "configured_at": None,
-        "notes": request.notes
+        "notes": request_data.notes
     }
     
     await db.mikrotik_routers.insert_one(router_record)
@@ -4603,8 +4604,8 @@ async def register_mikrotik(
     # Also register as NAS client for RADIUS
     nas_client = {
         "id": str(uuid.uuid4()),
-        "name": request.name,
-        "hotspot_id": request.hotspot_id,
+        "name": request_data.name,
+        "hotspot_id": request_data.hotspot_id,
         "ip_address": "0.0.0.0",  # Will be updated when router connects
         "secret": radius_secret,
         "nas_type": "MikroTik",
@@ -4616,7 +4617,7 @@ async def register_mikrotik(
     
     # Generate scripts
     script = generate_mikrotik_script(
-        router_name=request.name,
+        router_name=request_data.name,
         nas_id=nas_id,
         confirm_url=confirm_command_url
     )
@@ -4629,7 +4630,7 @@ async def register_mikrotik(
     
     return {
         "router_id": router_id,
-        "router_name": request.name,
+        "router_name": request_data.name,
         "nas_identifier": nas_id,
         "radius_secret": radius_secret,
         "provisioning_token": provisioning_token,
@@ -4650,7 +4651,7 @@ async def register_mikrotik(
 
 
 @mikrotik_onboard_router.get("/provision/{provisioning_token}")
-async def get_mikrotik_provisioning_script(provisioning_token: str):
+async def get_mikrotik_provisioning_script(provisioning_token: str, req: Request):
     """Return router-specific MikroTik script for one-line fetch/import onboarding"""
     router = await db.mikrotik_routers.find_one(
         {"provisioning_token": provisioning_token},
@@ -4662,8 +4663,8 @@ async def get_mikrotik_provisioning_script(provisioning_token: str):
 
     callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
     if not callback_url:
-        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
-        callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
+        origin = str(req.base_url).rstrip('/')
+        callback_url = f"{origin}/api/mikrotik-onboard/confirm"
 
     confirm_command_url = f"{callback_url.rsplit('/confirm', 1)[0]}/confirm-command/{provisioning_token}"
     script = generate_mikrotik_script(
@@ -4816,6 +4817,7 @@ async def get_mikrotik_router(
 @mikrotik_onboard_router.get("/routers/{router_id}/script")
 async def regenerate_mikrotik_script(
     router_id: str,
+    req: Request,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
 ):
     """Regenerate the configuration script for a router"""
@@ -4829,8 +4831,8 @@ async def regenerate_mikrotik_script(
     
     callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
     if not callback_url:
-        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
-        callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
+        origin = str(req.base_url).rstrip('/')
+        callback_url = f"{origin}/api/mikrotik-onboard/confirm"
 
     provisioning_token = router.get("provisioning_token") or generate_provisioning_token()
     if "provisioning_token" not in router:
