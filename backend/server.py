@@ -4094,6 +4094,7 @@ class RADIUSAuthorizeRequest(BaseModel):
     password: str = ""
     nas_ip: str = ""
     called_station: str = ""
+    calling_station: str = ""
 
 class RADIUSAccountingRequest(BaseModel):
     username: str

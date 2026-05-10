@@ -45,7 +45,7 @@ rest {
         uri = "${..connect_uri}/radius/authorize"
         method = 'post'
         body = 'json'
-        data = '{"username": "%{User-Name}", "password": "%{User-Password}", "nas_ip": "%{NAS-IP-Address}", "called_station": "%{Called-Station-Id}"}'
+        data = '{"username": "%{User-Name}", "password": "%{User-Password}", "nas_ip": "%{NAS-IP-Address}", "called_station": "%{Called-Station-Id}", "calling_station": "%{Calling-Station-Id}"}'
         tls = ${..tls}
     }
     
