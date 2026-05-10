@@ -763,6 +763,18 @@ def build_rate_limit_from_package(package: Optional[dict], default: str = "2M/2M
         speed_value = speed
 
     return f"{speed_value}M/{speed_value}M"
+
+def normalize_mac(mac: Optional[str]) -> str:
+    """Normalize MAC addresses to AA:BB:CC:DD:EE:FF format."""
+    if not mac:
+        return ""
+
+    cleaned = "".join(c for c in mac.upper() if c in "0123456789ABCDEF")
+
+    if len(cleaned) != 12:
+        return mac.upper().strip()
+
+    return ":".join(cleaned[i:i+2] for i in range(0, 12, 2))
     
 async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRevenue:
     """Calculate dynamic revenue sharing based on hotspot metrics"""
