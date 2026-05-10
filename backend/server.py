@@ -397,6 +397,7 @@ class Session(SessionBase):
     phone_number: Optional[str] = None
     username: str = ""  # RADIUS username
     password: str = ""  # RADIUS password (for vouchers)
+    rate_limit: str = "2M/2M"
     status: SessionStatus = SessionStatus.ACTIVE
     started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
@@ -746,6 +747,23 @@ def generate_radius_credentials(prefix: str = "") -> tuple:
     password = uuid.uuid4().hex[:8]
     return username, password
 
+def build_rate_limit_from_package(package: Optional[dict], default: str = "2M/2M") -> str:
+    """Build MikroTik rate-limit string from package speed_mbps."""
+    if not package:
+        return default
+
+    speed = package.get("speed_mbps")
+    if not speed:
+        return default
+
+    # MikroTik accepts values like 5M/5M or 512K/512K.
+    if float(speed).is_integer():
+        speed_value = int(speed)
+    else:
+        speed_value = speed
+
+    return f"{speed_value}M/{speed_value}M"
+    
 async def calculate_dynamic_revenue(hotspot_id: str, amount: float) -> DynamicRevenue:
     """Calculate dynamic revenue sharing based on hotspot metrics"""
     hotspot = await db.hotspots.find_one({"id": hotspot_id}, {"_id": 0})
@@ -1814,6 +1832,7 @@ async def handle_wifi_payment_success(transaction: dict, mpesa_receipt: str):
         phone_number=phone_number,
         username=username,
         password=password,
+        rate_limit=build_rate_limit_from_package(package),
         payment_id=payment.id,
         expires_at=now + timedelta(minutes=package["duration_minutes"])
     )
@@ -2895,6 +2914,7 @@ async def handle_paystack_wifi_success(transaction: dict, paystack_data: dict):
         phone_number=phone_number,
         username=username,
         password=password,
+        rate_limit=build_rate_limit_from_package(package),
         payment_id=payment.id,
         expires_at=now + timedelta(minutes=package["duration_minutes"])
     )
@@ -4076,31 +4096,25 @@ class RADIUSAccountingRequest(BaseModel):
 async def radius_authorize(request: RADIUSAuthorizeRequest):
     """FreeRADIUS calls this endpoint to authenticate WiFi users"""
 
+    def reject(message: str):
+        return {
+            "control": {
+                "Auth-Type": "Reject"
+            },
+            "reply": {
+                "Reply-Message": message
+            }
+        }
+
     session = await db.sessions.find_one({
         "username": request.username
     }, {"_id": 0})
 
     if not session:
-        session = await db.wifi_sessions.find_one({
-            "username": request.username,
-            "status": {"$in": ["active", "pending"]}
-        }, {"_id": 0})
-
-    if not session:
-        return {
-            "control": {},
-            "reply": {
-                "Reply-Message": "Invalid credentials or no active session"
-            }
-        }
+        return reject("Invalid credentials or no active session")
 
     if session.get("password") and session.get("password") != request.password:
-        return {
-            "control": {},
-            "reply": {
-                "Reply-Message": "Invalid password"
-            }
-        }
+        return reject("Invalid password")
 
     if session.get("expires_at"):
         expires_at = datetime.fromisoformat(
@@ -4108,22 +4122,31 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
         )
 
         if expires_at < datetime.now(timezone.utc):
-            await db.wifi_sessions.update_one(
+            await db.sessions.update_one(
                 {"username": request.username},
-                {"$set": {"status": "expired"}}
+                {"$set": {"status": SessionStatus.EXPIRED.value}}
             )
-            return {
-                "control": {},
-                "reply": {
-                    "Reply-Message": "Session expired"
-                }
-            }
+            return reject("Session expired")
 
         remaining_seconds = int(
             (expires_at - datetime.now(timezone.utc)).total_seconds()
         )
     else:
         remaining_seconds = 3600
+
+    # Optional MAC binding. Only enforce when the session already has a MAC saved.
+    session_mac = normalize_mac(session.get("user_mac", ""))
+    request_mac = normalize_mac(getattr(request, "calling_station", ""))
+
+    if session_mac and request_mac and session_mac != request_mac:
+        return reject("Session is not valid for this device")
+
+    # Bind first device if session has no MAC yet and MikroTik supplied one.
+    if not session_mac and request_mac:
+        await db.sessions.update_one(
+            {"username": request.username},
+            {"$set": {"user_mac": request_mac}}
+        )
 
     rate_limit = session.get("rate_limit", "2M/2M")
 
@@ -4139,67 +4162,66 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
 @radius_router.post("/accounting")
 async def radius_accounting(request: RADIUSAccountingRequest):
     """FreeRADIUS calls this to track session usage (start/stop/interim)"""
-    
-    session = await db.wifi_sessions.find_one({"username": request.username}, {"_id": 0})
-    
+
+    session = await db.sessions.find_one({"username": request.username}, {"_id": 0})
+
     if not session:
         return {"status": "error", "message": "Session not found"}
-    
+
     now = datetime.now(timezone.utc).isoformat()
-    
+    total_bytes = request.input_octets + request.output_octets
+    total_mb = round(total_bytes / (1024 * 1024), 2)
+
     if request.status_type.lower() in ["start", "1"]:
-        # Session started - user connected
-        await db.wifi_sessions.update_one(
+        await db.sessions.update_one(
             {"username": request.username},
             {"$set": {
                 "radius_session_id": request.session_id,
                 "connected_at": now,
                 "nas_ip": request.nas_ip,
-                "status": "connected"
+                "status": SessionStatus.ACTIVE.value
             }}
         )
-        
-        # Increment impression for ads shown during connection
+
         await db.ads.update_many(
             {"status": "active"},
             {"$inc": {"impressions": 1}}
         )
-        
+
     elif request.status_type.lower() in ["stop", "2"]:
-        # Session ended - user disconnected
-        await db.wifi_sessions.update_one(
+        await db.sessions.update_one(
             {"username": request.username},
             {"$set": {
                 "disconnected_at": now,
                 "total_session_time": request.session_time,
                 "total_upload_bytes": request.input_octets,
                 "total_download_bytes": request.output_octets,
+                "data_used_mb": total_mb,
                 "status": "completed"
             }}
         )
-        
-        # Update hotspot statistics
+
         if session.get("hotspot_id"):
             await db.hotspots.update_one(
                 {"id": session["hotspot_id"]},
                 {"$inc": {
                     "total_sessions": 1,
-                    "total_data_used": request.input_octets + request.output_octets
+                    "total_data_mb": total_mb
                 }}
             )
-        
+
     elif request.status_type.lower() in ["interim-update", "3"]:
-        # Periodic update during active session
-        await db.wifi_sessions.update_one(
+        await db.sessions.update_one(
             {"username": request.username},
             {"$set": {
                 "current_session_time": request.session_time,
                 "current_upload_bytes": request.input_octets,
                 "current_download_bytes": request.output_octets,
+                "data_used_mb": total_mb,
                 "last_accounting_update": now
             }}
         )
-    
+
     return {"status": "ok", "message": f"Accounting {request.status_type} processed"}
 
 @radius_router.post("/post-auth")
@@ -5010,6 +5032,7 @@ async def redeem_voucher(code: str, hotspot_id: str, user_mac: Optional[str] = N
         user_mac=user_mac,
         username=voucher["username"],
         password=voucher["password"],
+        rate_limit=build_rate_limit_from_package(package),
         voucher_code=code,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
     )
@@ -5062,8 +5085,9 @@ async def create_session(session_data: SessionCreate):
     session = Session(**session_data.model_dump())
     session.username = username
     session.password = password
+    session.rate_limit = build_rate_limit_from_package(package)
     session.expires_at = datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
-    
+        
     session_dict = session.model_dump()
     session_dict["started_at"] = session_dict["started_at"].isoformat()
     session_dict["expires_at"] = session_dict["expires_at"].isoformat()
@@ -5506,6 +5530,7 @@ async def create_free_session(
         user_mac=user_identifier,
         username=username,
         password=password,
+        rate_limit="512K/512K",
         is_free=True,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
     )

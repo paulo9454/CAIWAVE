@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import axios from "axios";
 import { Wifi, Clock, Zap, MessageCircle, ExternalLink, Play, ChevronRight, Phone, AlertCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -16,6 +17,7 @@ const formatWhatsApp = (phone) => {
 };
 
 const CaptivePortal = () => {
+  const { hotspotId: routeHotspotId } = useParams();
   const [hotspotId, setHotspotId] = useState(null);
   const [hotspot, setHotspot] = useState(null);
   const [packages, setPackages] = useState([]);
@@ -31,11 +33,10 @@ const CaptivePortal = () => {
   useEffect(() => {
     // Get hotspot ID from URL params
     const params = new URLSearchParams(window.location.search);
-    const hid = params.get('hotspot') || params.get('h') || params.get('id');
-    setHotspotId(hid);
-    
-    fetchData(hid);
-  }, []);
+const hid = routeHotspotId || params.get('hotspot') || params.get('h') || params.get('id');
+setHotspotId(hid);
+
+fetchData(hid);
 
   // Rotate ads every 5 seconds
   useEffect(() => {
@@ -62,14 +63,39 @@ const CaptivePortal = () => {
       setStreams(streamsRes.data || []);
 
       // Fetch hotspot info if ID provided
-      if (hid) {
-        try {
-          const hotspotRes = await axios.get(`${API_URL}/hotspots/${hid}`);
-          setHotspot(hotspotRes.data);
-        } catch (e) {
-          console.log("Hotspot not found");
-        }
+      const fetchData = async (hid) => {
+  try {
+    if (hid) {
+      try {
+        const portalRes = await axios.get(`${API_URL}/portal/${hid}`);
+        setHotspot(portalRes.data.hotspot);
+        setPackages((portalRes.data.packages || []).filter((p) => p.is_active));
+        setAds(portalRes.data.ads || []);
+      } catch (e) {
+        console.log("Portal hotspot data not found, falling back to public packages/ads");
+
+        const packagesRes = await axios.get(`${API_URL}/packages/`);
+        setPackages(packagesRes.data.filter((p) => p.is_active));
+
+        const adsRes = await axios.get(`${API_URL}/ads/active`);
+        setAds(adsRes.data || []);
       }
+    } else {
+      const packagesRes = await axios.get(`${API_URL}/packages/`);
+      setPackages(packagesRes.data.filter((p) => p.is_active));
+
+      const adsRes = await axios.get(`${API_URL}/ads/active`);
+      setAds(adsRes.data || []);
+    }
+
+    const streamsRes = await axios.get(`${API_URL}/streams/live`);
+    setStreams(streamsRes.data || []);
+  } catch (error) {
+    console.error("Failed to fetch data:", error);
+  } finally {
+    setLoading(false);
+  }
+};
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
