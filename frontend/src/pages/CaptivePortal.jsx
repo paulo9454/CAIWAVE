@@ -19,6 +19,8 @@ const formatWhatsApp = (phone) => {
 const CaptivePortal = () => {
   const { hotspotId: routeHotspotId } = useParams();
   const [hotspotId, setHotspotId] = useState(null);
+  const [clientMac, setClientMac] = useState("");
+  const [clientIp, setClientIp] = useState("");
   const [hotspot, setHotspot] = useState(null);
   const [packages, setPackages] = useState([]);
   const [ads, setAds] = useState([]);
@@ -31,13 +33,18 @@ const CaptivePortal = () => {
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
 
   useEffect(() => {
-    // Get hotspot ID from route params or URL query params
+  // Get hotspot ID and client info from route params or MikroTik query params
     const params = new URLSearchParams(window.location.search);
     const hid = routeHotspotId || params.get("hotspot") || params.get("h") || params.get("id");
+    const mac = params.get("mac") || params.get("user_mac") || "";
+    const ip = params.get("ip") || params.get("user_ip") || "";
 
     setHotspotId(hid);
+    setClientMac(mac);
+    setClientIp(ip);
+
     fetchData(hid);
-  }, [routeHotspotId]);
+}, [routeHotspotId]);
 
   // Rotate ads every 5 seconds
   useEffect(() => {
@@ -124,7 +131,11 @@ const CaptivePortal = () => {
     const checkFreeStatus = async () => {
       try {
         const response = await axios.get(`${API_URL}/portal/free-session-status`, {
-          params: { hotspot_id: hotspotId || "demo" }
+          params: {
+            hotspot_id: hotspotId || "demo",
+            user_mac: clientMac || undefined,
+            user_ip: clientIp || undefined
+          }
         });
         setFreeSessionStatus(response.data);
       } catch (error) {
@@ -132,7 +143,7 @@ const CaptivePortal = () => {
       }
     };
     if (hotspotId || true) checkFreeStatus();
-  }, [hotspotId]);
+  }, [hotspotId, clientMac, clientIp]);
 
   const handleGetFreeWifi = async () => {
     if (!currentAd) {
@@ -150,10 +161,12 @@ const CaptivePortal = () => {
       const response = await axios.post(`${API_URL}/portal/free-session`, null, {
         params: {
           hotspot_id: hotspotId || "demo",
-          ad_id: currentAd.id
+          ad_id: currentAd.id,
+          user_mac: clientMac || undefined,
+          user_ip: clientIp || undefined
         }
       });
-
+      
       if (response.data.session_id) {
         setFreeSession(response.data);
         setFreeSessionStatus({
