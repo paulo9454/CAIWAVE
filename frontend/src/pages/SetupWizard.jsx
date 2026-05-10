@@ -381,7 +381,7 @@ add chain=srcnat out-interface=ether1 action=masquerade comment="CAIWAVE NAT"
 :log info "Creating login redirect page..."
 
 # Create the redirect HTML
-?mac=$(mac)&ip=$(ip)&link_login=$(link-login-only)&link_orig=$(link-orig)
+:local loginhtml "<!DOCTYPE html>\\r\\n<html>\\r\\n<head>\\r\\n<meta http-equiv=\\"refresh\\" content=\\"0;url=https://${config.caiwave_domain}/portal/${config.hotspot_id || 'YOUR_HOTSPOT_ID'}?mac=$(mac)&ip=$(ip)&link_login=$(link-login-only)&link_orig=$(link-orig)\\">\\r\\n<title>Redirecting...</title>\\r\\n</head>\\r\\n<body>\\r\\n<p>Redirecting to WiFi Portal...</p>\\r\\n</body>\\r\\n</html>"
 
 # Note: You may need to manually create the login.html file
 # Download from: https://${config.caiwave_domain}/hotspot-templates/login.html
