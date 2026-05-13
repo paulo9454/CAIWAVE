@@ -825,18 +825,19 @@ const MikroTikSetupPage = () => {
         </div>
       </div>
 
-      {/* Quick Copy-Paste Setup */}
-      <div className="dashboard-card border-green-500/30">
-        <h2 className="font-semibold mb-4 flex items-center gap-2">
-          <Zap className="w-5 h-5 text-green-400" />
-          Quick MikroTik Setup (Copy & Paste)
-        </h2>
-        <p className="text-neutral-400 text-sm mb-4">
-          Open MikroTik Terminal (WinBox → New Terminal) and paste this script:
-        </p>
-        <div className="relative">
-          <pre className="bg-neutral-950 p-4 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-48">
-{`# CAIWAVE Quick Setup - Paste in MikroTik Terminal
+{/* Quick Copy-Paste Setup */}
+<div className="dashboard-card border-yellow-500/30">
+  <h2 className="font-semibold mb-4 flex items-center gap-2">
+    <Zap className="w-5 h-5 text-yellow-400" />
+    Legacy Generic Setup (Not Hotspot-Bound)
+  </h2>
+  <p className="text-neutral-400 text-sm mb-4">
+    Use this only for baseline connectivity tests. For production linking to CAIWAVE hotspot records, use{" "}
+    <strong>Add MikroTik → Generate Configuration Script</strong>.
+  </p>
+  <div className="relative">
+    <pre className="bg-neutral-950 p-4 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-48">
+{`# WARNING: Generic baseline script only (no hotspot ID binding)
 /radius remove [find comment~"CAIWAVE"]
 /radius add address=10.5.50.254 secret="YOUR_SECRET" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
 /ip hotspot profile set default use-radius=yes radius-accounting=yes
@@ -844,12 +845,12 @@ const MikroTikSetupPage = () => {
 /ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE"
 /ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
 :put "CAIWAVE Setup Done! Test: /radius monitor 0"`}
-          </pre>
-          <Button
-            size="sm"
-            className="absolute top-2 right-2 bg-green-600 hover:bg-green-700"
-            onClick={() => {
-              navigator.clipboard.writeText(`# CAIWAVE Quick Setup - Paste in MikroTik Terminal
+    </pre>
+    <Button
+      size="sm"
+      className="absolute top-2 right-2 bg-green-600 hover:bg-green-700"
+      onClick={() => {
+        navigator.clipboard.writeText(`# WARNING: Generic baseline script only (no hotspot ID binding)
 /radius remove [find comment~"CAIWAVE"]
 /radius add address=10.5.50.254 secret="YOUR_SECRET" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
 /ip hotspot profile set default use-radius=yes radius-accounting=yes
@@ -857,17 +858,17 @@ const MikroTikSetupPage = () => {
 /ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE"
 /ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
 :put "CAIWAVE Setup Done! Test: /radius monitor 0"`);
-              toast.success("Copied to clipboard!");
-            }}
-          >
-            <Copy className="w-4 h-4 mr-1" />
-            Copy
-          </Button>
-        </div>
-        <p className="text-yellow-400 text-xs mt-2">
-          ⚠️ Replace YOUR_SECRET with your actual RADIUS secret from CAIWAVE admin
-        </p>
-      </div>
+        toast.success("Copied to clipboard!");
+      }}
+    >
+      <Copy className="w-4 h-4 mr-1" />
+      Copy
+    </Button>
+  </div>
+  <p className="text-yellow-400 text-xs mt-2">
+    ⚠️ Generic only: this script does NOT bind the router to a specific hotspot ID in CAIWAVE. For real deployment, use the generated hotspot-bound script below.
+  </p>
+</div>
 
       {/* Setup Steps */}
       <div className="dashboard-card">
@@ -1021,6 +1022,9 @@ const MikroTikSetupPage = () => {
                   
                   {/* Hotspot Selection */}
                   <div>
+                    <div className="mb-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm">
+                      Recommended flow: this process links the MikroTik router to a specific hotspot ID in CAIWAVE.
+                    </div>
                     <label className="block text-sm text-neutral-400 mb-2">Select Hotspot</label>
                     <select
                       value={selectedHotspot}
@@ -1077,6 +1081,9 @@ const MikroTikSetupPage = () => {
                         {generatedScript.radius_secret}
                       </p>
                     </div>
+                  </div>
+                  <div className="p-3 mt-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-300 text-sm">
+                    Router mapping context captured: selected hotspot ID, generated NAS identifier, and RADIUS secret are now tied to this onboarding session.
                   </div>
                   
                   {/* Instructions */}
