@@ -1193,7 +1193,6 @@ const QuickSetupTab = ({ radiusConfig }) => {
     radius_server_ip: radiusConfig?.host || "",
     radius_secret: "",
     mikrotik_ip: "",
-    hotspot_id: "",
     hotspot_ssid: "CAIWAVE_WiFi",
     hotspot_gateway: "192.168.88.1",
   });
@@ -1292,8 +1291,12 @@ sudo systemctl restart freeradius
 sudo freeradius -X`;
 
   return (
-    <div className="space-y-6">
-      {/* Configuration Inputs */}
+      <div className="space-y-6">
+        <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
+          Admin Quick Setup applies global RADIUS/MikroTik baseline settings only. Hotspot-specific router binding is performed by hotspot owners from Owner Dashboard → MikroTik Setup.
+        </div>
+
+    {/* Configuration Inputs */}
       <div className="dashboard-card">
         <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
           <Settings className="w-5 h-5 text-blue-400" />
@@ -1388,6 +1391,7 @@ sudo freeradius -X`;
           MikroTik Router Setup
         </h3>
         <p className="text-neutral-400 text-sm mb-4">Copy and paste into MikroTik Terminal (WinBox → New Terminal)</p>
+        <p className="text-xs text-neutral-400 mb-3">Note: This script configures global RADIUS baseline only; it does not assign a router to a specific hotspot ID.</p>
         
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium">MikroTik Script</span>
@@ -2074,6 +2078,7 @@ const AllHotspotsPage = () => {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Hotspot ID</th>
                 <th>SSID</th>
                 <th>Location</th>
                 <th>Status</th>
@@ -2086,6 +2091,19 @@ const AllHotspotsPage = () => {
               {hotspots.map((hotspot) => (
                 <tr key={hotspot.id}>
                   <td className="font-medium">{hotspot.name}</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <code className="font-mono text-xs text-blue-400">{hotspot.id}</code>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(hotspot.id)}
+                        className="text-neutral-400 hover:text-white"
+                        title="Copy hotspot ID"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="font-mono text-sm text-neutral-400">{hotspot.ssid}</td>
                   <td>{hotspot.location_name}</td>
                   <td>

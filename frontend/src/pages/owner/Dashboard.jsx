@@ -653,6 +653,7 @@ const HotspotsPage = () => {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Hotspot ID</th>
                 <th>SSID</th>
                 <th>Location</th>
                 <th>Status</th>
@@ -664,6 +665,19 @@ const HotspotsPage = () => {
               {hotspots.map((hotspot) => (
                 <tr key={hotspot.id}>
                   <td className="font-medium">{hotspot.name}</td>
+                  <td>
+                    <div className="flex items-center gap-2">
+                      <code className="font-mono text-xs text-blue-400">{hotspot.id}</code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(hotspot.id)}
+                        className="text-neutral-400 hover:text-white"
+                        title="Copy hotspot ID"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
                   <td className="font-mono text-sm text-neutral-400">{hotspot.ssid}</td>
                   <td>{hotspot.location_name}</td>
                   <td>
