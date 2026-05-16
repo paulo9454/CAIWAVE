@@ -4119,59 +4119,124 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
             }
         }
 
-    session = await db.sessions.find_one({
-        "username": request.username
-    }, {"_id": 0})
+    def accept(session_timeout: int, rate_limit: str):
+        return {
+            "control": {
+                "Auth-Type": "Accept"
+            },
+            "reply": {
+                "Session-Timeout": int(max(1, session_timeout)),
+                "Mikrotik-Rate-Limit": rate_limit
+            }
+        }
 
-    if not session:
-        return reject("Invalid credentials or no active session")
+    now = datetime.now(timezone.utc)
 
-    if session.get("password") and session.get("password") != request.password:
-        return reject("Invalid password")
+    # 1) Normal session auth (primary path)
+    session = await db.sessions.find_one({"username": request.username}, {"_id": 0})
 
-    if session.get("expires_at"):
-        expires_at = datetime.fromisoformat(
-            session["expires_at"].replace("Z", "+00:00")
-        )
+    if session:
+        if session.get("password") and session.get("password") != request.password:
+            return reject("Invalid password")
 
-        if expires_at < datetime.now(timezone.utc):
+        if session.get("expires_at"):
+            expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
+            if expires_at <= now:
+                await db.sessions.update_one(
+                    {"username": request.username},
+                    {"$set": {"status": SessionStatus.EXPIRED.value}}
+                )
+                return reject("Session expired")
+            remaining_seconds = int((expires_at - now).total_seconds())
+        else:
+            remaining_seconds = 3600
+
+        session_mac = normalize_mac(session.get("user_mac", ""))
+        request_mac = normalize_mac(request.calling_station)
+
+        if session_mac and request_mac and session_mac != request_mac:
+            return reject("Session is not valid for this device")
+
+        if not session_mac and request_mac:
             await db.sessions.update_one(
                 {"username": request.username},
-                {"$set": {"status": SessionStatus.EXPIRED.value}}
+                {"$set": {"user_mac": request_mac}}
             )
-            return reject("Session expired")
 
-        remaining_seconds = int(
-            (expires_at - datetime.now(timezone.utc)).total_seconds()
+        return accept(remaining_seconds, session.get("rate_limit", "2M/2M"))
+
+    # 2) Voucher auth fallback (username = voucher code, password = voucher password)
+    voucher = await db.vouchers.find_one(
+        {"code": request.username, "is_used": False},
+        {"_id": 0}
+    )
+    if voucher:
+        if voucher.get("password") and voucher["password"] != request.password:
+            return reject("Invalid voucher password")
+
+        expires_at = datetime.fromisoformat(voucher["expires_at"].replace("Z", "+00:00"))
+        if expires_at <= now:
+            return reject("Voucher expired")
+
+        package = await db.packages.find_one({"id": voucher["package_id"]}, {"_id": 0})
+        if not package:
+            return reject("Voucher package not found")
+
+        duration_minutes = int(package.get("duration_minutes", 60))
+        session_expires_at = now + timedelta(minutes=duration_minutes)
+        request_mac = normalize_mac(request.calling_station)
+
+        created_session = Session(
+            package_id=voucher["package_id"],
+            hotspot_id=voucher["hotspot_id"],
+            user_mac=request_mac or None,
+            username=voucher["username"],
+            password=voucher["password"],
+            rate_limit=package.get("speed_limit", "2M/2M"),
+            expires_at=session_expires_at,
+            voucher_code=voucher["code"]
         )
-    else:
-        remaining_seconds = 3600
+        session_dict = created_session.model_dump()
+        session_dict["started_at"] = session_dict["started_at"].isoformat()
+        session_dict["expires_at"] = session_expires_at.isoformat()
+        await db.sessions.insert_one(session_dict)
 
-    # Optional MAC binding. Only enforce when the session already has a MAC saved.
-    session_mac = normalize_mac(session.get("user_mac", ""))
-    request_mac = normalize_mac(getattr(request, "calling_station", ""))
-
-    if session_mac and request_mac and session_mac != request_mac:
-        return reject("Session is not valid for this device")
-
-    # Bind first device if session has no MAC yet and MikroTik supplied one.
-    if not session_mac and request_mac:
-        await db.sessions.update_one(
-            {"username": request.username},
-            {"$set": {"user_mac": request_mac}}
+        await db.vouchers.update_one(
+            {"code": voucher["code"], "is_used": False},
+            {"$set": {
+                "is_used": True,
+                "used_at": now.isoformat(),
+                "user_mac": request_mac
+            }}
         )
 
-    rate_limit = session.get("rate_limit", "2M/2M")
+        return accept(duration_minutes * 60, created_session.rate_limit)
 
-    return {
-        "control": {},
-        "reply": {
-            "Session-Timeout": remaining_seconds,
-            "Acct-Interim-Interval": 300,
-            "Mikrotik-Rate-Limit": rate_limit,
-            "Reply-Message": f"Welcome! Session valid for {remaining_seconds // 60} minutes"
-        }
-    }
+    # 3) Trial MAC fallback (only when no session + no voucher)
+    request_mac = normalize_mac(request.calling_station)
+    if not request_mac:
+        return reject("Invalid credentials or no active session")
+
+    trial_record = await db.trial_access.find_one({"mac": request_mac}, {"_id": 0})
+    trial_minutes = 30
+    trial_rate_limit = "5M/5M"
+
+    if not trial_record:
+        trial_expires_at = now + timedelta(minutes=trial_minutes)
+        await db.trial_access.insert_one({
+            "mac": request_mac,
+            "started_at": now.isoformat(),
+            "expires_at": trial_expires_at.isoformat(),
+            "used": True
+        })
+        return accept(trial_minutes * 60, trial_rate_limit)
+
+    trial_expires_at = datetime.fromisoformat(trial_record["expires_at"].replace("Z", "+00:00"))
+    if trial_expires_at <= now:
+        return reject("Trial expired")
+
+    remaining_seconds = int((trial_expires_at - now).total_seconds())
+    return accept(remaining_seconds, trial_rate_limit)
 @radius_router.post("/accounting")
 async def radius_accounting(request: RADIUSAccountingRequest):
     """FreeRADIUS calls this to track session usage (start/stop/interim)"""
