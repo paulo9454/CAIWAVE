@@ -92,6 +92,7 @@ RADIUS_HOST = os.environ.get('RADIUS_HOST', 'localhost')
 RADIUS_SECRET = os.environ.get('RADIUS_SECRET', 'testing123')
 RADIUS_AUTH_PORT = int(os.environ.get('RADIUS_AUTH_PORT', '1812'))
 RADIUS_ACCT_PORT = int(os.environ.get('RADIUS_ACCT_PORT', '1813'))
+RADIUS_TEST_BYPASS_ENABLED = os.environ.get("RADIUS_TEST_BYPASS_ENABLED", "false").lower() == "true"
 
 # Create the main app
 app = FastAPI(
@@ -4132,6 +4133,10 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
 
     now = datetime.now(timezone.utc)
 
+    # TEST ONLY fallback account for hotspot login verification
+    if RADIUS_TEST_BYPASS_ENABLED:
+        if request.username == "test" and request.password == "test123":
+            return accept(3600, "5M/5M")
     # 1) Normal session auth (primary path)
     session = await db.sessions.find_one({"username": request.username}, {"_id": 0})
 
