@@ -866,7 +866,7 @@ const PackagesPage = () => {
 
   const fetchPackages = async () => {
     try {
-      const response = await axios.get(`${API_URL}/packages?active_only=false`);
+      const response = await axios.get(`${API_URL}/packages/?active_only=false`);
       setPackages(response.data);
     } catch (error) {
       console.error("Failed to fetch packages:", error);
@@ -1476,27 +1476,52 @@ const IntegrationSettingsPage = () => {
   }, []);
 
   const fetchAllConfigs = async () => {
-    try {
-      const [paystack, radius, nas] = await Promise.all([
-        axios.get(`${API_URL}/paystack/config`, {
-          headers: { Authorization: `Bearer ${getAuthToken()}` },
-        }).catch(() => ({ data: { configured: false } })),
-        axios.get(`${API_URL}/radius/config`, {
-          headers: { Authorization: `Bearer ${getAuthToken()}` },
-        }).catch(() => ({ data: { enabled: false } })),
-        axios.get(`${API_URL}/radius/nas-clients`, {
-          headers: { Authorization: `Bearer ${getAuthToken()}` },
-        }).catch(() => ({ data: [] })),
-      ]);
-      setPaystackStatus(paystack.data);
-      setRadiusConfig(radius.data);
-      setNasClients(nas.data);
-    } catch (error) {
-      console.error("Failed to fetch configs:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const [paystack, radius, nas] = await Promise.all([
+      axios.get(`${API_URL}/paystack/config`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      }).catch((error) => {
+        console.error(
+          "paystack/config failed",
+          error?.response?.status,
+          error?.response?.data
+        );
+        return { data: { configured: false } };
+      }),   // ← comma here
+
+      axios.get(`${API_URL}/radius/config`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      }).catch((error) => {
+        console.error(
+          "radius/config failed",
+          error?.response?.status,
+          error?.response?.data
+        );
+        return { data: { enabled: false } };
+      }),   // ← comma here
+
+      axios.get(`${API_URL}/radius/nas-clients`, {
+        headers: { Authorization: `Bearer ${getAuthToken()}` },
+      }).catch((error) => {
+        console.error(
+          "radius/nas-clients failed",
+          error?.response?.status,
+          error?.response?.data
+        );
+        return { data: [] };
+      })
+    ]);
+
+    setPaystackStatus(paystack.data);
+    setRadiusConfig(radius.data);
+    setNasClients(nas.data);
+
+  } catch (error) {
+    console.error("Failed to fetch configs:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleAddNAS = async (e) => {
     e.preventDefault();
@@ -1911,6 +1936,7 @@ const AllHotspotsPage = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [generatedMikroTik, setGeneratedMikroTik] = useState(null);
   const [newHotspot, setNewHotspot] = useState({
     name: "",
     ssid: "",
@@ -1944,7 +1970,26 @@ const AllHotspotsPage = () => {
       toast.error("Failed to update status");
     }
   };
+  const handleAdminMikroTikSetup = async (hotspot) => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/mikrotik-onboard/register`,
+        {
+          name: `${hotspot.name} MikroTik`,
+          hotspot_id: hotspot.id,
+          notes: `Admin lifetime hotspot MikroTik setup for ${hotspot.name}`,
+        },
+        {
+          headers: { Authorization: `Bearer ${getAuthToken()}` },
+        }
+      );
 
+      setGeneratedMikroTik(response.data);
+      toast.success("MikroTik configuration generated!");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to generate MikroTik configuration");
+    }
+  };
   const handleCreateHotspot = async (e) => {
     e.preventDefault();
     setCreating(true);
@@ -2059,7 +2104,37 @@ const AllHotspotsPage = () => {
           </div>
         </div>
       )}
+      {generatedMikroTik && (
+        <div className="dashboard-card border-blue-500/30">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold">
+              MikroTik Setup for: {generatedMikroTik.router_name}
+            </h3>
+            <Button size="sm" variant="ghost" onClick={() => setGeneratedMikroTik(null)}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
 
+          <div className="bg-neutral-950 rounded-lg p-4">
+            <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap overflow-x-auto">
+              {generatedMikroTik.script}
+            </pre>
+          </div>
+
+          <div className="mt-4 flex gap-3">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(generatedMikroTik.script);
+                toast.success("MikroTik script copied to clipboard!");
+              }}
+            >
+              Copy Script
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="dashboard-card overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
@@ -2127,7 +2202,8 @@ const AllHotspotsPage = () => {
                   <td className="font-medium">
                     {formatCurrency(hotspot.total_revenue || 0)}
                   </td>
-                  <td>
+                 <td>
+                  <div className="flex gap-2">
                     {hotspot.status === "active" ? (
                       <Button
                         size="sm"
@@ -2147,7 +2223,17 @@ const AllHotspotsPage = () => {
                         Activate
                       </Button>
                     )}
-                  </td>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-blue-700 text-blue-400"
+                      onClick={() => handleAdminMikroTikSetup(hotspot)}
+                    >
+                      MikroTik
+                    </Button>
+                  </div>
+                </td>
                 </tr>
               ))}
             </tbody>

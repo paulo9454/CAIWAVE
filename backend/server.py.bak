@@ -116,13 +116,15 @@ app = FastAPI(
     redirect_slashes=False
 )
 
-router_monitor_task = None
+monitor_task = None
 
 @app.on_event("startup")
-async def startup():
-    if not hasattr(app.state, "router_monitor_started"):
-        app.state.router_monitor_started = True
-        asyncio.create_task(monitor_router_health())
+async def startup_event():
+    global monitor_task
+
+    if monitor_task is None or monitor_task.done():
+        print("Starting router health monitor...")
+        monitor_task = asyncio.create_task(monitor_router_health())
 
 # Mount static files for ad media UNDER /api prefix for proper routing
 # Files will be accessible at /api/uploads/ads/images/filename.png
@@ -5421,21 +5423,32 @@ async def get_live_router_status(
 # =========================================================
 
 async def monitor_router_health():
+
     while True:
         try:
+
+            print("STEP 1")
+
             cutoff = datetime.now(timezone.utc) - timedelta(
                 minutes=ROUTER_HEARTBEAT_TIMEOUT_MINUTES
             )
 
+            print("STEP 2")
+
+            stale_time = cutoff.isoformat()
+
+            print("STEP 3")
+
             routers = await db.mikrotik_routers.find(
-                {"status": "connected"}
+            {"status": "connected"}
             ).to_list(None)
 
-            logger.info(f"Router health check: active routers={len(routers)}")
+            print(f"STEP 4 routers={len(routers)}")
+            logger.debug(f"routers={len(routers)}")
 
             await db.mikrotik_routers.update_many(
                 {
-                    "heartbeat_received_at": {"$lt": cutoff},
+                    "heartbeat_received_at": {"$lt": stale_time},
                     "status": "connected"
                 },
                 {
@@ -5448,8 +5461,13 @@ async def monitor_router_health():
                 }
             )
 
+            print("STEP 5")
+
         except Exception as e:
-            logger.exception("Router monitor error")
+            print("========== ROUTER MONITOR ERROR ==========")
+            print(repr(e))
+            traceback.print_exc()
+            print("==========================================")
 
         await asyncio.sleep(30)
         
