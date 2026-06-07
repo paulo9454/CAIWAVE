@@ -107,7 +107,9 @@ ROUTER_HEARTBEAT_TIMEOUT_MINUTES = int(
     os.environ.get("ROUTER_HEARTBEAT_TIMEOUT_MINUTES", "10")
 )
 
-app = FastAPI(
+
+# Create the main app
+app = FastAPI(lifespan=lifespan, 
     title="CAIWAVE Wi-Fi Hotspot Billing Platform",
     version="2.1.0",
     description="ISP-grade Wi-Fi hotspot billing and advertising platform for www.caiwave.com",
@@ -115,21 +117,19 @@ app = FastAPI(
 )
 
 router_monitor_task = None
-    
-@app.on_event("startup")
-async def startup():
-    # Prevent duplicate startup execution
-    if getattr(app.state, "startup_initialized", False):
-        return
 
-    app.state.startup_initialized = True
+from contextlib import asynccontextmanager
 
-    # Track running tasks safely
-    app.state.tasks = []
-
-    # Start router monitor only once
+@asynccontextmanager
+def lifespan(app: FastAPI):
     task = asyncio.create_task(monitor_router_health())
-    app.state.tasks.append(task)
+    app.state.router_monitor_task = task
+    try:
+        yield
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
 
 # Mount static files for ad media UNDER /api prefix for proper routing
 # Files will be accessible at /api/uploads/ads/images/filename.png
@@ -1021,35 +1021,36 @@ mpesa_service = MPesaService()
 
 class SMSService:
     """SMS Gateway Integration (Africa's Talking / Centipid compatible)"""
-
+    
     def __init__(self):
         self.provider = SMS_PROVIDER
         self.api_key = SMS_API_KEY
         self.username = SMS_USERNAME
         self.sender_id = SMS_SENDER_ID
-
+    
     def is_configured(self) -> bool:
         return bool(self.api_key and self.username)
-
+    
     async def send_sms(self, phone_number: str, message: str) -> dict:
         """Send SMS via configured provider"""
         if not self.is_configured():
             logging.warning("SMS not configured, skipping notification")
             return {"status": "skipped", "reason": "SMS not configured"}
-
+        
+        # Format phone number
         phone = phone_number.replace("+", "").replace(" ", "")
         if phone.startswith("0"):
             phone = "+254" + phone[1:]
         elif not phone.startswith("+"):
             phone = "+" + phone
-
+        
         if self.provider == "africas_talking":
             return await self._send_africas_talking(phone, message)
         elif self.provider == "centipid":
             return await self._send_centipid(phone, message)
         else:
             return {"status": "error", "reason": f"Unknown provider: {self.provider}"}
-
+    
     async def _send_africas_talking(self, phone: str, message: str) -> dict:
         """Send via Africa's Talking API"""
         async with httpx.AsyncClient() as client:
@@ -1067,7 +1068,7 @@ class SMSService:
                 }
             )
             return response.json()
-
+    
     async def _send_centipid(self, phone: str, message: str) -> dict:
         """Send via Centipid SMS API"""
         async with httpx.AsyncClient() as client:
@@ -1081,7 +1082,6 @@ class SMSService:
                 }
             )
             return response.json()
-
 
 sms_service = SMSService()
 
@@ -2232,11 +2232,13 @@ async def initialize_paystack_payment(request: PaystackPaymentRequest):
 
 @paystack_router.post("/charge-mobile")
 async def charge_mobile_money(request: PaystackPaymentRequest):
-    """Directly charge customer via M-Pesa mobile money.
+    """
+    Directly charge customer via M-Pesa mobile money.
     This sends an STK Push to the customer's phone.
     """
     if not paystack_service.is_configured():
-        raise HTTPException(status_code=503, detail="Paystack not configured")   
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+    
     # Format phone number
     phone = request.phone_number.replace(" ", "").replace("+", "")
     if phone.startswith("0"):
@@ -3346,8 +3348,9 @@ async def upload_ad(
     counties: Optional[str] = Form(None),  # JSON array string for county/national scope
     media: UploadFile = File(...),
     user: dict = Depends(require_role([UserRole.ADVERTISER, UserRole.SUPER_ADMIN]))
-    ):
-    """Upload a new ad with media file and package selection.
+):
+    """
+    Upload a new ad with media file and package selection.
     - Images: Max 5MB, JPG/PNG/WEBP
     - Videos: Max 20MB, MP4/WEBM, 10-15 seconds
     - Package determines pricing and coverage scope
@@ -4461,26 +4464,26 @@ async def generate_mikrotik_config(
     radius_server = RADIUS_HOST or "YOUR_RADIUS_SERVER_IP"
     radius_secret = client.get("secret", "YOUR_SECRET")
     
-    config = f""# ============================================
+    config = f"""# ============================================
 # MikroTik RADIUS Configuration for CAIWAVE
 # Router: {client['name']}
 # Generated: {datetime.now(timezone.utc).isoformat()}
 # ============================================
 
 # Step 1: Add RADIUS Server
-# /radius add service=hotspot address={radius_server} secret="{radius_secret}" timeout=3s
+/radius add service=hotspot address={radius_server} secret="{radius_secret}" timeout=3s
 
 # Step 2: Configure Hotspot to use RADIUS
-# /ip hotspot profile set default use-radius=yes
+/ip hotspot profile set default use-radius=yes
 
 # Step 3: Configure AAA (Authentication, Authorization, Accounting)
-# /ppp aaa set interim-update=5m use-radius=yes accounting=yes
+/ppp aaa set interim-update=5m use-radius=yes accounting=yes
 
 # Step 4: Enable RADIUS incoming (for CoA/Disconnect)
-# /radius incoming set accept=yes port=3799
+/radius incoming set accept=yes port=3799
 
 # Step 5: Create Hotspot User Profile (will be overridden by RADIUS)
-# /ip hotspot user profile add name="caiwave-default" rate-limit="10M/10M" session-timeout=1h
+/ip hotspot user profile add name="caiwave-default" rate-limit="10M/10M" session-timeout=1h
 
 # ============================================
 # IMPORTANT NOTES:
@@ -4488,6 +4491,7 @@ async def generate_mikrotik_config(
 # 2. Ensure firewall allows UDP 1812, 1813, 3799 from this router to RADIUS server
 # 3. Test with: /radius monitor numbers=0
 # ============================================
+"""
     
     return {
         "client_name": client["name"],
@@ -4721,12 +4725,12 @@ def generate_mikrotik_script(router: dict) -> str:
 }}
 
 # Add CAIWAVE RADIUS server
-# /radius add address={radius_host} secret="{radius_secret}" service=hotspot comment="CAIWAVE RADIUS Server" timeout=3s
+/radius add address={radius_host} secret="{radius_secret}" service=hotspot comment="CAIWAVE RADIUS Server" timeout=3s
 
 :log info "CAIWAVE: RADIUS server configured - {radius_host}"
 
 # Enable RADIUS for hotspot
-# /ip hotspot profile set [find default=yes] use-radius=yes radius-interim-update=5m
+/ip hotspot profile set [find default=yes] use-radius=yes radius-interim-update=5m
 
 # =========================================================
 # 6. HOTSPOT SERVER PROFILE
@@ -4768,12 +4772,12 @@ def generate_mikrotik_script(router: dict) -> str:
 }}
 
 # Set NAS identifier
-# /ip hotspot set caiwave-hotspot addresses-per-mac=1
+/ip hotspot set caiwave-hotspot addresses-per-mac=1
 
 # =========================================================
 # 8. ANTI-SHARING PROTECTION
 # =========================================================
-# /ip hotspot set caiwave-hotspot addresses-per-mac=1
+/ip hotspot set caiwave-hotspot addresses-per-mac=1
 
 # Add connection tracking rules
 :if ([:len [/ip firewall filter find comment="CAIWAVE Anti-Sharing"]] = 0) do={{
@@ -4801,12 +4805,12 @@ def generate_mikrotik_script(router: dict) -> str:
 # =========================================================
 # 10. WALLED GARDEN
 # =========================================================
-# /ip hotspot walled-garden add dst-host=*.caiwave.com action=allow comment="CAIWAVE Portal"
-# /ip hotspot walled-garden add dst-host=caiwave.com action=allow comment="CAIWAVE Portal"
-# /ip hotspot walled-garden add dst-host=*.paystack.com action=allow comment="Paystack Payment"
-# /ip hotspot walled-garden add dst-host=paystack.com action=allow comment="Paystack Payment"
-# /ip hotspot walled-garden add dst-host=*.paystack.co action=allow comment="Paystack Payment"
-# /ip hotspot walled-garden add dst-host=*.flutterwave.com action=allow comment="Payment Fallback"
+/ip hotspot walled-garden add dst-host=*.caiwave.com action=allow comment="CAIWAVE Portal"
+/ip hotspot walled-garden add dst-host=caiwave.com action=allow comment="CAIWAVE Portal"
+/ip hotspot walled-garden add dst-host=*.paystack.com action=allow comment="Paystack Payment"
+/ip hotspot walled-garden add dst-host=paystack.com action=allow comment="Paystack Payment"
+/ip hotspot walled-garden add dst-host=*.paystack.co action=allow comment="Paystack Payment"
+/ip hotspot walled-garden add dst-host=*.flutterwave.com action=allow comment="Payment Fallback"
 
 :log info "CAIWAVE: Walled garden configured"
 
@@ -5426,56 +5430,39 @@ async def get_live_router_status(
 # =========================================================
 
 async def monitor_router_health():
-    # Prevent double-start if called twice
-    if getattr(app.state, "router_monitor_running", False):
-        logger.warning("Router monitor already running, skipping duplicate start")
-        return
+    while True:
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(
+                minutes=ROUTER_HEARTBEAT_TIMEOUT_MINUTES
+            )
 
-    app.state.router_monitor_running = True
+            routers = await db.mikrotik_routers.find(
+                        {"status": "connected"},
+                "heartbeat_received_at": datetime.now(timezone.utc).isoformat(),
+                    ).to_list(None)
 
-    logger.info("Router health monitor started")
+            logger.info(f"Router health check: active routers={len(routers)}")
 
-    try:
-        while True:
-            try:
-                cutoff = datetime.now(timezone.utc) - timedelta(
-                    minutes=ROUTER_HEARTBEAT_TIMEOUT_MINUTES
-                )
-
-                routers = await db.mikrotik_routers.find({
-                    "status": {"$in": ["connected", "online"]}
-                }).to_list(None)
-
-                logger.info(f"Router health check: active routers={len(routers)}")
-
-                result = await db.mikrotik_routers.update_many(
-                    {
-                        "heartbeat_received_at": {"$lt": cutoff},
-                        "status": {"$in": ["connected", "online"]}
-                    },
-                    {
-                        "$set": {
-                            "status": "offline",
-                            "health_status": "offline",
-                            "offline_reason": "heartbeat_timeout",
-                            "updated_at": datetime.now(timezone.utc).isoformat()
-                        }
+            await db.mikrotik_routers.update_many(
+                {
+                    "heartbeat_received_at": {"$lt": cutoff},
+                    "status": "connected"
+        "heartbeat_received_at": datetime.now(timezone.utc).isoformat(),
+                },
+                {
+                    "$set": {
+                        "status": "offline",
+                        "health_status": "offline",
+                        "offline_reason": "heartbeat_timeout",
+                        "updated_at": datetime.now(timezone.utc).isoformat()
                     }
-                )
+                }
+            )
 
-                if result.modified_count > 0:
-                    logger.warning(
-                        f"Marked {result.modified_count} routers as offline"
-                    )
+        except Exception as e:
+            logger.exception("Router monitor error")
 
-            except Exception:
-                logger.exception("Router monitor error")
-
-            await asyncio.sleep(30)
-
-    finally:
-        # Safety reset if task is cancelled
-        app.state.router_monitor_running = False
+        await asyncio.sleep(30)
         
 # ==================== Voucher Routes ====================
 
