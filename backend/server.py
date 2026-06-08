@@ -127,6 +127,16 @@ async def startup():
     # Track running tasks safely
     app.state.tasks = []
 
+    # Ensure MikroTik router indexes exist
+    try:
+        await db.mikrotik_routers.create_index([
+            ("status", 1),
+            ("heartbeat_received_at", 1)
+        ])
+        logger.info("MikroTik router indexes ensured")
+    except Exception:
+        logger.exception("Failed to create MikroTik indexes")
+
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
     app.state.tasks.append(task)
@@ -4531,6 +4541,8 @@ from pydantic import field_validator
 import ipaddress
 
 class MikroTikRegisterRequest(BaseModel):
+    bootstrap_token: str
+
     name: str = Field(..., min_length=3, max_length=50)
     hotspot_id: str
     notes: Optional[str] = None
@@ -4547,46 +4559,34 @@ class MikroTikRegisterRequest(BaseModel):
     dhcp_pool: str
     dns_name: str
 
-
-
     @field_validator("wan_interface")
-    @classmethod
     def validate_wan(cls, v):
-        v = v.strip()
+        v = (v or "").strip()
         if not v:
             raise ValueError("WAN interface is required")
         return v
 
-    @field_validator("lan_interfaces")
-    @classmethod
-    def validate_lan(cls, v):
-        if not v or len(v) == 0:
-            raise ValueError("At least one LAN interface is required")
+    from pydantic import field_validator
 
-        cleaned = [i.strip() for i in v if i and i.strip()]
-        if len(cleaned) == 0:
-            raise ValueError("LAN interfaces cannot be empty")
+@field_validator("lan_interfaces")
+@classmethod
+def validate_lan(cls, v):
+    if not v:
+        raise ValueError("At least one LAN interface is required")
 
-        cleaned_ids = [
-            x["id"] if isinstance(x, dict) and "id" in x else x
-            for x in cleaned
-        ]
+    cleaned = [i.strip() for i in v if i and i.strip()]
 
-        if len(set(cleaned_ids)) != len(cleaned_ids):
-            raise ValueError("Duplicate LAN interfaces not allowed")
+    if not cleaned:
+        raise ValueError("LAN interfaces cannot be empty")
 
-            return cleaned
+    if len(set(cleaned)) != len(cleaned):
+        raise ValueError("Duplicate LAN interfaces not allowed")
 
-    @field_validator("mode")
-    @classmethod
-    def validate_mode(cls, v):
-        if v not in ["fresh", "existing"]:
-            raise ValueError("mode must be fresh or existing")
-        return v
+    return cleaned
 
     @field_validator("hotspot_cidr")
-    @classmethod
     def validate_cidr(cls, v):
+        import ipaddress
         try:
             ipaddress.ip_interface(v)
         except Exception:
@@ -4594,7 +4594,6 @@ class MikroTikRegisterRequest(BaseModel):
         return v
 
     @field_validator("dns_name")
-    @classmethod
     def validate_dns(cls, v):
         v = (v or "").strip()
         if not v:
@@ -4849,6 +4848,11 @@ python -m py_compile backend/server.py
 
 
 @mikrotik_onboard_router.post("/register")
+
+# ============================
+# ZERO-TOUCH BOOTSTRAP
+# ============================
+
 async def register_mikrotik(
     request: MikroTikRegisterRequest,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
@@ -5133,7 +5137,7 @@ async def get_mikrotik_routers(
     return routers
 
 
-@mikrotik_onboard_router.get("/routers/{router_id}")
+@mikrotik_onboard_router.delete("/routers/{router_id}")
 async def get_mikrotik_router(
     router_id: str,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
@@ -5442,9 +5446,12 @@ async def monitor_router_health():
                     minutes=ROUTER_HEARTBEAT_TIMEOUT_MINUTES
                 )
 
-                routers = await db.mikrotik_routers.find({
-                    "status": {"$in": ["connected", "online"]}
-                }).to_list(None)
+                routers = await db.mikrotik_routers.find(
+                    {
+                        "heartbeat_received_at": {"$gte": cutoff},
+                        "status": {"$ne": "offline"}
+                    }
+                ).to_list(length=1000)
 
                 logger.info(f"Router health check: active routers={len(routers)}")
 
@@ -5468,10 +5475,10 @@ async def monitor_router_health():
                         f"Marked {result.modified_count} routers as offline"
                     )
 
-            except Exception:
-                logger.exception("Router monitor error")
+            except Exception as e:
+                logger.error(f"Router monitor error: {e}")
 
-            await asyncio.sleep(30)
+            await asyncio.sleep(120)
 
     finally:
         # Safety reset if task is cancelled
@@ -6950,3 +6957,10 @@ logger = logging.getLogger(__name__)
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+class MikroTikBootstrapRequest(BaseModel):
+    bootstrap_token: str
+    name: str
+    wan_interface: str
+    lan_interfaces: List[str] = []
+    notes: Optional[str] = None
+

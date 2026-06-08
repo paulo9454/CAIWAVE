@@ -1,86 +1,16 @@
-"""
-CAIWAVE MikroTik Auto-Configuration and Onboarding Routes
-Centipaid-style workflow for automated MikroTik setup
-"""
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime, timezone
-import uuid
-import secrets
-import os
-
+# CAIWAVE MikroTik Auto-Configuration and Onboarding Routes
+# Centipaid-style workflow for automated MikroTik setup
+# 
+# from fastapi import APIRouter, HTTPException, Depends
+# from typing import Optional, List
+# from datetime import datetime, timezone
+# import uuid
+# import secrets
+# import os
+# 
 mikrotik_router = APIRouter(prefix="/mikrotik", tags=["MikroTik"])
 
 # ==================== Models ====================
-
-class MikroTikRegisterRequest(BaseModel):
-    """Request to register a new MikroTik router"""
-    name: str = Field(..., min_length=3, max_length=50, description="Router name")
-    hotspot_id: str = Field(..., description="Associated hotspot ID")
-    notes: Optional[str] = Field(None, max_length=500, description="Optional notes")
-
-class MikroTikRouter(BaseModel):
-    """Registered MikroTik router model"""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    hotspot_id: str
-    owner_id: str
-    
-    # RADIUS credentials (auto-generated)
-    radius_secret: str
-    nas_identifier: str
-    
-    # Status tracking
-    status: str = "pending_configuration"  # pending_configuration, configured, connected, offline, error
-    connection_confirmed: bool = False
-    last_seen: Optional[datetime] = None
-    
-    # Detected capabilities (populated after script runs)
-    detected_ports: List[str] = Field(default_factory=list)
-    detected_services: List[str] = Field(default_factory=list)
-    firmware_version: Optional[str] = None
-    model: Optional[str] = None
-    
-    # Timestamps
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    configured_at: Optional[datetime] = None
-    
-    notes: Optional[str] = None
-
-class MikroTikConfigResponse(BaseModel):
-    """Response containing the auto-configuration script"""
-    router_id: str
-    router_name: str
-    script: str
-    instructions: List[str]
-    radius_secret: str
-    nas_identifier: str
-    callback_url: str
-
-class MikroTikConfirmRequest(BaseModel):
-    """Request to confirm router connection"""
-    router_id: str
-    nas_identifier: str
-    detected_ports: Optional[List[str]] = None
-    detected_services: Optional[List[str]] = None
-    firmware_version: Optional[str] = None
-    model: Optional[str] = None
-
-class MikroTikStatusResponse(BaseModel):
-    """Router status response"""
-    id: str
-    name: str
-    status: str
-    connection_confirmed: bool
-    last_seen: Optional[str]
-    detected_ports: List[str]
-    detected_services: List[str]
-
-
-def generate_radius_secret() -> str:
-    """Generate a secure RADIUS secret"""
-    return secrets.token_hex(16)
 
 def generate_nas_identifier(name: str) -> str:
     """Generate a unique NAS identifier"""
@@ -103,7 +33,6 @@ def generate_mikrotik_script(
     - Anti-sharing protection
     - Proper DNS and firewall rules
     """
-    
     script = f'''# =========================================================
 # CAIWAVE MikroTik Auto-Configuration Script
 # Router: {router_name}
