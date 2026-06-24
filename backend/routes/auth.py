@@ -7,13 +7,13 @@ from pydantic import EmailStr
 from datetime import datetime, timezone, timedelta
 import uuid
 
-from ..database import db
-from ..models import UserCreate, UserLogin, User, UserResponse, UserRole
-from ..utils.auth import (
+from backend.core.database import db
+from backend.models import UserCreate, UserLogin, User, UserResponse, UserRole
+from backend.utils.auth import (
     hash_password, verify_password, create_token, get_current_user
 )
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 
 @router.post("/register", response_model=dict)

@@ -1,11 +1,12 @@
+import { safeError } from "../utils/safeError";
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
+import { API_URL } from "../lib/utils";
 import { Wifi, Clock, Zap, MessageCircle, ExternalLink, Play, ChevronRight, Phone, AlertCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { toast, Toaster } from "sonner";
 
-const API_URL = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 // Format phone number for WhatsApp
 const formatWhatsApp = (phone) => {
@@ -115,7 +116,7 @@ const CaptivePortal = () => {
         toast.error(response.data.message || "Payment failed");
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to initiate payment");
+      toast.error(safeError(error));
     } finally {
       setPaying(false);
     }
@@ -133,8 +134,8 @@ const CaptivePortal = () => {
         const response = await axios.get(`${API_URL}/portal/free-session-status`, {
           params: {
             hotspot_id: hotspotId || "demo",
-            user_mac: clientMac || undefined,
-            user_ip: clientIp || undefined
+            user_mac: clientMac ,
+            user_ip: clientIp 
           }
         });
         setFreeSessionStatus(response.data);
@@ -162,8 +163,8 @@ const CaptivePortal = () => {
         params: {
           hotspot_id: hotspotId || "demo",
           ad_id: currentAd.id,
-          user_mac: clientMac || undefined,
-          user_ip: clientIp || undefined
+          user_mac: clientMac ,
+          user_ip: clientIp 
         }
       });
       
@@ -180,7 +181,7 @@ const CaptivePortal = () => {
         await axios.post(`${API_URL}/ads/${currentAd.id}/click`).catch(() => {});
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to get free WiFi");
+      toast.error(safeError(error));
     } finally {
       setGettingFreeWifi(false);
     }

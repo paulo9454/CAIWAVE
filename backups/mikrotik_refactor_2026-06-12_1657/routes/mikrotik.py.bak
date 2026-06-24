@@ -1,0 +1,23 @@
+
+from fastapi import APIRouter
+from backend.server import generate_mikrotik_script as build_mikrotik_script
+from backend.schemas.mikrotik import MikroTikProvisionRequest
+from backend.services.mikrotik_provisioning import provision_router
+
+mikrotik_router = APIRouter(prefix="/mikrotik", tags=["MikroTik"])
+
+
+@mikrotik_router.post("/generate")
+def generate_script(payload: MikroTikProvisionRequest):
+    result = provision_router(payload)
+
+    if result["status"] != "success":
+        return result
+
+    script = build_mikrotik_script(result["router"])
+
+    return {
+        "status": "success",
+        "script": script,
+        "router": result["router"]
+    }

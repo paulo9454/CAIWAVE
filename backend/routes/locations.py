@@ -5,7 +5,7 @@ Handles Kenya counties and constituencies data.
 from fastapi import APIRouter
 from typing import Optional
 
-from ..utils.locations import get_all_counties, get_constituencies, get_all_constituencies
+from backend.utils.locations import get_all_counties, get_constituencies, get_all_constituencies
 
 router = APIRouter(prefix="/locations", tags=["Locations"])
 

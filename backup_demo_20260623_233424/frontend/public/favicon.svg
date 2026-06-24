@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Blue Background -->
+  <rect width="32" height="32" rx="4" fill="#0032FA"/>
+  
+  <!-- WiFi Signal Icon (White) -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round">
+    <!-- Signal Arc 1 (Outermost) -->
+    <path d="M 7 17 Q 16 7 25 17" />
+    <!-- Signal Arc 2 -->
+    <path d="M 10 19 Q 16 11 22 19" />
+    <!-- Signal Arc 3 -->
+    <path d="M 13 21 Q 16 16 19 21" />
+  </g>
+  
+  <!-- Center Dot -->
+  <circle cx="16" cy="25" r="2" fill="#FFFFFF"/>
+</svg>

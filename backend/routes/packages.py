@@ -5,9 +5,9 @@ Handles WiFi packages management.
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 
-from ..database import db
-from ..models import PackageBase, Package
-from ..utils.auth import require_admin
+from backend.core.database import db
+from backend.models import PackageBase, Package
+from backend.utils.auth import require_admin
 
 router = APIRouter(prefix="/packages", tags=["Packages"])
 

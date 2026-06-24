@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en" class="dark" style="background-color: #050505 !important; color-scheme: dark;">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#0032FA" />
+        <meta name="description" content="CAIWAVE - WiFi Hotspot Billing, Advertising & Premium Live Access Platform" />
+        <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/favicon.svg" />
+        <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo-192.svg" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+        <style>
+            /* Aggressive hide for Emergent badge */
+            #emergent-badge, 
+            [id*="emergent"], 
+            a[href*="emergent.sh"],
+            a[href*="emergent-badge"],
+            a[href*="utm_source=emergent"],
+            div[style*="position: fixed"][style*="bottom"][style*="right"],
+            a[style*="position: fixed"][style*="bottom"][style*="right"],
+            a[style*="z-index: 9999"],
+            a[style*="178px"],
+            a[style*="border-radius: 50px"][style*="position: fixed"] {
+                display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                max-width: 0 !important;
+                max-height: 0 !important;
+                overflow: hidden !important;
+                position: absolute !important;
+                left: -99999px !important;
+                top: -99999px !important;
+                transform: scale(0) !important;
+                clip: rect(0,0,0,0) !important;
+            }
+        </style>
+        <!--
+        manifest.json provides metadata used when your web app is installed on a
+        user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
+        -->
+        <!--
+        Notice the use of %PUBLIC_URL% in the tags above.
+        It will be replaced with the URL of the `public` folder during the build.
+        Only files inside the `public` folder can be referenced from the HTML.
+
+        Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
+        work correctly both with client-side routing and a non-root public URL.
+        Learn how to configure a non-root public URL by running `npm run build`.
+        -->
+        <title>CAIWAVE | WiFi Hotspot Billing Platform</title>
+        <script>
+            // Only load Emergent scripts in preview/iframe mode
+            if (window.self !== window.top) {
+                var emergentScript = document.createElement('script');
+                emergentScript.src = 'https://assets.emergent.sh/scripts/emergent-main.js';
+                document.head.appendChild(emergentScript);
+            }
+        </script>
+        <!--
+        These two scripts have been added for the Visual Edits, please do not edit or remove them
+        -->
+        <script>
+            // Only load visual edit scripts when inside an iframe
+            if (window.self !== window.top) {
+                // Load debug monitor script
+                var debugMonitorScript = document.createElement('script');
+                debugMonitorScript.src = 'https://assets.emergent.sh/scripts/debug-monitor.js';
+                document.head.appendChild(debugMonitorScript);
+
+                // Configure Tailwind
+                window.tailwind = window.tailwind || {};
+                tailwind.config = {
+                    corePlugins: { preflight: false },
+                };
+
+                // Load Tailwind CDN
+                var tailwindScript = document.createElement('script');
+                tailwindScript.src = 'https://cdn.tailwindcss.com';
+                document.head.appendChild(tailwindScript);
+            }
+        </script>
+    </head>
+    <body style="background-color: #050505 !important;">
+        <noscript>You need to enable JavaScript to run this app.</noscript>
+        <div id="root"></div>
+        <!--
+      This HTML file is a template.
+      If you open it directly in the browser, you will see an empty page.
+
+      You can add webfonts, meta tags, or analytics to this file.
+      The build step will place the bundled scripts into the <body> tag.
+
+      To begin the development, run `npm start` or `yarn start`.
+      To create a production bundle, use `npm run build` or `yarn build`.
+    -->
+        <script>
+            !(function (t, e) {
+                var o, n, p, r;
+                e.__SV ||
+                    ((window.posthog = e),
+                    (e._i = []),
+                    (e.init = function (i, s, a) {
+                        function g(t, e) {
+                            var o = e.split(".");
+                            2 == o.length && ((t = t[o[0]]), (e = o[1])),
+                                (t[e] = function () {
+                                    t.push(
+                                        [e].concat(
+                                            Array.prototype.slice.call(
+                                                arguments,
+                                                0,
+                                            ),
+                                        ),
+                                    );
+                                });
+                        }
+                        ((p = t.createElement("script")).type =
+                            "text/javascript"),
+                            (p.crossOrigin = "anonymous"),
+                            (p.async = !0),
+                            (p.src =
+                                s.api_host.replace(
+                                    ".i.posthog.com",
+                                    "-assets.i.posthog.com",
+                                ) + "/static/array.js"),
+                            (r =
+                                t.getElementsByTagName(
+                                    "script",
+                                )[0]).parentNode.insertBefore(p, r);
+                        var u = e;
+                        for (
+                            void 0 !== a ? (u = e[a] = []) : (a = "posthog"),
+                                u.people = u.people || [],
+                                u.toString = function (t) {
+                                    var e = "posthog";
+                                    return (
+                                        "posthog" !== a && (e += "." + a),
+                                        t || (e += " (stub)"),
+                                        e
+                                    );
+                                },
+                                u.people.toString = function () {
+                                    return u.toString(1) + ".people (stub)";
+                                },
+                                o =
+                                    "init me ws ys ps bs capture je Di ks register register_once register_for_session unregister unregister_for_session Ps getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSurveysLoaded onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey canRenderSurveyAsync identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty Es $s createPersonProfile Is opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing Ss debug xs getPageViewId captureTraceFeedback captureTraceMetric".split(
+                                        " ",
+                                    ),
+                                n = 0;
+                            n < o.length;
+                            n++
+                        )
+                            g(u, o[n]);
+                        e._i.push([i, s, a]);
+                    }),
+                    (e.__SV = 1));
+            })(document, window.posthog || []);
+            posthog.init("phc_xAvL2Iq4tFmANRE7kzbKwaSqp1HJjN7x48s3vr0CMjs", {
+                api_host: "https://us.i.posthog.com",
+                person_profiles: "identified_only", // or 'always' to create profiles for anonymous users as well,
+                session_recording: {
+                    recordCrossOriginIframes: true,
+                    capturePerformance: false,
+                },
+            });
+        </script>
+        <script>
+            // Aggressive removal of any external badges
+            (function() {
+                function removeBadge() {
+                    // Remove by ID
+                    const badge = document.getElementById('emergent-badge');
+                    if (badge) badge.parentNode.removeChild(badge);
+                    
+                    // Remove any link containing emergent
+                    document.querySelectorAll('a').forEach(function(el) {
+                        var href = el.getAttribute('href') || '';
+                        var text = el.textContent || '';
+                        var style = el.getAttribute('style') || '';
+                        
+                        if (href.indexOf('emergent') !== -1 || 
+                            text.indexOf('Emergent') !== -1 ||
+                            text.indexOf('Made with') !== -1 ||
+                            (style.indexOf('fixed') !== -1 && style.indexOf('bottom') !== -1 && style.indexOf('right') !== -1) ||
+                            (style.indexOf('z-index') !== -1 && style.indexOf('9999') !== -1)) {
+                            el.parentNode.removeChild(el);
+                        }
+                    });
+                    
+                    // Remove any element with emergent in id
+                    document.querySelectorAll('[id*="emergent"]').forEach(function(el) {
+                        el.parentNode.removeChild(el);
+                    });
+                }
+                
+                // Run immediately
+                removeBadge();
+                
+                // Run on DOM ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', removeBadge);
+                }
+                
+                // Run on load
+                window.addEventListener('load', removeBadge);
+                
+                // Run periodically
+                setInterval(removeBadge, 100);
+                
+                // Use MutationObserver to catch dynamically injected elements
+                var observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        mutation.addedNodes.forEach(function(node) {
+                            if (node.nodeType === 1) {
+                                var href = node.getAttribute ? node.getAttribute('href') || '' : '';
+                                var text = node.textContent || '';
+                                var style = node.getAttribute ? node.getAttribute('style') || '' : '';
+                                var id = node.id || '';
+                                
+                                if (id.indexOf('emergent') !== -1 ||
+                                    href.indexOf('emergent') !== -1 || 
+                                    text.indexOf('Made with Emergent') !== -1 ||
+                                    (style.indexOf('fixed') !== -1 && style.indexOf('9999') !== -1)) {
+                                    node.parentNode.removeChild(node);
+                                }
+                            }
+                        });
+                    });
+                    removeBadge();
+                });
+                
+                observer.observe(document.documentElement, {
+                    childList: true,
+                    subtree: true
+                });
+            })();
+        </script>
+    </body>
+</html>

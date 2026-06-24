@@ -11,7 +11,7 @@ from typing import List
 import uuid
 
 from ..config import JWT_SECRET, JWT_ALGORITHM, JWT_EXPIRATION_HOURS
-from ..database import db
+from backend.core.database import db
 from ..models import UserRole
 
 security = HTTPBearer()
@@ -22,11 +22,19 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
-def verify_password(password: str, hashed: str) -> bool:
-    """Verify a password against a bcrypt hash."""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
-
-
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    try:
+        if not hashed_password:
+            return False
+        return bcrypt.checkpw(
+            plain_password.encode("utf-8"),
+            hashed_password.encode("utf-8")
+        )
+    except Exception:
+        return False
+    except Exception as e:
+        return False
+        return False
 def create_token(user_id: str, role: str) -> str:
     """Create a JWT token for a user."""
     payload = {
