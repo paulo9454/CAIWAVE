@@ -41,7 +41,7 @@ export const initializeAuth = () => {
 };
 
 export const login = async (email, password) => {
-  const response = await axios.post(`${API_URL}/api/auth/login`, {
+  const response = await axios.post(`${API_URL}/auth/login`, {
     email,
     password,
   });
@@ -52,7 +52,7 @@ export const login = async (email, password) => {
 };
 
 export const register = async (userData) => {
-  const response = await axios.post(`${API_URL}/api/auth/register`, userData);
+  const response = await axios.post(`${API_URL}/auth/register`, userData);
   const { token, user } = response.data;
   setAuthToken(token);
   setUser(user);
@@ -65,7 +65,7 @@ export const logout = () => {
 };
 
 export const getCurrentUser = async () => {
-  const response = await axios.get(`${API_URL}/api/auth/me`);
+  const response = await axios.get(`${API_URL}/auth/me`);
   setUser(response.data);
   return response.data;
 };
