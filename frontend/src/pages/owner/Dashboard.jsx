@@ -508,6 +508,11 @@ const HotspotsPage = () => {
     constituency: "",
   });
 
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard!");
+  };
+
   useEffect(() => {
     fetchHotspots();
   }, []);

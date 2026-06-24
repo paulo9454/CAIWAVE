@@ -27,12 +27,23 @@ app.middleware("http")
 app.state.DEMO_MODE = DEMO_MODE
 app.include_router(demo_router)
 
+# CORS Configuration - Read from environment variable
+cors_origins_env = os.getenv("CORS_ORIGINS", "*")
+if cors_origins_env == "*":
+    cors_allow_origins = ["*"]
+else:
+    cors_allow_origins = [origin.strip() for origin in cors_origins_env.split(",")]
+    # Always include CAIWAVE domains
+    cors_allow_origins.extend([
+        "https://www.caiwave.com",
+        "https://caiwave.com",
+        "https://hotspot-paystack.preview.emergentagent.com"
+    ])
+    cors_allow_origins = list(set(cors_allow_origins))  # Remove duplicates
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://www.caiwave.com",
-        "https://caiwave.com"
-    ],
+    allow_origins=cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

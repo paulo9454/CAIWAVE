@@ -55,7 +55,7 @@ const RegisterPage = () => {
       toast.success("Account created!", { description: `Welcome, ${user.name}!` });
       navigate(getDashboardPath(user.role));
     } catch (error) {
-      const message = safeError(error);
+      const message = error.response?.data?.detail || error.message || "Registration failed";
       toast.error("Error", { description: message });
     } finally {
       setLoading(false);

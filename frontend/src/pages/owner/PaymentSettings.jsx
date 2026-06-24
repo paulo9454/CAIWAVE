@@ -95,7 +95,7 @@ const PaymentSettings = () => {
         account_number: formData.account_number,
       });
     } catch (error) {
-      const message = safeError(error);
+      const message = error.response?.data?.detail || error.message || "Failed to connect bank account";
       toast.error(message);
     } finally {
       setSubmitting(false);

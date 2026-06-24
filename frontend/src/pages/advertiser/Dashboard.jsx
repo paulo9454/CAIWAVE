@@ -338,7 +338,7 @@ const AdUploadForm = ({ onSuccess }) => {
         if (onSuccess) onSuccess();
       }
     } catch (error) {
-      toast.error(safeError(error));
+      toast.error(error.response?.data?.detail || error.message || "Upload failed");
     } finally {
       setUploading(false);
     }
@@ -840,7 +840,7 @@ const PaymentModal = ({ ad, onClose, onSuccess }) => {
         toast.error(response.data.message || "Payment failed");
       }
     } catch (error) {
-      toast.error(safeError(error));
+      toast.error(error.response?.data?.detail || error.message || "Payment failed");
     } finally {
       setLoading(false);
     }
@@ -948,7 +948,7 @@ const MyAdsPage = () => {
       toast.success("Ad cancelled");
       fetchAds();
     } catch (error) {
-      toast.error(safeError(error));
+      toast.error(error.response?.data?.detail || error.message || "Failed to cancel ad");
     }
   };
 
