@@ -54,3 +54,16 @@ credentials.json
 *.key
 .credentials
 frontend/node_modules/.cache/default-development/7.pack
+
+# Historical backups
+backup_demo_20260623_233424/
+backend_BACKUP_1782031195/
+backend_BACKUP_2026-06-16_0508/
+backend_CRASH_COPY_2026-06-13_1505/
+backend_WORKING_2026-06-13_1757/
+backend_copy_before_refactor/
+_LEGACY_SERVER/
+_refactor_stage/
+_backup_refactor_1781691290/
+FINAL_CAIWAVE_BACKUP_BEFORE_CLEANUP.tar.gz
+frontend/node_modules/.cache/default-development/0.pack
