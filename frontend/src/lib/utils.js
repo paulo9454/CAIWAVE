@@ -19,4 +19,6 @@ export function formatCurrency(value, currency = "KES") {
 
 // API base URL (single source of truth)
 export const API_URL =
-  process.env.REACT_APP_BACKEND_URL || "http://127.0.0.1:8001/api";
+  process.env.REACT_APP_BACKEND_URL?.endsWith("/api")
+    ? process.env.REACT_APP_BACKEND_URL
+    : `${process.env.REACT_APP_BACKEND_URL}/api`;

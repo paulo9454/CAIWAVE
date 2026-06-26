@@ -19,7 +19,18 @@ export const setUser = (user) => {
 
 export const getUser = () => {
   const user = localStorage.getItem(USER_KEY);
-  return user ? JSON.parse(user) : null;
+
+  if (!user || user === "undefined" || user === "null") {
+    return null;
+  }
+
+  try {
+    return JSON.parse(user);
+  } catch (err) {
+    console.warn("Invalid auth data in localStorage. Clearing user.", err);
+    localStorage.removeItem(USER_KEY);
+    return null;
+  }
 };
 
 export const clearAuth = () => {
