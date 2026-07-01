@@ -23,7 +23,7 @@ const LoginPage = () => {
 
     try {
       const user = await login(formData.email, formData.password);
-      toast.success("Welcome back!", { description: `Logged in as ${user.name}` });
+      toast.success("Welcome back!", { description: `Logged in as ${user?.name || user?.email || "User"}` });
       navigate(getDashboardPath(user.role));
     } catch (error) {
       const message = safeError(error);
