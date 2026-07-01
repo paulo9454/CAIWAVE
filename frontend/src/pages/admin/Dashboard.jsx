@@ -2288,7 +2288,7 @@ setUsers(Array.isArray(response.data) ? response.data : [])
           <tbody>
             {users.map((user) => (
               <tr key={user.id}>
-                <td className="font-medium">{user.name}</td>
+                <td className="font-medium">{user?.name || user?.email || "User"}</td>
                 <td className="text-neutral-400">{user.email}</td>
                 <td>
                   <span className="px-2 py-1 bg-purple-500/10 text-purple-400 rounded-md text-xs">

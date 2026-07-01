@@ -52,7 +52,7 @@ const RegisterPage = () => {
       };
 
       const user = await register(userData);
-      toast.success("Account created!", { description: `Welcome, ${user.name}!` });
+      toast.success("Account created!", { description: `Welcome, ${user?.name || user?.email || "User"}!` });
       navigate(getDashboardPath(user.role));
     } catch (error) {
       const message = error.response?.data?.detail || error.message || "Registration failed";
