@@ -21,6 +21,7 @@ export const getUser = () => {
   const user = localStorage.getItem(USER_KEY);
 
   if (!user || user === "undefined" || user === "null") {
+    localStorage.removeItem(USER_KEY);
     return null;
   }
 
