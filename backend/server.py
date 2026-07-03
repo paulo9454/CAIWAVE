@@ -4148,23 +4148,15 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
 
     def reject(message: str):
         return {
-            "control": {
-                "Auth-Type": "Reject"
-            },
-            "reply": {
-                "Reply-Message": message
-            }
+            "control:Auth-Type": {"value": "Reject", "op": ":="},
+            "reply:Reply-Message": {"value": message, "op": ":="}
         }
 
     def accept(session_timeout: int, rate_limit: str):
         return {
-            "control": {
-                "Auth-Type": "Accept"
-            },
-            "reply": {
-                "Session-Timeout": int(max(1, session_timeout)),
-                "Mikrotik-Rate-Limit": rate_limit
-            }
+            "control:Auth-Type": {"value": "Accept", "op": ":="},
+            "reply:Session-Timeout": {"value": int(max(1, session_timeout)), "op": ":="},
+            "reply:Mikrotik-Rate-Limit": {"value": rate_limit, "op": ":="}
         }
 
     now = datetime.now(timezone.utc)
