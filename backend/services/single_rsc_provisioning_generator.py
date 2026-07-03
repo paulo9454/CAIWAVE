@@ -47,6 +47,8 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
     radius_secret = config.radius_secret
     router_name = config.router_name
     nas_identifier = config.nas_identifier
+    callback_url = config.callback_url or "https://caiwave.com/api/mikrotik-onboard/confirm"
+    heartbeat_url = callback_url.replace("/confirm", "/heartbeat")
 
     return f"""# =========================================================
 # CAIWAVE MikroTik Auto-Configuration Script
@@ -65,32 +67,92 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
 
 # BRIDGE
 :if ([:len [/interface bridge find name=bridge-hotspot]] = 0) do={{
-    /interface bridge add name=bridge-hotspot
+    /interface bridge add name=bridge-hotspot comment="CAIWAVE Hotspot Bridge"
+}}
+
+# ADD LAN PORTS TO BRIDGE, KEEP ether1 AS WAN
+:foreach i in=[/interface ethernet find] do={{
+    :local ethName [/interface ethernet get $i name]
+    :if ($ethName != "ether1") do={{
+        :if ([:len [/interface bridge port find interface=$ethName]] = 0) do={{
+            /interface bridge port add bridge=bridge-hotspot interface=$ethName comment="CAIWAVE"
+        }}
+    }}
 }}
 
 # IP CONFIG
-/ip address add address=10.10.0.1/24 interface=bridge-hotspot
+:if ([:len [/ip address find interface=bridge-hotspot address="10.10.0.1/24"]] = 0) do={{
+    /ip address add address=10.10.0.1/24 interface=bridge-hotspot comment="CAIWAVE Hotspot Gateway"
+}}
 
 # DHCP POOL
-/ip pool add name=pool-hotspot ranges=10.10.0.10-10.10.0.254
+:if ([:len [/ip pool find name=pool-hotspot]] = 0) do={{
+    /ip pool add name=pool-hotspot ranges=10.10.0.10-10.10.0.254
+}}
 
 # DHCP SERVER
-/ip dhcp-server add name=dhcp-hotspot interface=bridge-hotspot address-pool=pool-hotspot disabled=no
+:if ([:len [/ip dhcp-server find name=dhcp-hotspot]] = 0) do={{
+    /ip dhcp-server add name=dhcp-hotspot interface=bridge-hotspot address-pool=pool-hotspot disabled=no
+}}
+
+:if ([:len [/ip dhcp-server network find address=10.10.0.0/24]] = 0) do={{
+    /ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,1.1.1.1 comment="CAIWAVE Hotspot Network"
+}}
 
 # DNS
 /ip dns set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1
 
+# NAT
+:if ([:len [/ip firewall nat find comment="CAIWAVE NAT"]] = 0) do={{
+    /ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade comment="CAIWAVE NAT"
+}}
+
 # RADIUS
-/radius add address={radius_host} secret="{radius_secret}" service=hotspot comment="CAIWAVE"
+:foreach r in=[/radius find comment~"CAIWAVE"] do={{
+    /radius remove $r
+}}
+/radius add address={radius_host} secret="{radius_secret}" service=hotspot comment="CAIWAVE" timeout=3s
 
 # HOTSPOT PROFILE
-/ip hotspot profile add name=caiwave-profile hotspot-address=10.10.0.1 dns-name=caiwave.local use-radius=yes
+:if ([:len [/ip hotspot profile find name=caiwave-profile]] = 0) do={{
+    /ip hotspot profile add name=caiwave-profile hotspot-address=10.10.0.1 dns-name=login.caiwave.local use-radius=yes radius-accounting=yes login-by=http-chap,http-pap
+}} else={{
+    /ip hotspot profile set caiwave-profile use-radius=yes radius-accounting=yes login-by=http-chap,http-pap
+}}
 
 # HOTSPOT SERVER
-/ip hotspot add name=caiwave-hotspot interface=bridge-hotspot profile=caiwave-profile address-pool=pool-hotspot
+:if ([:len [/ip hotspot find name=caiwave-hotspot]] = 0) do={{
+    /ip hotspot add name=caiwave-hotspot interface=bridge-hotspot profile=caiwave-profile address-pool=pool-hotspot disabled=no
+}} else={{
+    /ip hotspot set caiwave-hotspot profile=caiwave-profile disabled=no
+}}
+
+# WALLED GARDEN
+:if ([:len [/ip hotspot walled-garden find comment="CAIWAVE Portal"]] = 0) do={{
+    /ip hotspot walled-garden add dst-host=caiwave.com action=allow comment="CAIWAVE Portal"
+    /ip hotspot walled-garden add dst-host=www.caiwave.com action=allow comment="CAIWAVE Portal"
+    /ip hotspot walled-garden add dst-host=*.caiwave.com action=allow comment="CAIWAVE Portal"
+    /ip hotspot walled-garden add dst-host=*.paystack.com action=allow comment="CAIWAVE Paystack"
+}}
+
+# CONFIRM CALLBACK
+/tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\"router_id\\":\\"\\",\\"nas_identifier\\":\\"{nas_identifier}\\"}}" keep-result=no
+
+# HEARTBEAT SCRIPT
+/system script remove [find name="caiwave-heartbeat"]
+/system script add name="caiwave-heartbeat" policy=read,write,test source="/tool fetch url=\\"{heartbeat_url}\\" http-method=post http-header-field=\\"Content-Type: application/json\\" http-data=\\"{{\\\\\\"nas_identifier\\\\\\":\\\\\\"{nas_identifier}\\\\\\"}}\\" keep-result=no"
+
+# HEARTBEAT SCHEDULER
+/system scheduler remove [find name="caiwave-heartbeat"]
+/system scheduler add name="caiwave-heartbeat" interval=2m on-event=caiwave-heartbeat disabled=no
+
+/system script run caiwave-heartbeat
 
 :log info "CAIWAVE provisioning complete"
+:put "CAIWAVE provisioning complete"
+:put "NAS Identifier: {nas_identifier}"
 """
+
 
 def generate_single_rsc_provisioning_script(
     router_name: str,

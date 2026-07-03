@@ -760,14 +760,23 @@ const MikroTikSetupPage = () => {
       const response = await axios.post(
         `${API_URL}/mikrotik-onboard/register`,
         {
+          bootstrap_token: "owner-dashboard",
           name: routerName.trim(),
           hotspot_id: selectedHotspot,
+          wan_interface: "ether1",
+          lan_interfaces: ["ether2", "ether3", "ether4", "ether5"],
+          create_bridge: true,
+          bridge_name: "bridge-hotspot",
+          mode: "fresh",
+          hotspot_cidr: "10.10.0.1/24",
+          dhcp_pool: "10.10.0.10-10.10.0.254",
+          dns_name: "login.caiwave.local",
         },
         { headers: { Authorization: `Bearer ${getAuthToken()}` } }
       );
       
       setGeneratedScript(response.data);
-      toast.success("Configuration script generated!");
+      toast.success("Provisioning .rsc file generated!");
       fetchData();
     } catch (error) {
       toast.error(safeError(error));
@@ -845,51 +854,6 @@ const MikroTikSetupPage = () => {
         </div>
       </div>
 
-{/* Quick Copy-Paste Setup */}
-<div className="dashboard-card border-yellow-500/30">
-  <h2 className="font-semibold mb-4 flex items-center gap-2">
-    <Zap className="w-5 h-5 text-yellow-400" />
-    Legacy Generic Setup (Not Hotspot-Bound)
-  </h2>
-  <p className="text-neutral-400 text-sm mb-4">
-    Use this only for baseline connectivity tests. For production linking to CAIWAVE hotspot records, use{" "}
-    <strong>Add MikroTik → Generate Configuration Script</strong>.
-  </p>
-  <div className="relative">
-    <pre className="bg-neutral-950 p-4 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-48">
-{`# WARNING: Generic baseline script only (no hotspot ID binding)
-/radius remove [find comment~"CAIWAVE"]
-/radius add address=10.5.50.254 secret="YOUR_SECRET" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
-/ip hotspot profile set default use-radius=yes radius-accounting=yes
-/ip hotspot walled-garden ip remove [find comment~"CAIWAVE"]
-/ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE"
-/ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
-:put "CAIWAVE Setup Done! Test: /radius monitor 0"`}
-    </pre>
-    <Button
-      size="sm"
-      className="absolute top-2 right-2 bg-green-600 hover:bg-green-700"
-      onClick={() => {
-        navigator.clipboard.writeText(`# WARNING: Generic baseline script only (no hotspot ID binding)
-/radius remove [find comment~"CAIWAVE"]
-/radius add address=10.5.50.254 secret="YOUR_SECRET" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
-/ip hotspot profile set default use-radius=yes radius-accounting=yes
-/ip hotspot walled-garden ip remove [find comment~"CAIWAVE"]
-/ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE"
-/ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
-:put "CAIWAVE Setup Done! Test: /radius monitor 0"`);
-        toast.success("Copied to clipboard!");
-      }}
-    >
-      <Copy className="w-4 h-4 mr-1" />
-      Copy
-    </Button>
-  </div>
-  <p className="text-yellow-400 text-xs mt-2">
-    ⚠️ Generic only: this script does NOT bind the router to a specific hotspot ID in CAIWAVE. For real deployment, use the generated hotspot-bound script below.
-  </p>
-</div>
-
       {/* Setup Steps */}
       <div className="dashboard-card">
         <h2 className="font-semibold mb-4 flex items-center gap-2">
@@ -908,22 +872,22 @@ const MikroTikSetupPage = () => {
             <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-blue-400 font-bold">2</span>
             </div>
-            <h4 className="font-medium text-sm">New Terminal</h4>
-            <p className="text-xs text-neutral-500 mt-1">Click New Terminal</p>
+            <h4 className="font-medium text-sm">Upload .rsc</h4>
+            <p className="text-xs text-neutral-500 mt-1">Upload file to MikroTik</p>
           </div>
           <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
             <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <span className="text-blue-400 font-bold">3</span>
             </div>
-            <h4 className="font-medium text-sm">Paste Script</h4>
-            <p className="text-xs text-neutral-500 mt-1">Copy script above</p>
+            <h4 className="font-medium text-sm">Import File</h4>
+            <p className="text-xs text-neutral-500 mt-1">Run import command</p>
           </div>
           <div className="p-4 bg-neutral-800/50 rounded-lg text-center">
             <div className="w-10 h-10 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
               <CheckCircle className="w-5 h-5 text-green-400" />
             </div>
-            <h4 className="font-medium text-sm">Test</h4>
-            <p className="text-xs text-neutral-500 mt-1">/radius monitor 0</p>
+            <h4 className="font-medium text-sm">Confirm</h4>
+            <p className="text-xs text-neutral-500 mt-1">Confirm connection</p>
           </div>
         </div>
       </div>
@@ -1071,7 +1035,7 @@ const MikroTikSetupPage = () => {
                     ) : (
                       <>
                         <Zap className="w-4 h-4 mr-2" />
-                        Generate Configuration Script
+                        Generate Provisioning File
                       </>
                     )}
                   </Button>
@@ -1082,10 +1046,10 @@ const MikroTikSetupPage = () => {
                   <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
                     <div className="flex items-center gap-2 text-green-400 mb-2">
                       <CheckCircle className="w-5 h-5" />
-                      <span className="font-semibold">Script Generated Successfully!</span>
+                      <span className="font-semibold">Provisioning File Generated Successfully!</span>
                     </div>
                     <p className="text-sm text-neutral-400">
-                      Copy the script below and paste it into your MikroTik Terminal.
+                      Download the .rsc file and import it into your MikroTik router.
                     </p>
                   </div>
                   
@@ -1121,23 +1085,49 @@ const MikroTikSetupPage = () => {
                     </ol>
                   </div>
                   
-                  {/* Script Box */}
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold">Configuration Script</h3>
+                  {/* RSC Provisioning File */}
+                  <div className="p-4 bg-neutral-900/70 border border-neutral-800 rounded-lg">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <div>
+                        <h3 className="font-semibold">MikroTik .rsc Provisioning File</h3>
+                        <p className="text-sm text-neutral-400 mt-1">
+                          Download this file, upload it to MikroTik, then import it from RouterOS terminal.
+                        </p>
+                        <p className="text-xs text-neutral-500 mt-2 font-mono">
+                          {generatedScript.single_rsc_provisioning?.filename || "caiwave-provisioning.rsc"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-3">
                       <Button
-                        size="sm"
+                        onClick={() => {
+                          const file = generatedScript.single_rsc_provisioning;
+                          const blob = new Blob([file.content], { type: file.content_type || "text/plain" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = file.filename || "caiwave-provisioning.rsc";
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        Download .rsc File
+                      </Button>
+
+                      <Button
                         variant="outline"
-                        onClick={() => copyToClipboard(generatedScript.script)}
+                        onClick={() => {
+                          navigator.clipboard.writeText(generatedScript.single_rsc_provisioning?.content || "");
+                          toast.success(".rsc content copied to clipboard!");
+                        }}
                         className="border-neutral-700"
                       >
-                        Copy Script
+                        Copy .rsc Content
                       </Button>
-                    </div>
-                    <div className="bg-neutral-950 rounded-lg p-4 max-h-64 overflow-y-auto">
-                      <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono">
-                        {generatedScript.script}
-                      </pre>
                     </div>
                   </div>
                   

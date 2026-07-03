@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import os
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv('/app/backend/.env')
+load_dotenv(ROOT_DIR / ".env")
 
 # Upload directories
 UPLOAD_DIR = ROOT_DIR / "uploads" / "ads"

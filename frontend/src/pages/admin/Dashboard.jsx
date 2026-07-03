@@ -1187,266 +1187,53 @@ const RevenueSettingsPage = () => {
   );
 };
 
-// Quick Setup Tab Component - Easy copy-paste commands
+// Quick Setup Tab Component - Platform readiness guide
 const QuickSetupTab = ({ radiusConfig }) => {
-  const [copied, setCopied] = useState({});
-  const [config, setConfig] = useState({
-    radius_server_ip: radiusConfig?.host || "",
-    radius_secret: "",
-    mikrotik_ip: "",
-    hotspot_ssid: "CAIWAVE_WiFi",
-    hotspot_gateway: "192.168.88.1",
-  });
-
-  const copyToClipboard = (text, key) => {
-    navigator.clipboard.writeText(text);
-    setCopied({ ...copied, [key]: true });
-    toast.success("Copied to clipboard!");
-    setTimeout(() => setCopied({ ...copied, [key]: false }), 2000);
-  };
-
-  const generateSecret = () => {
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < 32; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  };
-
-  // Simple MikroTik Script
-  const getMikroTikScript = () => `# CAIWAVE MikroTik Quick Setup
-# Paste this in MikroTik Terminal (WinBox > New Terminal)
-
-# 1. Configure RADIUS
-/radius remove [find comment~"CAIWAVE"]
-/radius add address=${config.radius_server_ip || "YOUR_RADIUS_IP"} secret="${config.radius_secret || "YOUR_SECRET"}" service=hotspot timeout=3s comment="CAIWAVE RADIUS"
-
-# 2. Configure Hotspot Profile
-/ip hotspot profile set default use-radius=yes radius-accounting=yes
-
-# 3. Create Walled Garden (allow portal access)
-/ip hotspot walled-garden ip remove [find comment~"CAIWAVE"]
-/ip hotspot walled-garden ip add dst-host=www.caiwave.com action=accept comment="CAIWAVE Portal"
-/ip hotspot walled-garden ip add dst-host=*.caiwave.com action=accept comment="CAIWAVE"
-/ip hotspot walled-garden ip add dst-host=*.paystack.com action=accept comment="CAIWAVE Paystack"
-/ip hotspot walled-garden ip add dst-host=*.safaricom.co.ke action=accept comment="CAIWAVE M-Pesa"
-
-# 4. Set Login Redirect
-/ip hotspot profile set default login-by=http-chap,http-pap html-directory=hotspot
-
-:put "CAIWAVE Setup Complete! Test with: /radius monitor 0"`;
-
-  // FreeRADIUS Config
-  const getFreeRadiusConfig = () => `# CAIWAVE FreeRADIUS REST Config
-# File: /etc/freeradius/3.0/mods-available/rest
-
-rest {
-    connect_uri = "https://www.caiwave.com/api"
-    connect_timeout = 4.0
-    http_timeout = 4.0
-    
-    tls {
-        verify_cert = no
-        verify_cert_cn = no
-    }
-    
-    authorize {
-        uri = "\${..connect_uri}/radius/authorize"
-        method = 'post'
-        body = 'json'
-        data = '{"username": "%{User-Name}", "password": "%{User-Password}", "nas_ip": "%{NAS-IP-Address}"}'
-        tls = \${..tls}
-    }
-    
-    accounting {
-        uri = "\${..connect_uri}/radius/accounting"
-        method = 'post'
-        body = 'json'
-        data = '{"username": "%{User-Name}", "session_id": "%{Acct-Session-Id}", "status_type": "%{Acct-Status-Type}", "nas_ip": "%{NAS-IP-Address}", "session_time": "%{Acct-Session-Time}"}'
-        tls = \${..tls}
-    }
-}`;
-
-  // FreeRADIUS Client Config
-  const getFreeRadiusClientConfig = () => `# Add to /etc/freeradius/3.0/clients.conf
-
-client mikrotik_caiwave {
-    ipaddr = ${config.mikrotik_ip || "YOUR_MIKROTIK_IP"}
-    secret = ${config.radius_secret || "YOUR_SECRET"}
-    nastype = mikrotik
-    shortname = caiwave
-}`;
-
-  // FreeRADIUS Install Commands
-  const getFreeRadiusInstallCmds = () => `# Ubuntu/Debian FreeRADIUS Quick Install
-sudo apt update && sudo apt install -y freeradius freeradius-rest
-
-# Enable REST module
-cd /etc/freeradius/3.0/mods-enabled && sudo ln -sf ../mods-available/rest rest
-
-# After adding configs, restart:
-sudo systemctl restart freeradius
-
-# Test in debug mode:
-sudo freeradius -X`;
-
   return (
-      <div className="space-y-6">
-        <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 text-sm">
-          Admin Quick Setup applies global RADIUS/MikroTik baseline settings only. Hotspot-specific router binding is performed by hotspot owners from Owner Dashboard → MikroTik Setup.
-        </div>
-
-    {/* Configuration Inputs */}
-      <div className="dashboard-card">
-        <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-          <Settings className="w-5 h-5 text-blue-400" />
-          Setup Configuration
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">FreeRADIUS Server IP</label>
-            <Input
-              value={config.radius_server_ip}
-              onChange={(e) => setConfig({...config, radius_server_ip: e.target.value})}
-              placeholder="e.g., 10.5.50.254"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">MikroTik Router IP</label>
-            <Input
-              value={config.mikrotik_ip}
-              onChange={(e) => setConfig({...config, mikrotik_ip: e.target.value})}
-              placeholder="e.g., 192.168.88.1"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">RADIUS Secret</label>
-            <div className="flex gap-2">
-              <Input
-                value={config.radius_secret}
-                onChange={(e) => setConfig({...config, radius_secret: e.target.value})}
-                placeholder="Click Generate"
-                className="font-mono text-sm"
-              />
-              <Button variant="outline" size="sm" onClick={() => setConfig({...config, radius_secret: generateSecret()})}>
-                Generate
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Step 1: FreeRADIUS */}
-      <div className="dashboard-card border-purple-500/30">
-        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-          <span className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center text-sm">1</span>
-          FreeRADIUS Server Setup
-        </h3>
-        <p className="text-neutral-400 text-sm mb-4">Run on your Ubuntu/Debian FreeRADIUS server</p>
-        
-        {/* Install Commands */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Install Commands</span>
-            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(getFreeRadiusInstallCmds(), 'install')}>
-              {copied['install'] ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-            </Button>
-          </div>
-          <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto">
-            {getFreeRadiusInstallCmds()}
-          </pre>
-        </div>
-
-        {/* REST Config */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">REST Module Config</span>
-            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(getFreeRadiusConfig(), 'rest')}>
-              {copied['rest'] ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-            </Button>
-          </div>
-          <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-48">
-            {getFreeRadiusConfig()}
-          </pre>
-        </div>
-
-        {/* Client Config */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Client Config (Add MikroTik)</span>
-            <Button size="sm" variant="ghost" onClick={() => copyToClipboard(getFreeRadiusClientConfig(), 'client')}>
-              {copied['client'] ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-            </Button>
-          </div>
-          <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto">
-            {getFreeRadiusClientConfig()}
-          </pre>
-        </div>
-      </div>
-
-      {/* Step 2: MikroTik */}
-      <div className="dashboard-card border-green-500/30">
-        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-          <span className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-sm">2</span>
-          MikroTik Router Setup
-        </h3>
-        <p className="text-neutral-400 text-sm mb-4">Copy and paste into MikroTik Terminal (WinBox → New Terminal)</p>
-        <p className="text-xs text-neutral-400 mb-3">Note: This script configures global RADIUS baseline only; it does not assign a router to a specific hotspot ID.</p>
-        
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium">MikroTik Script</span>
-          <Button size="sm" variant="outline" className="text-green-400 border-green-400/30" onClick={() => copyToClipboard(getMikroTikScript(), 'mikrotik')}>
-            {copied['mikrotik'] ? <CheckCircle className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
-            Copy Script
-          </Button>
-        </div>
-        <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-green-400 font-mono overflow-x-auto max-h-64">
-          {getMikroTikScript()}
-        </pre>
-      </div>
-
-      {/* Step 3: Verify */}
+    <div className="space-y-6">
       <div className="dashboard-card border-blue-500/30">
-        <h3 className="font-semibold text-lg mb-2 flex items-center gap-2">
-          <span className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-sm">3</span>
-          Verify Setup
+        <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-blue-400" />
+          CAIWAVE Platform Readiness
         </h3>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <h4 className="font-medium text-sm mb-2">On MikroTik:</h4>
-            <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-yellow-400 font-mono">
-{`/radius monitor 0
-/ip hotspot print
-/log print where topics~"radius"`}
-            </pre>
-          </div>
-          <div>
-            <h4 className="font-medium text-sm mb-2">On FreeRADIUS:</h4>
-            <pre className="bg-neutral-950 p-3 rounded-lg text-xs text-yellow-400 font-mono">
-{`sudo freeradius -X
-# Watch for incoming requests`}
-            </pre>
-          </div>
+        <p className="text-neutral-400 text-sm">
+          Legacy copy-paste MikroTik scripts have been retired. Router provisioning now uses hotspot-bound .rsc files generated from the Owner or Admin Dashboard.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className="dashboard-card">
+          <h4 className="font-semibold mb-2">1. Backend</h4>
+          <p className="text-sm text-neutral-400">
+            Confirm CAIWAVE API, MongoDB, HTTPS, and backend services are healthy.
+          </p>
+        </div>
+
+        <div className="dashboard-card">
+          <h4 className="font-semibold mb-2">2. RADIUS</h4>
+          <p className="text-sm text-neutral-400">
+            Confirm RADIUS is reachable and connected to CAIWAVE radius endpoints.
+          </p>
+          <p className="text-xs text-neutral-500 mt-2 font-mono">
+            Host: {radiusConfig?.host || "Not configured"}
+          </p>
+        </div>
+
+        <div className="dashboard-card">
+          <h4 className="font-semibold mb-2">3. MikroTik</h4>
+          <p className="text-sm text-neutral-400">
+            Provision routers from Hotspots using Download .rsc File. Do not use generic scripts.
+          </p>
         </div>
       </div>
 
-      {/* Quick Reference */}
-      <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
-        <h4 className="font-medium mb-2">Quick Reference</h4>
-        <div className="grid md:grid-cols-3 gap-4 text-sm">
-          <div>
-            <span className="text-neutral-500">CAIWAVE API:</span>
-            <p className="font-mono text-xs">https://www.caiwave.com/api</p>
-          </div>
-          <div>
-            <span className="text-neutral-500">RADIUS Auth Port:</span>
-            <p className="font-mono">1812 (UDP)</p>
-          </div>
-          <div>
-            <span className="text-neutral-500">RADIUS Acct Port:</span>
-            <p className="font-mono">1813 (UDP)</p>
-          </div>
+      <div className="dashboard-card border-green-500/30">
+        <h3 className="font-semibold text-lg mb-3">Correct production flow</h3>
+        <div className="grid md:grid-cols-4 gap-3 text-sm">
+          <div className="p-3 rounded-lg bg-neutral-800/50">Create hotspot</div>
+          <div className="p-3 rounded-lg bg-neutral-800/50">Generate MikroTik .rsc</div>
+          <div className="p-3 rounded-lg bg-neutral-800/50">Upload/import to router</div>
+          <div className="p-3 rounded-lg bg-neutral-800/50">Confirm connection</div>
         </div>
       </div>
     </div>
@@ -1976,9 +1763,18 @@ const AllHotspotsPage = () => {
       const response = await axios.post(
         `${API_URL}/mikrotik-onboard/register`,
         {
+          bootstrap_token: "admin-dashboard",
           name: `${hotspot.name} MikroTik`,
           hotspot_id: hotspot.id,
           notes: `Admin lifetime hotspot MikroTik setup for ${hotspot.name}`,
+          wan_interface: "ether1",
+          lan_interfaces: ["ether2", "ether3", "ether4", "ether5"],
+          create_bridge: true,
+          bridge_name: "bridge-hotspot",
+          mode: "fresh",
+          hotspot_cidr: "10.10.0.1/24",
+          dhcp_pool: "10.10.0.10-10.10.0.254",
+          dns_name: "login.caiwave.local",
         },
         {
           headers: { Authorization: `Bearer ${getAuthToken()}` },
@@ -1986,7 +1782,7 @@ const AllHotspotsPage = () => {
       );
 
       setGeneratedMikroTik(response.data);
-      toast.success("MikroTik configuration generated!");
+      toast.success("MikroTik .rsc provisioning file generated!");
     } catch (error) {
       toast.error(safeError(error));
     }
@@ -2117,21 +1913,43 @@ const AllHotspotsPage = () => {
           </div>
 
           <div className="bg-neutral-950 rounded-lg p-4">
-            <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap overflow-x-auto">
-              {generatedMikroTik.script}
-            </pre>
+            <p className="text-sm text-neutral-400 mb-2">
+              Download this .rsc file, upload it to MikroTik, then import it from RouterOS terminal.
+            </p>
+            <code className="text-xs text-blue-400">
+              {generatedMikroTik.single_rsc_provisioning?.filename || "caiwave-provisioning.rsc"}
+            </code>
           </div>
 
           <div className="mt-4 flex gap-3">
             <Button
               size="sm"
-              variant="outline"
+              className="bg-green-600 hover:bg-green-700"
               onClick={() => {
-                navigator.clipboard.writeText(generatedMikroTik.script);
-                toast.success("MikroTik script copied to clipboard!");
+                const file = generatedMikroTik.single_rsc_provisioning;
+                const blob = new Blob([file.content], { type: file.content_type || "text/plain" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = file.filename || "caiwave-provisioning.rsc";
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
               }}
             >
-              Copy Script
+              Download .rsc File
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard.writeText(generatedMikroTik.single_rsc_provisioning?.content || "");
+                toast.success(".rsc content copied to clipboard!");
+              }}
+            >
+              Copy .rsc Content
             </Button>
           </div>
         </div>
