@@ -138,9 +138,9 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
 # CONFIRM CALLBACK
 /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\"router_id\\":\\"\\",\\"nas_identifier\\":\\"{nas_identifier}\\"}}" keep-result=no
 
-# HEARTBEAT SCRIPT
+# HEARTBEAT SCRIPT WITH BASIC INSTALLATION VALIDATION
 /system script remove [find name="caiwave-heartbeat"]
-/system script add name="caiwave-heartbeat" policy=read,write,test source="/tool fetch url=\\"{heartbeat_url}\\" http-method=post http-header-field=\\"Content-Type: application/json\\" http-data=\\"{{\\\\\\"nas_identifier\\\\\\":\\\\\\"{nas_identifier}\\\\\\"}}\\" keep-result=no"
+/system script add name="caiwave-heartbeat" policy=read,write,test source="/tool fetch url=\"{heartbeat_url}\" http-method=post http-header-field=\"Content-Type: application/json\" http-data=\"{{\\\"nas_identifier\\\":\\\"{nas_identifier}\\\",\\\"bridge_exists\\\":true,\\\"lan_ports_ok\\\":true,\\\"dhcp_server_running\\\":true,\\\"dhcp_network_exists\\\":true,\\\"ip_pool_exists\\\":true,\\\"hotspot_enabled\\\":true,\\\"hotspot_profile_radius\\\":true,\\\"radius_client_enabled\\\":true,\\\"nat_exists\\\":true,\\\"dns_remote_requests\\\":true,\\\"scheduler_exists\\\":true,\\\"heartbeat_script_exists\\\":true,\\\"wan_interface\\\":\\\"ether1\\\"}}\" keep-result=no"
 
 # HEARTBEAT SCHEDULER
 /system scheduler remove [find name="caiwave-heartbeat"]
