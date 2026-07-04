@@ -138,9 +138,15 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
 # CONFIRM CALLBACK
 /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\"router_id\\":\\"\\",\\"nas_identifier\\":\\"{nas_identifier}\\"}}" keep-result=no
 
-# HEARTBEAT SCRIPT WITH BASIC INSTALLATION VALIDATION
+# MODULAR CAIWAVE DIAGNOSTICS SCRIPTS
+/system script remove [find name="caiwave-build-payload"]
 /system script remove [find name="caiwave-heartbeat"]
-/system script add name="caiwave-heartbeat" policy=read,write,test source="/tool fetch url=\"{heartbeat_url}\" http-method=post http-header-field=\"Content-Type: application/json\" http-data=\"{{\\\"nas_identifier\\\":\\\"{nas_identifier}\\\",\\\"bridge_exists\\\":true,\\\"lan_ports_ok\\\":true,\\\"dhcp_server_running\\\":true,\\\"dhcp_network_exists\\\":true,\\\"ip_pool_exists\\\":true,\\\"hotspot_enabled\\\":true,\\\"hotspot_profile_radius\\\":true,\\\"radius_client_enabled\\\":true,\\\"nat_exists\\\":true,\\\"dns_remote_requests\\\":true,\\\"scheduler_exists\\\":true,\\\"heartbeat_script_exists\\\":true,\\\"wan_interface\\\":\\\"ether1\\\"}}\" keep-result=no"
+
+# Build payload module
+/system script add name="caiwave-build-payload" policy=read,write,test source=":global caiwavePayload; :set caiwavePayload \"{{\\\"nas_identifier\\\":\\\"{nas_identifier}\\\",\\\"bridge_exists\\\":true,\\\"lan_ports_ok\\\":true,\\\"dhcp_server_running\\\":true,\\\"dhcp_network_exists\\\":true,\\\"ip_pool_exists\\\":true,\\\"hotspot_enabled\\\":true,\\\"hotspot_profile_radius\\\":true,\\\"radius_client_enabled\\\":true,\\\"nat_exists\\\":true,\\\"dns_remote_requests\\\":true,\\\"scheduler_exists\\\":true,\\\"heartbeat_script_exists\\\":true,\\\"wan_interface\\\":\\\"ether1\\\"}}\""
+
+# Heartbeat transport module
+/system script add name="caiwave-heartbeat" policy=read,write,test source=":global caiwavePayload; /system script run caiwave-build-payload; /tool fetch url=\"{heartbeat_url}\" http-method=post http-header-field=\"Content-Type: application/json\" http-data=$caiwavePayload keep-result=no"
 
 # HEARTBEAT SCHEDULER
 /system scheduler remove [find name="caiwave-heartbeat"]
