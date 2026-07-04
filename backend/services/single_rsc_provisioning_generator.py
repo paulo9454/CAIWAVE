@@ -153,7 +153,7 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
 
 # CONFIRM CALLBACK - BEST EFFORT ONLY
 :do {{
-    /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\"router_id\":\"\",\"nas_identifier\":\"{nas_identifier}\"}}" keep-result=no
+    /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\\"router_id\\\":\\\"\\\",\\\"nas_identifier\\\":\\\"{nas_identifier}\\\"}}" keep-result=no
 }} on-error={{
     :log warning "CAIWAVE: confirm callback failed, heartbeat will continue"
 }}
