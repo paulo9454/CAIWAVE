@@ -18,6 +18,7 @@ class SingleRscProvisioningInput:
     nas_identifier: str
     radius_secret: str
     radius_host: str
+    hotspot_id: str = ""
     callback_url: str = ""
     generated_at: Optional[datetime] = None
 
@@ -47,8 +48,23 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
     radius_secret = config.radius_secret
     router_name = config.router_name
     nas_identifier = config.nas_identifier
+    hotspot_id = config.hotspot_id
     callback_url = config.callback_url or "https://caiwave.com/api/mikrotik-onboard/confirm"
     heartbeat_url = callback_url.replace("/confirm", "/heartbeat")
+    portal_url = f"https://caiwave.com/portal/{hotspot_id}"
+    login_html = (
+        '<html><head><meta http-equiv="refresh" content="0; url='
+        + portal_url
+        + '?mac=$(mac)&ip=$(ip)&dst=$(link-orig)">'
+        + '<title>CAIWAVE WiFi</title></head>'
+        + '<body style="font-family:Arial;text-align:center;padding:40px;">'
+        + '<h2>Redirecting to CAIWAVE...</h2>'
+        + '<p><a href="'
+        + portal_url
+        + '?mac=$(mac)&ip=$(ip)&dst=$(link-orig)">Continue to WiFi Portal</a></p>'
+        + '</body></html>'
+    )
+    login_html = login_html.replace("\\", "\\\\").replace('"', '\\"')
 
     return f"""# =========================================================
 # CAIWAVE MikroTik Auto-Configuration Script
@@ -159,6 +175,7 @@ def generate_single_rsc_provisioning_script(
     nas_identifier: str,
     radius_secret: str,
     radius_host: str,
+    hotspot_id: str = "",
     callback_url: str = "",
     generated_at: Optional[datetime] = None,
 ) -> str:
@@ -168,6 +185,7 @@ def generate_single_rsc_provisioning_script(
             nas_identifier=nas_identifier,
             radius_secret=radius_secret,
             radius_host=radius_host,
+            hotspot_id=hotspot_id,
             callback_url=callback_url,
             generated_at=generated_at,
         )
@@ -188,6 +206,7 @@ def generate_single_rsc_provisioning_file(
     nas_identifier: str,
     radius_secret: str,
     radius_host: str,
+    hotspot_id: str = "",
     callback_url: str = "",
     generated_at: Optional[datetime] = None,
 ) -> SingleRscProvisioningOutput:
@@ -197,6 +216,7 @@ def generate_single_rsc_provisioning_file(
             nas_identifier=nas_identifier,
             radius_secret=radius_secret,
             radius_host=radius_host,
+            hotspot_id=hotspot_id,
             callback_url=callback_url,
             generated_at=generated_at,
         )

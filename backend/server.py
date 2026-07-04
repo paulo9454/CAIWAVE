@@ -4894,6 +4894,7 @@ async def register_mikrotik(
         nas_identifier=nas_id,
         radius_secret=radius_secret,
         radius_host=radius_host,
+        hotspot_id=request.hotspot_id,
         callback_url=callback_url
     )
 
