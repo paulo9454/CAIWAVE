@@ -4138,9 +4138,9 @@ class RADIUSAccountingRequest(BaseModel):
     session_id: str = ""
     status_type: str = ""  # Start, Stop, Interim-Update
     nas_ip: str = ""
-    session_time: int = 0
-    input_octets: int = 0
-    output_octets: int = 0
+    session_time: int | str = 0
+    input_octets: int | str = 0
+    output_octets: int | str = 0
 
 @radius_router.post("/authorize")
 async def radius_authorize(request: RADIUSAuthorizeRequest):
@@ -4279,8 +4279,18 @@ async def radius_accounting(request: RADIUSAccountingRequest):
     if not session:
         return {"status": "error", "message": "Session not found"}
 
+    def to_int(value):
+        try:
+            return int(value or 0)
+        except Exception:
+            return 0
+
+    session_time = to_int(request.session_time)
+    input_octets = to_int(request.input_octets)
+    output_octets = to_int(request.output_octets)
+
     now = datetime.now(timezone.utc).isoformat()
-    total_bytes = request.input_octets + request.output_octets
+    total_bytes = input_octets + output_octets
     total_mb = round(total_bytes / (1024 * 1024), 2)
 
     if request.status_type.lower() in ["start", "1"]:
@@ -4304,9 +4314,9 @@ async def radius_accounting(request: RADIUSAccountingRequest):
             {"username": request.username},
             {"$set": {
                 "disconnected_at": now,
-                "total_session_time": request.session_time,
-                "total_upload_bytes": request.input_octets,
-                "total_download_bytes": request.output_octets,
+                "total_session_time": session_time,
+                "total_upload_bytes": input_octets,
+                "total_download_bytes": output_octets,
                 "data_used_mb": total_mb,
                 "status": "completed"
             }}
@@ -4325,9 +4335,9 @@ async def radius_accounting(request: RADIUSAccountingRequest):
         await db.sessions.update_one(
             {"username": request.username},
             {"$set": {
-                "current_session_time": request.session_time,
-                "current_upload_bytes": request.input_octets,
-                "current_download_bytes": request.output_octets,
+                "current_session_time": session_time,
+                "current_upload_bytes": input_octets,
+                "current_download_bytes": output_octets,
                 "data_used_mb": total_mb,
                 "last_accounting_update": now
             }}
