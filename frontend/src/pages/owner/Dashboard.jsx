@@ -1037,6 +1037,14 @@ const MikroTikSetupPage = () => {
                         {renderDiagnosticItem("Connection confirmed", diagnostics[router.id].checks?.connection_confirmed)}
                         {renderDiagnosticItem("RADIUS configured", diagnostics[router.id].checks?.radius_configured)}
                         {renderDiagnosticItem("Paystack configured", diagnostics[router.id].checks?.paystack_configured)}
+                        {renderDiagnosticItem("Bridge configured", diagnostics[router.id].checks?.bridge_configured)}
+                        {renderDiagnosticItem("LAN ports configured", diagnostics[router.id].checks?.lan_ports_configured)}
+                        {renderDiagnosticItem("DHCP configured", diagnostics[router.id].checks?.dhcp_configured)}
+                        {renderDiagnosticItem("NAT configured", diagnostics[router.id].checks?.nat_configured)}
+                        {renderDiagnosticItem("Hotspot configured", diagnostics[router.id].checks?.hotspot_configured)}
+                        {renderDiagnosticItem("RADIUS client configured", diagnostics[router.id].checks?.radius_client_configured)}
+                        {renderDiagnosticItem("Heartbeat scheduler configured", diagnostics[router.id].checks?.heartbeat_scheduler_configured)}
+                        {renderDiagnosticItem("Walled garden configured", diagnostics[router.id].checks?.walled_garden_configured)}
                         {renderDiagnosticItem("First login seen", diagnostics[router.id].checks?.first_auth_seen)}
                         {renderDiagnosticItem("First login accepted", diagnostics[router.id].checks?.first_auth_success)}
                         {renderDiagnosticItem("Accounting seen", diagnostics[router.id].checks?.accounting_seen)}

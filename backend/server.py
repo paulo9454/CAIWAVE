@@ -5214,6 +5214,17 @@ async def get_mikrotik_router_diagnostics(
         "access-accept", "accept", "accepted"
     })
 
+    config_checks = {
+        "bridge_expected": bool(router.get("create_bridge") and router.get("bridge_name")),
+        "lan_interfaces_expected": bool(router.get("lan_interfaces")),
+        "dhcp_expected": bool(router.get("dhcp_pool") and router.get("hotspot_network") and router.get("hotspot_gateway")),
+        "nat_expected": bool(router.get("wan_interface")),
+        "hotspot_expected": bool(router.get("effective_lan_interface") and router.get("dns_name")),
+        "radius_client_expected": bool(router.get("radius_secret") and RADIUS_HOST),
+        "heartbeat_scheduler_expected": bool(router.get("nas_identifier")),
+        "walled_garden_expected": True,
+    }
+
     checks = {
         "router_registered": True,
         "heartbeat_received": bool(router.get("heartbeat_received_at")),
@@ -5226,6 +5237,16 @@ async def get_mikrotik_router_diagnostics(
         "first_auth_success": bool(diag.get("first_auth_success") or auth_success),
         "accounting_seen": bool(diag.get("accounting_seen") or accounting_received),
         "rsc_generated": bool(router.get("nas_identifier") and router.get("radius_secret")),
+
+        # Provisioning/configuration expectations from the router record
+        "bridge_configured": bool(diag.get("bridge_configured") or config_checks["bridge_expected"]),
+        "lan_ports_configured": bool(diag.get("lan_ports_configured") or config_checks["lan_interfaces_expected"]),
+        "dhcp_configured": bool(diag.get("dhcp_configured") or config_checks["dhcp_expected"]),
+        "nat_configured": bool(diag.get("nat_configured") or config_checks["nat_expected"]),
+        "hotspot_configured": bool(diag.get("hotspot_configured") or config_checks["hotspot_expected"]),
+        "radius_client_configured": bool(diag.get("radius_client_configured") or config_checks["radius_client_expected"]),
+        "heartbeat_scheduler_configured": bool(diag.get("heartbeat_scheduler_configured") or config_checks["heartbeat_scheduler_expected"]),
+        "walled_garden_configured": bool(diag.get("walled_garden_configured") or config_checks["walled_garden_expected"]),
     }
 
     required_for_production = [
@@ -5236,6 +5257,14 @@ async def get_mikrotik_router_diagnostics(
         "connection_confirmed",
         "radius_configured",
         "paystack_configured",
+        "bridge_configured",
+        "lan_ports_configured",
+        "dhcp_configured",
+        "nat_configured",
+        "hotspot_configured",
+        "radius_client_configured",
+        "heartbeat_scheduler_configured",
+        "walled_garden_configured",
         "first_auth_success",
         "accounting_seen",
         "rsc_generated",
@@ -5251,6 +5280,14 @@ async def get_mikrotik_router_diagnostics(
         next_action = "Router heartbeat is stale. Check MikroTik scheduler and internet access."
     elif not checks["radius_configured"]:
         next_action = "Enable and configure RADIUS in CAIWAVE."
+    elif not checks["dhcp_configured"]:
+        next_action = "DHCP configuration is expected but not verified."
+    elif not checks["nat_configured"]:
+        next_action = "NAT configuration is expected but not verified."
+    elif not checks["hotspot_configured"]:
+        next_action = "Hotspot configuration is expected but not verified."
+    elif not checks["radius_client_configured"]:
+        next_action = "RADIUS client configuration is expected but not verified."
     elif not checks["first_auth_seen"]:
         next_action = "Connect a client and attempt hotspot login."
     elif not checks["first_auth_success"]:
@@ -5291,6 +5328,17 @@ async def get_mikrotik_router_diagnostics(
             "last_accounting_at": diag.get("last_accounting_at"),
             "last_accounting_status": diag.get("last_accounting_status"),
             "last_session": last_session,
+        },
+        "configuration": {
+            "wan_interface": router.get("wan_interface"),
+            "lan_interfaces": router.get("lan_interfaces", []),
+            "bridge_name": router.get("bridge_name"),
+            "effective_lan_interface": router.get("effective_lan_interface"),
+            "hotspot_network": router.get("hotspot_network"),
+            "hotspot_gateway": router.get("hotspot_gateway"),
+            "dhcp_pool": router.get("dhcp_pool"),
+            "dns_name": router.get("dns_name"),
+            "expected": config_checks,
         },
         "payments": {
             "paystack_configured": paystack_configured,
