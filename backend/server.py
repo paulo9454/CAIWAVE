@@ -4293,6 +4293,14 @@ async def radius_accounting(request: RADIUSAccountingRequest):
     total_bytes = input_octets + output_octets
     total_mb = round(total_bytes / (1024 * 1024), 2)
 
+    router = None
+    if session.get("hotspot_id"):
+        router = await db.mikrotik_routers.find_one(
+            {"hotspot_id": session.get("hotspot_id")},
+            {"_id": 0},
+            sort=[("last_seen", -1)]
+        )
+
     if request.status_type.lower() in ["start", "1"]:
         await db.sessions.update_one(
             {"username": request.username},
@@ -4343,6 +4351,29 @@ async def radius_accounting(request: RADIUSAccountingRequest):
             }}
         )
 
+    if router:
+        status_lower = request.status_type.lower()
+        diag_updates = {
+            "last_accounting_at": now,
+            "last_accounting_status": request.status_type,
+            "last_accounting_username": request.username,
+            "last_accounting_session_id": request.session_id,
+            "last_accounting_nas_ip": request.nas_ip,
+            "last_accounting_session_time": session_time,
+            "last_accounting_input_octets": input_octets,
+            "last_accounting_output_octets": output_octets,
+            "accounting_seen": True
+        }
+
+        if status_lower in ["start", "1"]:
+            diag_updates["last_accounting_start_at"] = now
+        elif status_lower in ["stop", "2"]:
+            diag_updates["last_accounting_stop_at"] = now
+        elif status_lower in ["interim-update", "3"]:
+            diag_updates["last_accounting_interim_at"] = now
+
+        await update_router_diagnostics(router["id"], diag_updates)
+
     return {"status": "ok", "message": f"Accounting {request.status_type} processed"}
 
 @radius_router.post("/post-auth")
@@ -4357,6 +4388,43 @@ async def radius_post_auth(request: dict):
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
     await db.radius_auth_logs.insert_one(log_entry)
+
+    router = None
+    nas_ip = request.get("nas_ip", "")
+    if nas_ip:
+        router = await db.mikrotik_routers.find_one(
+            {
+                "$or": [
+                    {"last_seen_ip": nas_ip},
+                    {"hotspot_gateway": nas_ip},
+                    {"nas_identifier": nas_ip}
+                ]
+            },
+            {"_id": 0}
+        )
+
+    if not router:
+        router = await db.mikrotik_routers.find_one({}, {"_id": 0}, sort=[("last_seen", -1)])
+
+    if router:
+        result = str(request.get("result", "unknown"))
+        result_lower = result.lower()
+        updates = {
+            "last_auth_at": log_entry["timestamp"],
+            "last_auth_username": log_entry["username"],
+            "last_auth_result": result,
+            "first_auth_seen": True,
+            "last_radius_nas_ip": nas_ip
+        }
+
+        if result_lower in {"access-accept", "accept", "accepted"}:
+            updates["last_radius_accept_at"] = log_entry["timestamp"]
+            updates["first_auth_success"] = True
+        elif result_lower:
+            updates["last_radius_reject_at"] = log_entry["timestamp"]
+
+        await update_router_diagnostics(router["id"], updates)
+
     return {"status": "ok"}
 
 @radius_router.get("/auth-logs")
@@ -4944,6 +5012,26 @@ async def delete_mikrotik_router(
     return {"success": True, "message": "Router deleted successfully"}
 
 
+
+async def update_router_diagnostics(router_id: str, updates: dict):
+    """Upsert persistent diagnostics state for a MikroTik router."""
+    now = datetime.now(timezone.utc).isoformat()
+    updates = dict(updates or {})
+    updates["updated_at"] = now
+
+    await db.router_diagnostics.update_one(
+        {"router_id": router_id},
+        {
+            "$set": updates,
+            "$setOnInsert": {
+                "router_id": router_id,
+                "created_at": now
+            }
+        },
+        upsert=True
+    )
+
+
 class MikroTikHeartbeatRequest(BaseModel):
     nas_identifier: str
 
@@ -4979,6 +5067,16 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
             }
         }
     )
+
+    await update_router_diagnostics(router["id"], {
+        "nas_identifier": payload.nas_identifier,
+        "hotspot_id": router.get("hotspot_id"),
+        "owner_id": router.get("owner_id"),
+        "last_heartbeat_at": now,
+        "heartbeat_ok": True,
+        "router_online": True,
+        "connection_confirmed": True
+    })
 
     return {
         "success": True,
@@ -5032,6 +5130,178 @@ async def evaluate_router_health():
         "offline_marked": offline_count,
         "checked_at": now.isoformat()
     }
+
+
+
+@mikrotik_onboard_router.get("/routers/{router_id}/diagnostics")
+async def get_mikrotik_router_diagnostics(
+    router_id: str,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
+):
+    """Return onboarding diagnostics for a MikroTik router."""
+
+    router = await db.mikrotik_routers.find_one({"id": router_id}, {"_id": 0})
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not found")
+
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and router.get("owner_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    now = datetime.now(timezone.utc)
+
+    def parse_dt(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    last_seen_dt = parse_dt(router.get("last_seen") or router.get("heartbeat_received_at"))
+    heartbeat_recent = False
+    heartbeat_age_seconds = None
+
+    if last_seen_dt:
+        heartbeat_age_seconds = int((now - last_seen_dt).total_seconds())
+        heartbeat_recent = heartbeat_age_seconds <= 900
+
+    radius_enabled = os.environ.get("RADIUS_ENABLED", "false").lower() == "true"
+    radius_configured = bool(radius_enabled and RADIUS_HOST and RADIUS_SECRET)
+
+    paystack_configured = paystack_service.is_configured()
+
+    diag = await db.router_diagnostics.find_one(
+        {"router_id": router_id},
+        {"_id": 0}
+    ) or {}
+
+    last_auth = await db.radius_auth_logs.find_one(
+        {"nas_ip": {"$in": [router.get("last_seen_ip", ""), router.get("nas_identifier", ""), router.get("hotspot_gateway", "")]}},
+        {"_id": 0},
+        sort=[("timestamp", -1)]
+    )
+
+    # Fallback: most recent auth log if router-specific match is unavailable
+    if not last_auth:
+        last_auth = await db.radius_auth_logs.find_one(
+            {},
+            {"_id": 0},
+            sort=[("timestamp", -1)]
+        )
+
+    last_session = await db.sessions.find_one(
+        {
+            "$or": [
+                {"hotspot_id": router.get("hotspot_id")},
+                {"nas_ip": router.get("hotspot_gateway")},
+                {"nas_ip": router.get("last_seen_ip")}
+            ]
+        },
+        {"_id": 0},
+        sort=[("started_at", -1)]
+    )
+
+    accounting_received = bool(
+        last_session and (
+            last_session.get("connected_at")
+            or last_session.get("last_accounting_update")
+            or last_session.get("disconnected_at")
+            or last_session.get("radius_session_id")
+        )
+    )
+
+    auth_success = bool(last_auth and str(last_auth.get("result", "")).lower() in {
+        "access-accept", "accept", "accepted"
+    })
+
+    checks = {
+        "router_registered": True,
+        "heartbeat_received": bool(router.get("heartbeat_received_at")),
+        "heartbeat_recent": heartbeat_recent,
+        "router_online": router.get("status") == "online",
+        "connection_confirmed": bool(router.get("connection_confirmed")),
+        "radius_configured": radius_configured,
+        "paystack_configured": paystack_configured,
+        "first_auth_seen": bool(diag.get("first_auth_seen") or last_auth),
+        "first_auth_success": bool(diag.get("first_auth_success") or auth_success),
+        "accounting_seen": bool(diag.get("accounting_seen") or accounting_received),
+        "rsc_generated": bool(router.get("nas_identifier") and router.get("radius_secret")),
+    }
+
+    required_for_production = [
+        "router_registered",
+        "heartbeat_received",
+        "heartbeat_recent",
+        "router_online",
+        "connection_confirmed",
+        "radius_configured",
+        "paystack_configured",
+        "first_auth_success",
+        "accounting_seen",
+        "rsc_generated",
+    ]
+
+    passed = sum(1 for key in required_for_production if checks.get(key))
+    total = len(required_for_production)
+    score = int((passed / total) * 100)
+
+    if not checks["heartbeat_received"]:
+        next_action = "Import the .rsc file and wait for the first heartbeat."
+    elif not checks["heartbeat_recent"]:
+        next_action = "Router heartbeat is stale. Check MikroTik scheduler and internet access."
+    elif not checks["radius_configured"]:
+        next_action = "Enable and configure RADIUS in CAIWAVE."
+    elif not checks["first_auth_seen"]:
+        next_action = "Connect a client and attempt hotspot login."
+    elif not checks["first_auth_success"]:
+        next_action = "A login attempt was seen but no successful Access-Accept yet."
+    elif not checks["accounting_seen"]:
+        next_action = "Login succeeded; waiting for Accounting Start/Interim/Stop."
+    elif not checks["paystack_configured"]:
+        next_action = "Configure Paystack keys."
+    else:
+        next_action = "Router is production-ready."
+
+    return {
+        "success": True,
+        "router_id": router_id,
+        "nas_identifier": router.get("nas_identifier"),
+        "router": {
+            "name": router.get("name"),
+            "status": router.get("status"),
+            "health_status": router.get("health_status"),
+            "connection_confirmed": router.get("connection_confirmed"),
+            "last_seen": router.get("last_seen"),
+            "heartbeat_received_at": router.get("heartbeat_received_at"),
+            "heartbeat_age_seconds": heartbeat_age_seconds,
+            "hotspot_id": router.get("hotspot_id"),
+        },
+        "checks": checks,
+        "diagnostics": diag,
+        "radius": {
+            "enabled": radius_enabled,
+            "configured": radius_configured,
+            "host": RADIUS_HOST if radius_enabled else None,
+            "last_auth": last_auth,
+            "last_auth_at": diag.get("last_auth_at"),
+            "last_auth_result": diag.get("last_auth_result"),
+            "last_radius_accept_at": diag.get("last_radius_accept_at"),
+            "last_radius_reject_at": diag.get("last_radius_reject_at"),
+            "accounting_seen": bool(diag.get("accounting_seen") or accounting_received),
+            "last_accounting_at": diag.get("last_accounting_at"),
+            "last_accounting_status": diag.get("last_accounting_status"),
+            "last_session": last_session,
+        },
+        "payments": {
+            "paystack_configured": paystack_configured,
+        },
+        "score": score,
+        "passed": passed,
+        "total": total,
+        "production_ready": score == 100,
+        "next_action": next_action,
+    }
+
 
 @mikrotik_onboard_router.get("/routers/status/live")
 async def get_live_router_status(

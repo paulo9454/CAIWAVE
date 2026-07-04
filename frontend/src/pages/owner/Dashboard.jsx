@@ -287,6 +287,18 @@ const DashboardOverview = () => {
     { name: "Sun", revenue: 2600, sessions: 88 },
   ];
 
+  const renderDiagnosticItem = (label, passed, detail = "") => (
+    <div className="flex items-start gap-2 text-sm">
+      <span className={passed ? "text-green-400" : "text-yellow-400"}>
+        {passed ? "✓" : "⚠"}
+      </span>
+      <div>
+        <p className={passed ? "text-neutral-200" : "text-neutral-300"}>{label}</p>
+        {detail && <p className="text-xs text-neutral-500">{detail}</p>}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -725,6 +737,7 @@ const MikroTikSetupPage = () => {
   const [generatedScript, setGeneratedScript] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [diagnostics, setDiagnostics] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -742,10 +755,37 @@ const MikroTikSetupPage = () => {
       
       setHotspots(hotspotsRes.data);
       setRouters(routersRes.data);
+      fetchDiagnostics(routersRes.data);
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDiagnostics = async (routerList = routers) => {
+    try {
+      const token = getAuthToken();
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const results = await Promise.all(
+        routerList.map(async (router) => {
+          try {
+            const res = await axios.get(
+              `${API_URL}/mikrotik-onboard/routers/${router.id}/diagnostics`,
+              { headers }
+            );
+            return [router.id, res.data];
+          } catch (err) {
+            console.error("Failed to fetch router diagnostics:", router.id, err);
+            return [router.id, null];
+          }
+        })
+      );
+
+      setDiagnostics(Object.fromEntries(results));
+    } catch (error) {
+      console.error("Failed to fetch diagnostics:", error);
     }
   };
 
@@ -821,6 +861,18 @@ const MikroTikSetupPage = () => {
     };
     return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
   };
+
+  const renderDiagnosticItem = (label, passed, detail = "") => (
+    <div className="flex items-start gap-2 text-sm">
+      <span className={passed ? "text-green-400" : "text-yellow-400"}>
+        {passed ? "✓" : "⚠"}
+      </span>
+      <div>
+        <p className={passed ? "text-neutral-200" : "text-neutral-300"}>{label}</p>
+        {detail && <p className="text-xs text-neutral-500">{detail}</p>}
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -962,6 +1014,52 @@ const MikroTikSetupPage = () => {
                       <p>{router.last_seen ? new Date(router.last_seen).toLocaleString() : "Never"}</p>
                     </div>
                   </div>
+
+                  {diagnostics[router.id] && (
+                    <div className="mt-4 p-4 bg-neutral-900/70 border border-neutral-800 rounded-lg">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-semibold">Router Diagnostics</h4>
+                          <p className="text-xs text-neutral-500">{diagnostics[router.id].next_action}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xl font-bold text-blue-400">{diagnostics[router.id].score}%</p>
+                          <p className="text-xs text-neutral-500">
+                            {diagnostics[router.id].passed}/{diagnostics[router.id].total} checks
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-3">
+                        {renderDiagnosticItem("Heartbeat received", diagnostics[router.id].checks?.heartbeat_received)}
+                        {renderDiagnosticItem("Heartbeat recent", diagnostics[router.id].checks?.heartbeat_recent)}
+                        {renderDiagnosticItem("Router online", diagnostics[router.id].checks?.router_online)}
+                        {renderDiagnosticItem("Connection confirmed", diagnostics[router.id].checks?.connection_confirmed)}
+                        {renderDiagnosticItem("RADIUS configured", diagnostics[router.id].checks?.radius_configured)}
+                        {renderDiagnosticItem("Paystack configured", diagnostics[router.id].checks?.paystack_configured)}
+                        {renderDiagnosticItem("First login seen", diagnostics[router.id].checks?.first_auth_seen)}
+                        {renderDiagnosticItem("First login accepted", diagnostics[router.id].checks?.first_auth_success)}
+                        {renderDiagnosticItem("Accounting seen", diagnostics[router.id].checks?.accounting_seen)}
+                        {renderDiagnosticItem("Provisioning file generated", diagnostics[router.id].checks?.rsc_generated)}
+                      </div>
+
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-neutral-700"
+                          onClick={() => fetchDiagnostics([router])}
+                        >
+                          Refresh Diagnostics
+                        </Button>
+                        {diagnostics[router.id].production_ready && (
+                          <span className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-400">
+                            Production Ready
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1284,6 +1382,18 @@ const BillingPage = () => {
     return badges[status] || { bg: "bg-gray-500/10", text: "text-gray-400", label: status };
   };
   
+  const renderDiagnosticItem = (label, passed, detail = "") => (
+    <div className="flex items-start gap-2 text-sm">
+      <span className={passed ? "text-green-400" : "text-yellow-400"}>
+        {passed ? "✓" : "⚠"}
+      </span>
+      <div>
+        <p className={passed ? "text-neutral-200" : "text-neutral-300"}>{label}</p>
+        {detail && <p className="text-xs text-neutral-500">{detail}</p>}
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
