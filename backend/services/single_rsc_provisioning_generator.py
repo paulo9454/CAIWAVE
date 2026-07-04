@@ -151,8 +151,12 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
     /ip hotspot walled-garden add dst-host=*.paystack.com action=allow comment="CAIWAVE Paystack"
 }}
 
-# CONFIRM CALLBACK
-/tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\"router_id\\":\\"\\",\\"nas_identifier\\":\\"{nas_identifier}\\"}}" keep-result=no
+# CONFIRM CALLBACK - BEST EFFORT ONLY
+:do {{
+    /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\"router_id\":\"\",\"nas_identifier\":\"{nas_identifier}\"}}" keep-result=no
+}} on-error={{
+    :log warning "CAIWAVE: confirm callback failed, heartbeat will continue"
+}}
 
 # HEARTBEAT SCRIPT
 /system script remove [find name="caiwave-heartbeat"]
