@@ -254,6 +254,12 @@ const DashboardOverview = () => {
 
   useEffect(() => {
     fetchData();
+
+    const interval = setInterval(() => {
+      fetchData();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {
@@ -738,9 +744,16 @@ const MikroTikSetupPage = () => {
   const [generating, setGenerating] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [diagnostics, setDiagnostics] = useState({});
+  const [timelines, setTimelines] = useState({});
 
   useEffect(() => {
     fetchData();
+
+    const interval = setInterval(() => {
+      fetchData();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {
@@ -784,9 +797,45 @@ const MikroTikSetupPage = () => {
       );
 
       setDiagnostics(Object.fromEntries(results));
+      await fetchTimelines(routerList);
     } catch (error) {
       console.error("Failed to fetch diagnostics:", error);
     }
+  };
+
+  const fetchTimelines = async (routerList = routers) => {
+    try {
+      const token = getAuthToken();
+      const headers = { Authorization: `Bearer ${token}` };
+
+      const results = await Promise.all(
+        routerList.map(async (router) => {
+          try {
+            const res = await axios.get(
+              `${API_URL}/mikrotik-onboard/routers/${router.id}/timeline?limit=5`,
+              { headers }
+            );
+            return [router.id, res.data.events || []];
+          } catch (err) {
+            console.error("Failed to fetch router timeline:", router.id, err);
+            return [router.id, []];
+          }
+        })
+      );
+
+      setTimelines(Object.fromEntries(results));
+    } catch (error) {
+      console.error("Failed to fetch timelines:", error);
+    }
+  };
+
+  const formatAge = (seconds) => {
+    if (seconds === null || seconds === undefined) return "unknown";
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ago`;
   };
 
   const handleRegisterRouter = async () => {
@@ -1021,6 +1070,9 @@ const MikroTikSetupPage = () => {
                         <div>
                           <h4 className="font-semibold">Router Diagnostics</h4>
                           <p className="text-xs text-neutral-500">{diagnostics[router.id].next_action}</p>
+                          <p className="text-xs text-neutral-600 mt-1">
+                            Auto-refreshing every 15s · heartbeat {formatAge(diagnostics[router.id].router?.heartbeat_age_seconds)}
+                          </p>
                         </div>
                         <div className="text-right">
                           <p className="text-xl font-bold text-blue-400">{diagnostics[router.id].score}%</p>
@@ -1050,6 +1102,32 @@ const MikroTikSetupPage = () => {
                         {renderDiagnosticItem("Accounting seen", diagnostics[router.id].checks?.accounting_seen)}
                         {renderDiagnosticItem("Provisioning file generated", diagnostics[router.id].checks?.rsc_generated)}
                       </div>
+
+                      {timelines[router.id]?.length > 0 && (
+                        <div className="mt-4 border-t border-neutral-800 pt-3">
+                          <h5 className="font-medium text-sm mb-2">Recent Timeline</h5>
+                          <div className="space-y-2">
+                            {timelines[router.id].map((event) => (
+                              <div key={event.id} className="flex items-start gap-2 text-sm">
+                                <span className={
+                                  event.severity === "success" ? "text-green-400" :
+                                  event.severity === "warning" ? "text-yellow-400" :
+                                  event.severity === "error" ? "text-red-400" :
+                                  "text-blue-400"
+                                }>
+                                  ●
+                                </span>
+                                <div>
+                                  <p className="text-neutral-200">{event.title}</p>
+                                  <p className="text-xs text-neutral-500">
+                                    {new Date(event.timestamp).toLocaleString()} · {event.event_type}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="mt-3 flex gap-2">
                         <Button

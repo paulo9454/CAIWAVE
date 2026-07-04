@@ -4374,6 +4374,21 @@ async def radius_accounting(request: RADIUSAccountingRequest):
 
         await update_router_diagnostics(router["id"], diag_updates)
 
+        await record_router_event(
+            router["id"],
+            "radius_accounting",
+            f"Accounting {request.status_type}",
+            "success",
+            {
+                "username": request.username,
+                "session_id": request.session_id,
+                "nas_ip": request.nas_ip,
+                "session_time": session_time,
+                "input_octets": input_octets,
+                "output_octets": output_octets
+            }
+        )
+
     return {"status": "ok", "message": f"Accounting {request.status_type} processed"}
 
 @radius_router.post("/post-auth")
@@ -4424,6 +4439,18 @@ async def radius_post_auth(request: dict):
             updates["last_radius_reject_at"] = log_entry["timestamp"]
 
         await update_router_diagnostics(router["id"], updates)
+
+        await record_router_event(
+            router["id"],
+            "radius_auth",
+            f"RADIUS auth {result}",
+            "success" if result_lower in {"access-accept", "accept", "accepted"} else "warning",
+            {
+                "username": log_entry["username"],
+                "nas_ip": nas_ip,
+                "result": result
+            }
+        )
 
     return {"status": "ok"}
 
@@ -5032,6 +5059,31 @@ async def update_router_diagnostics(router_id: str, updates: dict):
     )
 
 
+async def record_router_event(
+    router_id: str,
+    event_type: str,
+    title: str,
+    severity: str = "info",
+    details: dict | None = None
+):
+    """Record a timeline event for MikroTik onboarding/support."""
+    now = datetime.now(timezone.utc).isoformat()
+
+    event = {
+        "id": str(uuid.uuid4()),
+        "router_id": router_id,
+        "event_type": event_type,
+        "title": title,
+        "severity": severity,
+        "details": details or {},
+        "timestamp": now,
+        "created_at": now
+    }
+
+    await db.router_events.insert_one(event)
+    return event
+
+
 class MikroTikHeartbeatRequest(BaseModel):
     nas_identifier: str
 
@@ -5077,6 +5129,17 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "router_online": True,
         "connection_confirmed": True
     })
+
+    await record_router_event(
+        router["id"],
+        "heartbeat",
+        "Heartbeat received",
+        "success",
+        {
+            "nas_identifier": payload.nas_identifier,
+            "status": "online"
+        }
+    )
 
     return {
         "success": True,
@@ -5131,6 +5194,36 @@ async def evaluate_router_health():
         "checked_at": now.isoformat()
     }
 
+
+
+@mikrotik_onboard_router.get("/routers/{router_id}/timeline")
+async def get_mikrotik_router_timeline(
+    router_id: str,
+    limit: int = 50,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
+):
+    """Return recent timeline events for a MikroTik router."""
+
+    router = await db.mikrotik_routers.find_one({"id": router_id}, {"_id": 0})
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not found")
+
+    if user["role"] == UserRole.HOTSPOT_OWNER.value and router.get("owner_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    safe_limit = max(1, min(int(limit or 50), 200))
+
+    events = await db.router_events.find(
+        {"router_id": router_id},
+        {"_id": 0}
+    ).sort("timestamp", -1).limit(safe_limit).to_list(safe_limit)
+
+    return {
+        "success": True,
+        "router_id": router_id,
+        "count": len(events),
+        "events": events
+    }
 
 
 @mikrotik_onboard_router.get("/routers/{router_id}/diagnostics")
