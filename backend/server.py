@@ -5087,6 +5087,27 @@ async def record_router_event(
 class MikroTikHeartbeatRequest(BaseModel):
     nas_identifier: str
 
+    # Installation validation payload from MikroTik
+    bridge_exists: Optional[bool] = None
+    lan_ports_ok: Optional[bool] = None
+    dhcp_server_running: Optional[bool] = None
+    dhcp_network_exists: Optional[bool] = None
+    ip_pool_exists: Optional[bool] = None
+    hotspot_enabled: Optional[bool] = None
+    hotspot_profile_radius: Optional[bool] = None
+    radius_client_enabled: Optional[bool] = None
+    nat_exists: Optional[bool] = None
+    dns_remote_requests: Optional[bool] = None
+    scheduler_exists: Optional[bool] = None
+    heartbeat_script_exists: Optional[bool] = None
+    wan_internet_ok: Optional[bool] = None
+
+    wan_interface: Optional[str] = None
+    firmware: Optional[str] = None
+    model: Optional[str] = None
+    uptime: Optional[str] = None
+    active_users: Optional[int] = None
+
 
 @mikrotik_onboard_router.post("/heartbeat")
 async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
@@ -5120,6 +5141,36 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         }
     )
 
+    validation_updates = {
+        "bridge_configured": payload.bridge_exists,
+        "lan_ports_configured": payload.lan_ports_ok,
+        "dhcp_configured": bool(payload.dhcp_server_running and payload.dhcp_network_exists and payload.ip_pool_exists)
+            if payload.dhcp_server_running is not None else None,
+        "dhcp_server_running": payload.dhcp_server_running,
+        "dhcp_network_exists": payload.dhcp_network_exists,
+        "ip_pool_exists": payload.ip_pool_exists,
+        "hotspot_configured": bool(payload.hotspot_enabled and payload.hotspot_profile_radius)
+            if payload.hotspot_enabled is not None else None,
+        "hotspot_enabled": payload.hotspot_enabled,
+        "hotspot_profile_radius": payload.hotspot_profile_radius,
+        "radius_client_configured": payload.radius_client_enabled,
+        "nat_configured": payload.nat_exists,
+        "dns_remote_requests": payload.dns_remote_requests,
+        "heartbeat_scheduler_configured": payload.scheduler_exists,
+        "heartbeat_script_exists": payload.heartbeat_script_exists,
+        "wan_internet_ok": payload.wan_internet_ok,
+        "wan_interface": payload.wan_interface,
+        "firmware": payload.firmware,
+        "model": payload.model,
+        "uptime": payload.uptime,
+        "active_users": payload.active_users,
+    }
+
+    validation_updates = {
+        key: value for key, value in validation_updates.items()
+        if value is not None
+    }
+
     await update_router_diagnostics(router["id"], {
         "nas_identifier": payload.nas_identifier,
         "hotspot_id": router.get("hotspot_id"),
@@ -5127,7 +5178,8 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "last_heartbeat_at": now,
         "heartbeat_ok": True,
         "router_online": True,
-        "connection_confirmed": True
+        "connection_confirmed": True,
+        **validation_updates
     })
 
     await record_router_event(
@@ -5137,7 +5189,8 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "success",
         {
             "nas_identifier": payload.nas_identifier,
-            "status": "online"
+            "status": "online",
+            "validation": validation_updates
         }
     )
 
