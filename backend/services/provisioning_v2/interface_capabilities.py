@@ -65,7 +65,7 @@ class InterfaceCapability(StrictModel):
 def infer_interface_kind(name: str, raw_type: str | None = None) -> InterfaceKind:
     text = f"{name} {raw_type or ''}".lower()
 
-    if text.startswith("ether") or "ethernet" in text:
+    if text.startswith("ether") or text.startswith("sfp") or "ethernet" in text:
         return InterfaceKind.ETHERNET
     if text.startswith("wlan") or "wireless" in text or "wifi" in text:
         return InterfaceKind.WIRELESS
