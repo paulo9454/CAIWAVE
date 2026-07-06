@@ -7,7 +7,12 @@ from __future__ import annotations
 import hashlib
 
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
-from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_section
+from backend.services.provisioning_v2.routeros_command_builder import (
+    RawRouterOSValue,
+    build_command,
+    build_comment,
+    build_section,
+)
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedSection,
@@ -34,7 +39,7 @@ def render_radius_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
                 "/radius",
                 "add",
                 {
-                    "service": ",".join(service.value for service in radius.services),
+                    "service": RawRouterOSValue(",".join(service.value for service in radius.services)),
                     "address": radius.auth_host,
                     "authentication-port": radius.auth_port,
                     "accounting-port": radius.accounting_port,
