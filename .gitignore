@@ -69,3 +69,4 @@ FINAL_CAIWAVE_BACKUP_BEFORE_CLEANUP.tar.gz
 frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/2.pack
 .venv/
+artifacts/
