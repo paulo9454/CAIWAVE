@@ -14,6 +14,7 @@ from backend.services.provisioning_v2.provisioning_bundle import build_provision
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.routeros_render_orchestrator import (
     RouterOSRenderOrchestratorError,
+    render_routeros_bundle,
     render_routeros_bundle_skeleton,
 )
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
@@ -111,15 +112,25 @@ def build_bundle():
     )
 
 
-def test_render_orchestrator_builds_skeleton_artifact():
-    artifact = render_routeros_bundle_skeleton(bundle=build_bundle())
+def test_render_orchestrator_builds_rendered_artifact():
+    artifact = render_routeros_bundle(bundle=build_bundle())
 
-    assert artifact.status == RenderStatus.PLANNED
+    assert artifact.status == RenderStatus.RENDERED
     assert artifact.filename == "router-1-provisioning-v2.rsc"
     assert artifact.content_type == "text/routeros-script"
     assert artifact.checksum
     assert "# section planned: header" in artifact.content
     assert "# section planned: footer" in artifact.content
+    assert "/system identity set" in artifact.content
+    assert "/interface bridge add" in artifact.content
+    assert "/ip address add" in artifact.content
+    assert "/ip dhcp-server add" in artifact.content
+    assert "/ip dns set" in artifact.content
+    assert "/ip firewall nat add" in artifact.content
+    assert "/ip hotspot add" in artifact.content
+    assert "/ip hotspot walled-garden add" in artifact.content
+    assert "/radius add" in artifact.content
+    assert "/ip firewall filter add" in artifact.content
 
 
 def test_render_orchestrator_uses_context_order():
@@ -131,7 +142,7 @@ def test_render_orchestrator_uses_context_order():
         ]
     )
 
-    artifact = render_routeros_bundle_skeleton(bundle=build_bundle(), context=context)
+    artifact = render_routeros_bundle(bundle=build_bundle(), context=context)
 
     assert [section.name for section in artifact.sections] == [
         RouterOSSectionName.HEADER,
@@ -146,4 +157,11 @@ def test_render_orchestrator_rejects_invalid_bundle():
     bad_bundle = bundle.model_copy(update={"firewall": bad_firewall})
 
     with pytest.raises(RouterOSRenderOrchestratorError):
-        render_routeros_bundle_skeleton(bundle=bad_bundle)
+        render_routeros_bundle(bundle=bad_bundle)
+
+
+def test_legacy_skeleton_alias_returns_rendered_artifact():
+    artifact = render_routeros_bundle_skeleton(bundle=build_bundle())
+
+    assert artifact.status == RenderStatus.RENDERED
+    assert "/system identity set" in artifact.content
