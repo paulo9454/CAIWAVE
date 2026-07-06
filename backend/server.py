@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
+from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
 import os
 import logging
 import json
@@ -4889,14 +4890,35 @@ async def register_mikrotik(
     # GENERATE PROVISIONING OUTPUTS
     # ================================
 
-    single_rsc = generate_single_rsc_provisioning_file(
-        router_name=request.name,
-        nas_identifier=nas_id,
-        radius_secret=radius_secret,
-        radius_host=radius_host,
-        hotspot_id=request.hotspot_id,
-        callback_url=callback_url
-    )
+    if os.getenv("CAIWAVE_PROVISIONING_ENGINE_V2", "false").lower() == "true":
+        single_rsc = build_provisioning_v2_rsc_from_router({
+            "id": router_id,
+            "name": request.name,
+            "owner_id": user["id"],
+            "hotspot_id": request.hotspot_id,
+            "nas_identifier": nas_id,
+            "radius_secret": radius_secret,
+            "radius_host": radius_host,
+            "portal_public_url": "https://caiwave.com/portal",
+            "api_public_url": "https://caiwave.com/api",
+            "heartbeat_url": callback_url.replace("/confirm", "/heartbeat"),
+            "wan_interface": "ether1",
+            "lan_interfaces": ["ether2"],
+            "bridge_name": "bridge-hotspot",
+            "hotspot_cidr": "10.10.0.0/24",
+            "hotspot_gateway": "10.10.0.1",
+            "dhcp_pool": "10.10.0.10-10.10.0.254",
+            "dns_name": "wifi.caiwave.com",
+        })
+    else:
+        single_rsc = generate_single_rsc_provisioning_file(
+            router_name=request.name,
+            nas_identifier=nas_id,
+            radius_secret=radius_secret,
+            radius_host=radius_host,
+            hotspot_id=request.hotspot_id,
+            callback_url=callback_url
+        )
 
     return {
         "router_id": router_id,
