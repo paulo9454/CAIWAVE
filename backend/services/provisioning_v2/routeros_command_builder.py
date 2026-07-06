@@ -17,6 +17,10 @@ import re
 from typing import Any, Dict, List
 
 
+class RawRouterOSValue(str):
+    """A RouterOS value that should be emitted without quotes."""
+
+
 class RouterOSCommandBuilderError(ValueError):
     """Raised when a RouterOS command cannot be safely built."""
 
@@ -52,6 +56,8 @@ def quote_routeros_value(value: Any) -> str:
 def build_set_arg(key: str, value: Any) -> str:
     if not _SAFE_KEY_RE.match(key):
         raise RouterOSCommandBuilderError(f"Unsafe RouterOS argument key: {key}")
+    if isinstance(value, RawRouterOSValue):
+        return f"{key}={value}"
     return f"{key}={quote_routeros_value(value)}"
 
 

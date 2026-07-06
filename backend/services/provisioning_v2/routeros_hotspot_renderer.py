@@ -7,7 +7,12 @@ from __future__ import annotations
 import hashlib
 
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
-from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_section
+from backend.services.provisioning_v2.routeros_command_builder import (
+    RawRouterOSValue,
+    build_command,
+    build_comment,
+    build_section,
+)
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedSection,
@@ -38,7 +43,7 @@ def render_hotspot_section(bundle: ProvisioningBundle) -> RouterOSRenderedSectio
                     "hotspot-address": bundle.address.gateway_ip,
                     "dns-name": hotspot.dns_name,
                     "use-radius": hotspot.use_radius,
-                    "login-by": ",".join(hotspot.login_methods),
+                    "login-by": RawRouterOSValue(",".join(hotspot.login_methods)),
                     "comment": "CAIWAVE managed hotspot profile",
                 },
             )
