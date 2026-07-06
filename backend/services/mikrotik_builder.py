@@ -1,5 +1,6 @@
 from backend.services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file as v1
 from backend.services.single_rsc_provisioning_generator_v2 import generate_single_rsc_provisioning_file as v2
+from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
 import os
 
 
@@ -12,9 +13,12 @@ def build_mikrotik_script(router: dict):
     """
 
     use_v2 = os.getenv("CAIWAVE_MIKROTIK_V2", "false").lower() == "true"
+    use_engine_v2 = os.getenv("CAIWAVE_PROVISIONING_ENGINE_V2", "false").lower() == "true"
 
     try:
-        if use_v2:
+        if use_engine_v2:
+            single_rsc = build_provisioning_v2_rsc_from_router(router)
+        elif use_v2:
             single_rsc = v2(
                 router_name=router.get("name", "unknown"),
                 nas_identifier=router.get("nas_identifier", ""),
