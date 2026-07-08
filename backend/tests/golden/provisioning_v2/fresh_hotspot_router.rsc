@@ -79,10 +79,6 @@
 /ip firewall filter add action="drop" chain="input" comment="CAIWAVE: Drop invalid packets"
 /ip firewall filter add action="accept" chain="input" comment="CAIWAVE: Allow hotspot clients to query router DNS" dst-port="53" protocol="udp" src-address="10.10.0.0/24"
 /ip firewall filter add action="accept" chain="input" comment="CAIWAVE: Allow DHCP service for hotspot clients" dst-port="67" protocol="udp" src-address="10.10.0.0/24"
-/ip firewall filter add action="accept" chain="forward" comment="CAIWAVE: Allow pre-auth captive portal or payment host" dst-address="caiwave.com" src-address="10.10.0.0/24"
-/ip firewall filter add action="accept" chain="forward" comment="CAIWAVE: Allow pre-auth captive portal or payment host" dst-address="checkout.paystack.com" src-address="10.10.0.0/24"
-/ip firewall filter add action="accept" chain="output" comment="CAIWAVE: Allow router to reach RADIUS authentication server" dst-address="radius.caiwave.com" dst-port="1812" protocol="udp"
-/ip firewall filter add action="accept" chain="output" comment="CAIWAVE: Allow router to reach RADIUS accounting server" dst-address="radius.caiwave.com" dst-port="1813" protocol="udp"
 /ip firewall filter add action="drop" chain="input" comment="CAIWAVE default drop WAN input" in-interface="ether1"
 /ip firewall filter add action="drop" chain="forward" comment="CAIWAVE default drop unmatched forward"
 

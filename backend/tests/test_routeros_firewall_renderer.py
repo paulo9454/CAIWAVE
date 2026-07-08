@@ -101,7 +101,6 @@ def test_renders_firewall_section():
     assert "# CAIWAVE Firewall" in section.content
     assert "# WAN interface: ether1" in section.content
     assert '/ip firewall filter add action="accept" chain="input" comment="CAIWAVE: Allow hotspot clients to query router DNS" dst-port="53" protocol="udp" src-address="10.10.0.0/24"' in section.content
-    assert '/ip firewall filter add action="accept" chain="output" comment="CAIWAVE: Allow router to reach RADIUS authentication server" dst-address="radius.caiwave.com" dst-port="1812" protocol="udp"' in section.content
 
 
 def test_renders_default_drop_rules():

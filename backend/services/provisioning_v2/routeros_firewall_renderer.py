@@ -30,16 +30,19 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
     ]
 
     for rule in firewall.rules:
-        args = {
-            "chain": rule.chain.value,
-            "action": rule.action.value,
-            "comment": f"CAIWAVE: {rule.purpose}",
-            "src-address": rule.source_network,
-            "dst-address": rule.destination_host,
-            "protocol": rule.protocol,
-            "dst-port": rule.destination_port,
-        }
-        commands.append(build_command("/ip firewall filter", "add", args))
+        # RouterOS firewall dst-address accepts IPs/ranges, not domain names.
+        # Domain allowlisting is handled by Hotspot walled-garden.
+        if not rule.destination_host or not any(ch.isalpha() for ch in rule.destination_host):
+            args = {
+                "chain": rule.chain.value,
+                "action": rule.action.value,
+                "comment": f"CAIWAVE: {rule.purpose}",
+                "src-address": rule.source_network,
+                "dst-address": rule.destination_host,
+                "protocol": rule.protocol,
+                "dst-port": rule.destination_port,
+            }
+            commands.append(build_command("/ip firewall filter", "add", args))
 
     if firewall.default_input_policy == FirewallAction.DROP:
         commands.append(
