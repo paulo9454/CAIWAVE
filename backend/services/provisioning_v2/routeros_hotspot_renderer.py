@@ -44,8 +44,7 @@ def render_hotspot_section(bundle: ProvisioningBundle) -> RouterOSRenderedSectio
                     "dns-name": hotspot.dns_name,
                     "use-radius": hotspot.use_radius,
                     "login-by": RawRouterOSValue(",".join(hotspot.login_methods)),
-                    "comment": "CAIWAVE managed hotspot profile",
-                },
+                            },
             )
         )
         commands.append(

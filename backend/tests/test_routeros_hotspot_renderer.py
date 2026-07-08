@@ -103,7 +103,7 @@ def test_renders_hotspot_section():
     assert section.checksum
     assert "# CAIWAVE Hotspot" in section.content
     assert "# Hotspot auth mode: radius" in section.content
-    assert '/ip hotspot profile add comment="CAIWAVE managed hotspot profile" dns-name="wifi.caiwave.com" hotspot-address="10.10.0.1" login-by=http-pap name="caiwave-profile" use-radius=yes' in section.content
+    assert '/ip hotspot profile add dns-name="wifi.caiwave.com" hotspot-address="10.10.0.1" login-by=http-pap name="caiwave-profile" use-radius=yes' in section.content
     assert '/ip hotspot add address-pool="caiwave-pool-hotspot" comment="CAIWAVE managed hotspot server" disabled=no interface="bridge-hotspot" name="caiwave-hotspot" profile="caiwave-profile"' in section.content
 
 
