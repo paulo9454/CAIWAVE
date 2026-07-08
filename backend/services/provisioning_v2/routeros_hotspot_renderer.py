@@ -57,8 +57,7 @@ def render_hotspot_section(bundle: ProvisioningBundle) -> RouterOSRenderedSectio
                     "address-pool": hotspot.address_pool_name,
                     "profile": hotspot.profile_name,
                     "disabled": False,
-                    "comment": "CAIWAVE managed hotspot server",
-                },
+                            },
             )
         )
 
