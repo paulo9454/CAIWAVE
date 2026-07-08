@@ -7,7 +7,12 @@ from __future__ import annotations
 import hashlib
 
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
-from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_section
+from backend.services.provisioning_v2.routeros_command_builder import (
+    RawRouterOSValue,
+    build_command,
+    build_comment,
+    build_section,
+)
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedSection,
@@ -41,7 +46,7 @@ def render_dhcp_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection:
                 "interface": dhcp.target_interface,
                 "address-pool": dhcp.pool_name,
                 "lease-time": dhcp.lease_time,
-                "authoritative": dhcp.authoritative.value,
+                "authoritative": RawRouterOSValue(dhcp.authoritative.value.replace("_", "-")),
                 "disabled": False,
                 "comment": "CAIWAVE managed hotspot DHCP server",
             },

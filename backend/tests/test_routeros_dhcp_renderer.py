@@ -95,5 +95,5 @@ def test_renders_dhcp_section():
     assert section.checksum
     assert "# CAIWAVE DHCP" in section.content
     assert '/ip pool add comment="CAIWAVE managed hotspot DHCP pool" name="caiwave-pool-hotspot" ranges="10.10.0.10-10.10.0.254"' in section.content
-    assert '/ip dhcp-server add address-pool="caiwave-pool-hotspot" authoritative="after_2sec_delay" comment="CAIWAVE managed hotspot DHCP server" disabled=no interface="bridge-hotspot" lease-time="1h" name="caiwave-dhcp-hotspot"' in section.content
+    assert '/ip dhcp-server add address-pool="caiwave-pool-hotspot" authoritative=after-2sec-delay comment="CAIWAVE managed hotspot DHCP server" disabled=no interface="bridge-hotspot" lease-time="1h" name="caiwave-dhcp-hotspot"' in section.content
     assert '/ip dhcp-server network add address="10.10.0.0/24" comment="CAIWAVE managed hotspot DHCP network" dns-server="10.10.0.1" gateway="10.10.0.1"' in section.content
