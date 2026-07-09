@@ -102,7 +102,7 @@ def test_renders_portal_section():
     assert section.checksum
     assert "# CAIWAVE Portal" in section.content
     assert "# Portal strategy: redirect" in section.content
-    assert "# Login redirect URL: https://caiwave.com/portal/login" in section.content
+    assert "# Login redirect URL: https://caiwave.com/portal/hotspot-1" in section.content
     assert '/ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="caiwave.com"' in section.content
     assert '/ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="checkout.paystack.com"' in section.content
     assert '/ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="static.caiwave.com"' in section.content
