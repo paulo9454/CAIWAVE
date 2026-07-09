@@ -22,9 +22,11 @@ def _sha256(text: str) -> str:
 def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection:
     portal = bundle.portal
 
+    login_redirect_url = f"{portal.login_redirect_url}?hotspot={bundle.hotspot_id}"
+
     commands = [
         build_comment(f"Portal strategy: {portal.strategy.value}"),
-        build_comment(f"Login redirect URL: {portal.login_redirect_url}"),
+        build_comment(f"Login redirect URL: {login_redirect_url}"),
         build_comment(f"Success URL: {portal.success_url}"),
         build_comment(f"Failure URL: {portal.failure_url}"),
     ]
@@ -34,9 +36,9 @@ def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
     else:
         login_html = (
             "<html><head>"
-            f"<meta http-equiv=\\\"refresh\\\" content=\\\"0; url={portal.login_redirect_url}\\\">"
+            f"<meta http-equiv=\\\"refresh\\\" content=\\\"0; url={login_redirect_url}\\\">"
             "</head><body>Redirecting to CAIWAVE..."
-            f"<script>window.location.href=\\\"{portal.login_redirect_url}\\\";</script>"
+            f"<script>window.location.href=\\\"{login_redirect_url}\\\";</script>"
             "</body></html>"
         )
 
