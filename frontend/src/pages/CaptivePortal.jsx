@@ -147,8 +147,8 @@ const CaptivePortal = () => {
   }, [hotspotId, clientMac, clientIp]);
 
   const handleGetFreeWifi = async () => {
-    if (!currentAd) {
-      toast.error("Please wait for ad to load");
+    if (!hasRealAd) {
+      toast.error("No sponsor advert is active yet. Free WiFi activation will be connected after ads are configured.");
       return;
     }
 
@@ -187,7 +187,17 @@ const CaptivePortal = () => {
     }
   };
 
-  const currentAd = ads[currentAdIndex];
+  const fallbackAd = {
+    id: "caiwave-placeholder-ad",
+    title: "Advertise Here on CAIWAVE WiFi",
+    ad_type: "image",
+    media_url: null,
+    whatsapp_number: "",
+    click_url: ""
+  };
+
+  const currentAd = ads[currentAdIndex] || fallbackAd;
+  const hasRealAd = ads.length > 0;
   const baseUrl = API_URL.replace('/api', '');
 
   if (loading) {
@@ -299,7 +309,7 @@ const CaptivePortal = () => {
         )}
 
         {/* Free WiFi Section - After watching ad */}
-        {currentAd && !freeSession && (
+        {!freeSession && (
           <div className={`rounded-xl border p-4 ${
             freeSessionStatus.can_get_free 
               ? "bg-gradient-to-r from-green-900/50 to-emerald-900/50 border-green-700/50"
@@ -343,7 +353,7 @@ const CaptivePortal = () => {
                   ) : (
                     <>
                       <Play className="w-5 h-5 mr-2" />
-                      Get Free WiFi ({freeSessionStatus.free_sessions_remaining} left)
+                      {hasRealAd ? `Get Free WiFi (${freeSessionStatus.free_sessions_remaining} left)` : "Free WiFi Coming Soon"}
                     </>
                   )}
                 </Button>
