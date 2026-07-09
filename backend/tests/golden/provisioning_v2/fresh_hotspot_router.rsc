@@ -59,9 +59,8 @@
 # Login redirect URL: https://caiwave.com/portal/login
 # Success URL: https://caiwave.com/portal/success
 # Failure URL: https://caiwave.com/portal/failed
-/file remove [find name=hotspot/login.html]
-/file print file=hotspot/login.html where name=hotspot/login.html
-/file set hotspot/login.html contents="<html><head><meta http-equiv=\"refresh\" content=\"0; url=https://caiwave.com/portal/login\"></head><body>Redirecting to CAIWAVE...<script>window.location.href=\"https://caiwave.com/portal/login\";</script></body></html>"
+/file remove [find name="hotspot/login.html"]
+/file add name="hotspot/login.html" contents="<html><head><meta http-equiv=\"refresh\" content=\"0; url=https://caiwave.com/portal/login\"></head><body>Redirecting to CAIWAVE...<script>window.location.href=\"https://caiwave.com/portal/login\";</script></body></html>"
 /ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="caiwave.com"
 /ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="checkout.paystack.com"
 

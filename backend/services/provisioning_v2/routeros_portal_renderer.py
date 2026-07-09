@@ -42,9 +42,8 @@ def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
 
         commands.extend(
             [
-                "/file remove [find name=hotspot/login.html]",
-                f'/file print file=hotspot/login.html where name=hotspot/login.html',
-                f'/file set hotspot/login.html contents="{login_html}"',
+                '/file remove [find name="hotspot/login.html"]',
+                f'/file add name="hotspot/login.html" contents="{login_html}"',
             ]
         )
 
