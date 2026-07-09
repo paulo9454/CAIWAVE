@@ -32,6 +32,22 @@ def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
     if not portal.enabled:
         commands.append(build_comment("Portal disabled by provisioning plan"))
     else:
+        login_html = (
+            "<html><head>"
+            f"<meta http-equiv=\\\"refresh\\\" content=\\\"0; url={portal.login_redirect_url}\\\">"
+            "</head><body>Redirecting to CAIWAVE..."
+            f"<script>window.location.href=\\\"{portal.login_redirect_url}\\\";</script>"
+            "</body></html>"
+        )
+
+        commands.extend(
+            [
+                "/file remove [find name=hotspot/login.html]",
+                f'/file print file=hotspot/login.html where name=hotspot/login.html',
+                f'/file set hotspot/login.html contents="{login_html}"',
+            ]
+        )
+
         for host in portal.walled_garden_hosts:
             commands.append(
                 build_command(
