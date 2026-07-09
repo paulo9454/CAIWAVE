@@ -22,7 +22,7 @@ def _sha256(text: str) -> str:
 def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection:
     portal = bundle.portal
 
-    login_redirect_url = f"{portal.portal_public_url}/{bundle.hotspot_id}"
+    login_redirect_url = f"{portal.login_redirect_url}?hotspot={bundle.hotspot_id}"
 
     commands = [
         build_comment(f"Portal strategy: {portal.strategy.value}"),
