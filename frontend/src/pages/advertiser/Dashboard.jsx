@@ -825,22 +825,54 @@ const PaymentModal = ({ ad, onClose, onSuccess }) => {
     }
 
     setLoading(true);
+
     try {
       const response = await axios.post(
-        `${API_URL}/ads/${ad.id}/pay`,
-        { phone_number: phone },
-        { headers: { Authorization: `Bearer ${getAuthToken()}` } }
+        `${API_URL}/paystack/advertiser/initialize-checkout`,
+        {
+          ad_id: ad.id,
+          phone_number: phone,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+        }
       );
-      
-      if (response.data.success) {
-        toast.success(response.data.message);
+
+      const authorizationUrl =
+        response.data.authorization_url;
+
+      if (response.data.success && authorizationUrl) {
+        const checkoutWindow = window.open(
+          authorizationUrl,
+          "_blank",
+          "noopener,noreferrer"
+        );
+
+        if (!checkoutWindow) {
+          window.location.assign(authorizationUrl);
+          return;
+        }
+
+        toast.success(
+          "Secure Paystack checkout opened. Choose M-Pesa, card or bank."
+        );
+
         onSuccess();
         onClose();
       } else {
-        toast.error(response.data.message || "Payment failed");
+        toast.error(
+          response.data.message ||
+            "Paystack checkout could not be created"
+        );
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || error.message || "Payment failed");
+      toast.error(
+        error.response?.data?.detail ||
+          error.message ||
+          "Payment failed"
+      );
     } finally {
       setLoading(false);
     }
@@ -872,7 +904,7 @@ const PaymentModal = ({ ad, onClose, onSuccess }) => {
         </div>
         
         <div className="mb-6">
-          <label className="block text-sm text-neutral-400 mb-2">M-Pesa Phone Number</label>
+          <label className="block text-sm text-neutral-400 mb-2">Phone Number</label>
           <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg">
             <span className="px-4 text-neutral-500">+254</span>
             <input
@@ -885,7 +917,7 @@ const PaymentModal = ({ ad, onClose, onSuccess }) => {
             />
           </div>
           <p className="text-xs text-neutral-500 mt-2">
-            An STK Push will be sent to this number. Confirm payment on your phone.
+            Continue to secure Paystack checkout, where you can choose M-Pesa, card or bank.
           </p>
         </div>
         
@@ -904,7 +936,7 @@ const PaymentModal = ({ ad, onClose, onSuccess }) => {
             ) : (
               <>
                 <Phone className="w-4 h-4 mr-2" />
-                Pay via M-Pesa
+                Continue to Paystack
               </>
             )}
           </Button>

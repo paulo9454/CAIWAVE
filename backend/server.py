@@ -2515,6 +2515,191 @@ async def advertiser_pay_ad_paystack(
     }
 
 
+@paystack_router.post("/advertiser/initialize-checkout")
+async def initialize_advertiser_paystack_checkout(
+    ad_id: str = Body(...),
+    phone_number: str = Body(""),
+    user: dict = Depends(require_role([UserRole.ADVERTISER]))
+):
+    """
+    Initialize secure hosted Paystack checkout for an approved advert.
+
+    The server loads the advert package and determines the amount.
+    Advertisers can complete payment using the channels enabled by
+    Paystack, including mobile money, card and bank.
+    """
+    if not paystack_service.is_configured():
+        raise HTTPException(status_code=503, detail="Paystack not configured")
+
+    ad = await db.ads.find_one(
+        {
+            "id": ad_id,
+            "advertiser_id": user["id"],
+        },
+        {"_id": 0},
+    )
+
+    if not ad:
+        raise HTTPException(
+            status_code=404,
+            detail="Advert not found or access denied",
+        )
+
+    if ad.get("status") != AdStatus.APPROVED.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Advert must be approved before payment",
+        )
+
+    package = await db.ad_packages.find_one(
+        {
+            "id": ad.get("package_id"),
+            "status": AdPackageStatus.ACTIVE.value,
+        },
+        {"_id": 0},
+    )
+
+    if not package:
+        raise HTTPException(
+            status_code=400,
+            detail="The selected advertising package is unavailable",
+        )
+
+    amount = float(package.get("price", 0))
+
+    if amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid advertising package price",
+        )
+
+    phone = (phone_number or "").replace(" ", "").replace("+", "")
+
+    if phone.startswith("0"):
+        phone = "254" + phone[1:]
+    elif phone and not phone.startswith("254"):
+        phone = "254" + phone
+
+    email = user.get("email") or (
+        f"{phone}@caiwave.com" if phone else f"{user['id']}@caiwave.com"
+    )
+
+    now = datetime.now(timezone.utc)
+    reference = (
+        f"CAIWAVE-AD-{ad_id[:8]}-"
+        f"{now.strftime('%Y%m%d%H%M%S')}-"
+        f"{str(uuid.uuid4())[:6].upper()}"
+    )
+    transaction_id = str(uuid.uuid4())
+
+    transaction_record = {
+        "id": transaction_id,
+        "reference": reference,
+        "email": email,
+        "phone_number": phone,
+        "amount": amount,
+        "currency": "KES",
+        "payment_type": "advertising",
+        "reference_id": ad_id,
+        "ad_id": ad_id,
+        "advertiser_id": user["id"],
+        "package_id": package["id"],
+        "status": "pending",
+        "provider": "paystack",
+        "created_at": now.isoformat(),
+    }
+
+    await db.paystack_transactions.insert_one(transaction_record)
+
+    init_request = TransactionInitRequest(
+        email=email,
+        amount=amount,
+        reference=reference,
+        metadata={
+            "transaction_id": transaction_id,
+            "payment_type": "advertising",
+            "reference_id": ad_id,
+            "ad_id": ad_id,
+            "advertiser_id": user["id"],
+            "package_id": package["id"],
+            "phone_number": phone,
+        },
+    )
+
+    result = await paystack_service.initialize_transaction(init_request)
+
+    if not result.get("status"):
+        message = result.get("message", "Failed to initialize payment")
+
+        await db.paystack_transactions.update_one(
+            {"id": transaction_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": message,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            },
+        )
+
+        raise HTTPException(status_code=400, detail=message)
+
+    result_data = result.get("data") or {}
+    authorization_url = result_data.get("authorization_url")
+    access_code = result_data.get("access_code")
+
+    if not authorization_url:
+        await db.paystack_transactions.update_one(
+            {"id": transaction_id},
+            {
+                "$set": {
+                    "status": "failed",
+                    "error": "Paystack did not return an authorization URL",
+                }
+            },
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail="Paystack did not return a checkout link",
+        )
+
+    await db.paystack_transactions.update_one(
+        {"id": transaction_id},
+        {
+            "$set": {
+                "authorization_url": authorization_url,
+                "access_code": access_code,
+            }
+        },
+    )
+
+    await db.ads.update_one(
+        {"id": ad_id},
+        {
+            "$set": {
+                "paystack_reference": reference,
+                "payment_status": "pending",
+                "payment_provider": "paystack",
+            }
+        },
+    )
+
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "reference": reference,
+        "authorization_url": authorization_url,
+        "access_code": access_code,
+        "amount": amount,
+        "currency": "KES",
+        "message": (
+            "Paystack checkout created. Choose M-Pesa, card or bank "
+            "on the secure payment page."
+        ),
+    }
+
+
 @paystack_router.post("/client/pay-wifi")
 async def client_pay_wifi_paystack(
     hotspot_id: str = Body(...),
@@ -2902,6 +3087,7 @@ async def handle_paystack_ad_success(transaction: dict, paystack_data: dict):
         {"id": ad_id},
         {"$set": {
             "status": AdStatus.ACTIVE.value,
+            "is_active": True,
             "starts_at": now.isoformat(),
             "expires_at": expires_at.isoformat(),
             "payment_status": "paid",
