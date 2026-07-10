@@ -213,6 +213,36 @@ const CaptivePortal = () => {
 
   const currentAd = ads[currentAdIndex] || fallbackAd;
   const hasRealAd = ads.length > 0;
+
+  const sponsorPlaceholders = [
+    {
+      id: "sponsor-placeholder-1",
+      title: "Local Business Promotion",
+      description: "Promote offers to nearby CAIWAVE WiFi customers."
+    },
+    {
+      id: "sponsor-placeholder-2",
+      title: "Shop & Service Offers",
+      description: "Show products, services and special discounts."
+    },
+    {
+      id: "sponsor-placeholder-3",
+      title: "Events & Announcements",
+      description: "Reach your local audience directly."
+    },
+    {
+      id: "sponsor-placeholder-4",
+      title: "Your Business Here",
+      description: "Reserve a sponsored campaign placement."
+    }
+  ];
+
+  const secondaryAds = ads
+    .filter((_, index) => index !== currentAdIndex)
+    .slice(0, 4);
+
+  const sponsorCards =
+    secondaryAds.length > 0 ? secondaryAds : sponsorPlaceholders;
   const baseUrl = API_URL.replace('/api', '');
 
   if (loading) {
@@ -608,41 +638,111 @@ const CaptivePortal = () => {
           </div>
         )}
 
-        {/* More Ads Carousel */}
-        {ads.length > 1 && (
-          <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
-            <h2 className="font-semibold text-lg mb-4">More from Our Sponsors</h2>
-            
-            <div className="grid grid-cols-2 gap-3">
-              {ads.filter((_, i) => i !== currentAdIndex).slice(0, 4).map((ad) => (
-                <div key={ad.id} className="rounded-lg overflow-hidden bg-neutral-800">
-                  {ad.media_url && (
-                    <img
-                      src={`${baseUrl}${ad.media_url}`}
-                      alt={ad.title}
-                      className="w-full aspect-video object-cover"
-                    />
-                  )}
+        {/* Sponsored Campaigns Carousel */}
+        <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-purple-400">
+                Advertising Marketplace
+              </p>
+
+              <h2 className="mt-1 text-lg font-semibold text-white">
+                Sponsored Campaigns
+              </h2>
+
+              <p className="mt-1 text-sm text-neutral-400">
+                Discover offers, services and promotions from local businesses.
+              </p>
+            </div>
+
+            <span className="shrink-0 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300">
+              Swipe
+            </span>
+          </div>
+
+          <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3">
+            {sponsorCards.map((ad, index) => {
+              const isPlaceholder =
+                ad.id?.startsWith("sponsor-placeholder");
+
+              return (
+                <article
+                  key={ad.id || index}
+                  className="min-w-[78%] snap-start overflow-hidden rounded-xl border border-neutral-700 bg-neutral-800 sm:min-w-[46%] md:min-w-[31%]"
+                >
+                  <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-purple-950 via-indigo-900 to-blue-900">
+                    {!isPlaceholder && ad.media_url ? (
+                      <img
+                        src={`${baseUrl}${ad.media_url}`}
+                        alt={ad.title}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center p-6 text-center">
+                        <div>
+                          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
+                            <Zap className="h-6 w-6 text-yellow-300" />
+                          </div>
+
+                          <p className="text-sm font-semibold text-white">
+                            Sponsored Placement
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Sponsor
+                    </span>
+                  </div>
+
                   <div className="p-3">
-                    <div className="font-medium text-sm truncate">{ad.title}</div>
-                    {ad.whatsapp_number && (
-                      <a
-                        href={`https://wa.me/${formatWhatsApp(ad.whatsapp_number)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-2 flex items-center gap-1 text-green-400 text-sm"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                        WhatsApp
-                        <ChevronRight className="w-4 h-4" />
-                      </a>
+                    <h3 className="truncate font-semibold text-white">
+                      {ad.title}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-neutral-400">
+                      {ad.description ||
+                        "View this sponsored campaign on CAIWAVE WiFi."}
+                    </p>
+
+                    {!isPlaceholder && (
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        {ad.whatsapp_number && (
+                          <a
+                            href={`https://wa.me/${formatWhatsApp(ad.whatsapp_number)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-green-400"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            WhatsApp
+                          </a>
+                        )}
+
+                        {ad.click_url && (
+                          <a
+                            href={ad.click_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-400"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                            View offer
+                          </a>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
-            </div>
+                </article>
+              );
+            })}
           </div>
-        )}
+
+          <p className="pt-1 text-center text-xs text-neutral-500">
+            Swipe horizontally to explore sponsored campaigns.
+          </p>
+        </section>
       </main>
 
       {/* Footer & Support */}
