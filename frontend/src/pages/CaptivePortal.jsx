@@ -277,7 +277,22 @@ const CaptivePortal = () => {
             
             {/* Ad Info & CTA */}
             <div className="p-4">
-              <h3 className="font-semibold text-lg">{currentAd.title}</h3>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-blue-400">
+                    Sponsored Campaign
+                  </p>
+                  <h3 className="font-semibold text-lg mt-1">
+                    {hasRealAd ? currentAd.title : "Premium advertising placement"}
+                  </h3>
+                </div>
+
+                {!hasRealAd && (
+                  <span className="shrink-0 rounded-full border border-neutral-700 bg-neutral-800 px-3 py-1 text-xs text-neutral-400">
+                    Available
+                  </span>
+                )}
+              </div>
               
               {/* Contact Buttons */}
               <div className="flex flex-wrap gap-3 mt-3">
@@ -310,13 +325,13 @@ const CaptivePortal = () => {
 
         {/* Free WiFi Section - After watching ad */}
         {!freeSession && (
-          <div className={`rounded-xl border p-4 ${
+          <div className={`rounded-xl border p-5 ${
             freeSessionStatus.can_get_free 
-              ? "bg-gradient-to-r from-green-900/50 to-emerald-900/50 border-green-700/50"
-              : "bg-gradient-to-r from-orange-900/50 to-red-900/50 border-orange-700/50"
+              ? "bg-gradient-to-br from-green-950/80 to-emerald-900/50 border-green-700/50"
+              : "bg-gradient-to-br from-orange-950/80 to-red-900/50 border-orange-700/50"
           }`}>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex-1">
                 {freeSessionStatus.can_get_free ? (
                   <>
                     <h3 className="font-semibold text-lg text-green-400 flex items-center gap-2">
@@ -345,8 +360,8 @@ const CaptivePortal = () => {
               {freeSessionStatus.can_get_free ? (
                 <Button
                   onClick={handleGetFreeWifi}
-                  disabled={gettingFreeWifi}
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3"
+                  disabled={gettingFreeWifi || !hasRealAd}
+                  className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3"
                 >
                   {gettingFreeWifi ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -584,11 +599,45 @@ const CaptivePortal = () => {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="mt-8 py-6 border-t border-neutral-800">
-        <div className="max-w-4xl mx-auto px-4 text-center text-neutral-500 text-sm">
-          <p>Powered by CAIWAVE WiFi © 2026. All Rights Reserved.</p>
-          <p className="mt-1">www.caiwave.com</p>
+      {/* Footer & Support */}
+      <footer className="mt-8 py-8 border-t border-neutral-800 bg-neutral-950">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <div className="mb-5">
+            <h3 className="text-lg font-semibold text-white">
+              Need Help?
+            </h3>
+
+            <p className="text-neutral-400 mt-2">
+              Contact CAIWAVE Support any time for WiFi assistance,
+              vouchers or downtime compensation.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row justify-center gap-3">
+            <a
+              href="https://wa.me/25414302592?text=Hello%20CAIWAVE%20Support%2C%20I%20need%20help%20with%20the%20WiFi."
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 px-5 py-3 rounded-lg font-medium text-white transition-colors"
+            >
+              <MessageCircle className="w-5 h-5" />
+              WhatsApp Support
+            </a>
+
+            <a
+              href="tel:+25414302592"
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-lg font-medium text-white transition-colors"
+            >
+              <Phone className="w-5 h-5" />
+              Call Support
+            </a>
+          </div>
+
+          <div className="mt-6 text-neutral-500 text-sm">
+            <p>Powered by CAIWAVE WiFi © 2026</p>
+            <p className="mt-1">Reliable • Fast • Affordable</p>
+            <p className="mt-1">www.caiwave.com</p>
+          </div>
         </div>
       </footer>
     </div>
