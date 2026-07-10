@@ -218,22 +218,26 @@ const CaptivePortal = () => {
     {
       id: "sponsor-placeholder-1",
       title: "Local Business Promotion",
-      description: "Promote offers to nearby CAIWAVE WiFi customers."
+      description: "Promote offers to nearby CAIWAVE WiFi customers.",
+      symbol: "🏪"
     },
     {
       id: "sponsor-placeholder-2",
       title: "Shop & Service Offers",
-      description: "Show products, services and special discounts."
+      description: "Show products, services and special discounts.",
+      symbol: "🛍️"
     },
     {
       id: "sponsor-placeholder-3",
       title: "Events & Announcements",
-      description: "Reach your local audience directly."
+      description: "Reach your local audience directly.",
+      symbol: "📣"
     },
     {
       id: "sponsor-placeholder-4",
       title: "Your Business Here",
-      description: "Reserve a sponsored campaign placement."
+      description: "Reserve a sponsored campaign placement.",
+      symbol: "⭐"
     }
   ];
 
@@ -660,7 +664,10 @@ const CaptivePortal = () => {
             </span>
           </div>
 
-          <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3">
+          <div
+            className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            style={{ msOverflowStyle: "none" }}
+          >
             {sponsorCards.map((ad, index) => {
               const isPlaceholder =
                 ad.id?.startsWith("sponsor-placeholder");
@@ -681,7 +688,9 @@ const CaptivePortal = () => {
                       <div className="flex h-full w-full items-center justify-center p-6 text-center">
                         <div>
                           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
-                            <Zap className="h-6 w-6 text-yellow-300" />
+                            <span className="text-2xl" aria-hidden="true">
+                              {ad.symbol || "⭐"}
+                            </span>
                           </div>
 
                           <p className="text-sm font-semibold text-white">
@@ -739,7 +748,20 @@ const CaptivePortal = () => {
             })}
           </div>
 
-          <p className="pt-1 text-center text-xs text-neutral-500">
+          <div className="flex items-center justify-center gap-2 pt-2">
+            {sponsorCards.map((ad, index) => (
+              <span
+                key={`sponsor-indicator-${ad.id || index}`}
+                className={`h-1.5 rounded-full transition-all ${
+                  index === 0
+                    ? "w-6 bg-purple-400"
+                    : "w-1.5 bg-neutral-600"
+                }`}
+              />
+            ))}
+          </div>
+
+          <p className="pt-2 text-center text-xs text-neutral-500">
             Swipe horizontally to explore sponsored campaigns.
           </p>
         </section>
