@@ -47,15 +47,30 @@ const CaptivePortal = () => {
     fetchData(hid);
 }, [routeHotspotId]);
 
-  // Rotate ads every 5 seconds
+  // Rotate featured campaigns automatically.
   useEffect(() => {
     if (ads.length > 1) {
       const interval = setInterval(() => {
         setCurrentAdIndex((prev) => (prev + 1) % ads.length);
       }, 5000);
+
       return () => clearInterval(interval);
     }
   }, [ads.length]);
+
+  const showPreviousAd = () => {
+    if (ads.length <= 1) return;
+
+    setCurrentAdIndex((current) =>
+      current === 0 ? ads.length - 1 : current - 1
+    );
+  };
+
+  const showNextAd = () => {
+    if (ads.length <= 1) return;
+
+    setCurrentAdIndex((current) => (current + 1) % ads.length);
+  };
 
   const fetchData = async (hid) => {
     try {
@@ -260,17 +275,48 @@ const CaptivePortal = () => {
                 </div>
               )}
               
-              {/* Ad indicator dots */}
+              {/* Featured campaign slideshow controls */}
               {ads.length > 1 && (
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2">
-                  {ads.map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-2 h-2 rounded-full transition-colors ${
-                        i === currentAdIndex ? 'bg-white' : 'bg-white/30'
-                      }`}
-                    />
-                  ))}
+                <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={showPreviousAd}
+                    aria-label="Previous featured campaign"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
+                  >
+                    <ChevronRight className="h-5 w-5 rotate-180" />
+                  </button>
+
+                  <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/50 px-3 py-2 backdrop-blur">
+                    <span className="text-xs font-semibold text-white">
+                      {currentAdIndex + 1} / {ads.length}
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {ads.map((ad, index) => (
+                        <button
+                          key={ad.id || index}
+                          type="button"
+                          onClick={() => setCurrentAdIndex(index)}
+                          aria-label={`Show featured campaign ${index + 1}`}
+                          className={`h-2 rounded-full transition-all ${
+                            index === currentAdIndex
+                              ? "w-6 bg-white"
+                              : "w-2 bg-white/40 hover:bg-white/70"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={showNextAd}
+                    aria-label="Next featured campaign"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
                 </div>
               )}
             </div>
