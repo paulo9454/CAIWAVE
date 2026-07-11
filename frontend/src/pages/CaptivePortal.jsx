@@ -32,6 +32,7 @@ const CaptivePortal = () => {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [videoReady, setVideoReady] = useState(false);
 
   useEffect(() => {
   // Get hotspot ID and client info from route params or MikroTik query params
@@ -47,16 +48,27 @@ const CaptivePortal = () => {
     fetchData(hid);
 }, [routeHotspotId]);
 
-  // Rotate featured campaigns automatically.
+  // Rotate image campaigns automatically.
+  // Video campaigns advance only after the complete video has played.
   useEffect(() => {
-    if (ads.length > 1) {
-      const interval = setInterval(() => {
-        setCurrentAdIndex((prev) => (prev + 1) % ads.length);
-      }, 5000);
+    if (ads.length <= 1) return undefined;
 
-      return () => clearInterval(interval);
+    const activeAd = ads[currentAdIndex];
+
+    if (!activeAd || activeAd.ad_type === "video") {
+      return undefined;
     }
-  }, [ads.length]);
+
+    const timeout = window.setTimeout(() => {
+      setCurrentAdIndex((current) => (current + 1) % ads.length);
+    }, 6000);
+
+    return () => window.clearTimeout(timeout);
+  }, [ads, currentAdIndex]);
+
+  useEffect(() => {
+    setVideoReady(false);
+  }, [currentAdIndex]);
 
   const showPreviousAd = () => {
     if (ads.length <= 1) return;
@@ -288,14 +300,45 @@ const CaptivePortal = () => {
             <div className="relative w-full aspect-video bg-neutral-800">
               {currentAd.media_url ? (
                 currentAd.ad_type === "video" ? (
-                  <video
-                    src={`${baseUrl}${currentAd.media_url}`}
-                    className="w-full h-full object-cover"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                  />
+                  <>
+                    <video
+                      key={currentAd.id}
+                      src={`${baseUrl}${currentAd.media_url}`}
+                      className={`h-full w-full object-cover transition-opacity duration-300 ${
+                        videoReady ? "opacity-100" : "opacity-0"
+                      }`}
+                      autoPlay
+                      muted
+                      playsInline
+                      preload="auto"
+                      onLoadStart={() => setVideoReady(false)}
+                      onLoadedData={() => setVideoReady(true)}
+                      onCanPlay={() => setVideoReady(true)}
+                      onPlaying={() => setVideoReady(true)}
+                      onWaiting={() => setVideoReady(false)}
+                      onEnded={(event) => {
+                        if (ads.length > 1) {
+                          setCurrentAdIndex((current) =>
+                            (current + 1) % ads.length
+                          );
+                        } else {
+                          event.currentTarget.currentTime = 0;
+                          event.currentTarget.play().catch(() => {});
+                        }
+                      }}
+                    />
+
+                    {!videoReady && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
+                        <div className="text-center">
+                          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                          <p className="mt-3 text-sm font-medium text-neutral-300">
+                            Loading campaign…
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <img
                     src={`${baseUrl}${currentAd.media_url}`}
