@@ -10,6 +10,9 @@ from backend.services.owner_payment.repository import (
     OwnerPaymentProfileRepository,
 )
 from backend.services.owner_payment.service import OwnerPaymentProfileService
+from backend.services.owner_payment.router import (
+    create_owner_payment_router,
+)
 from backend.services.owner_payment.resolver import (
     AutomaticVerificationUnavailable,
     OwnerPaymentProfileInactive,
@@ -27,6 +30,7 @@ __all__ = [
     "OwnerPaymentProfileNotFound",
     "OwnerPaymentProfileRepository",
     "OwnerPaymentProfileService",
+    "create_owner_payment_router",
     "AutomaticVerificationUnavailable",
     "OwnerPaymentProfileInactive",
     "OwnerPaymentProfileRequired",

@@ -12,6 +12,11 @@ Refactored to use modular architecture:
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+
+from backend.services.owner_payment import (
+    OwnerPaymentProfileRepository,
+    create_owner_payment_router,
+)
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -137,6 +142,16 @@ async def startup():
         logger.info("MikroTik router indexes ensured")
     except Exception:
         logger.exception("Failed to create MikroTik indexes")
+
+    # Ensure Owner Payment Engine indexes exist
+    try:
+        owner_payment_repository = OwnerPaymentProfileRepository(
+            db.owner_payment_profiles
+        )
+        await owner_payment_repository.ensure_indexes()
+        logger.info("Owner payment profile indexes ensured")
+    except Exception:
+        logger.exception("Failed to create owner payment profile indexes")
 
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
@@ -777,6 +792,13 @@ def require_admin(user: dict = Depends(get_current_user)):
     if user["role"] != UserRole.SUPER_ADMIN.value:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+owner_payment_router = create_owner_payment_router(
+    collection=db.owner_payment_profiles,
+    owner_dependency=require_role([UserRole.HOTSPOT_OWNER]),
+)
+
 
 def generate_voucher_code() -> str:
     """Generate a unique voucher code"""
@@ -7303,6 +7325,7 @@ api_router.include_router(vouchers_router)
 api_router.include_router(marketplace_router)
 api_router.include_router(invoices_router)
 api_router.include_router(subscriptions_router)
+api_router.include_router(owner_payment_router)
 
 app.include_router(api_router)
 
