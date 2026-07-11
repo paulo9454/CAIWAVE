@@ -2812,6 +2812,48 @@ async def verify_paystack_payment(reference: str):
     transaction = await db.paystack_transactions.find_one({"reference": reference}, {"_id": 0})
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Return the existing WiFi authorization when verification is retried.
+    if transaction.get("status") == "completed":
+        payment_type = transaction.get("payment_type")
+
+        if payment_type == "wifi":
+            username = transaction.get("wifi_username")
+            password = transaction.get("wifi_password")
+            session_id = transaction.get("session_id")
+
+            if username and password and session_id:
+                package = await db.packages.find_one(
+                    {"id": transaction.get("package_id")},
+                    {"_id": 0, "duration_minutes": 1},
+                )
+
+                return {
+                    "success": True,
+                    "status": "completed",
+                    "payment_type": "wifi",
+                    "already_processed": True,
+                    "session_id": session_id,
+                    "wifi_credentials": {
+                        "username": username,
+                        "password": password,
+                        "expires_at": transaction.get("expires_at"),
+                        "duration_minutes": (
+                            package.get("duration_minutes")
+                            if package
+                            else None
+                        ),
+                    },
+                    "message": "Payment was already verified.",
+                }
+
+        return {
+            "success": True,
+            "status": "completed",
+            "payment_type": payment_type,
+            "already_processed": True,
+            "message": "Payment was already verified.",
+        }
     
     # Verify with Paystack
     result = await paystack_service.verify_transaction(reference)

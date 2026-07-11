@@ -22,6 +22,8 @@ const CaptivePortal = () => {
   const [hotspotId, setHotspotId] = useState(null);
   const [clientMac, setClientMac] = useState("");
   const [clientIp, setClientIp] = useState("");
+  const [mikrotikLoginUrl, setMikrotikLoginUrl] = useState("");
+  const [originalDestination, setOriginalDestination] = useState("");
   const [hotspot, setHotspot] = useState(null);
   const [packages, setPackages] = useState([]);
   const [ads, setAds] = useState([]);
@@ -40,10 +42,21 @@ const CaptivePortal = () => {
     const hid = routeHotspotId || params.get("hotspot") || params.get("h") || params.get("id");
     const mac = params.get("mac") || params.get("user_mac") || "";
     const ip = params.get("ip") || params.get("user_ip") || "";
+    const loginUrl =
+      params.get("login_url") ||
+      params.get("link-login-only") ||
+      params.get("link_login") ||
+      "";
+    const destination =
+      params.get("dst") ||
+      params.get("link-orig") ||
+      "http://neverssl.com/";
 
     setHotspotId(hid);
     setClientMac(mac);
     setClientIp(ip);
+    setMikrotikLoginUrl(loginUrl);
+    setOriginalDestination(destination);
 
     fetchData(hid);
 }, [routeHotspotId]);
@@ -118,6 +131,87 @@ const CaptivePortal = () => {
     }
   };
 
+  const submitCredentialsToMikrotik = (credentials) => {
+    const username = credentials?.username;
+    const password = credentials?.password;
+
+    if (!username || !password) {
+      toast.error("WiFi credentials were not returned.");
+      return false;
+    }
+
+    if (!mikrotikLoginUrl) {
+      toast.error(
+        "Payment completed, but the router login link is missing. Reconnect to the hotspot and try again."
+      );
+      return false;
+    }
+
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = mikrotikLoginUrl;
+    form.style.display = "none";
+
+    const fields = {
+      username,
+      password,
+      dst: originalDestination || "http://neverssl.com/",
+      popup: "true"
+    };
+
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+    return true;
+  };
+
+  const verifyPaymentUntilComplete = async (reference) => {
+    const maximumAttempts = 24;
+    const intervalMilliseconds = 3000;
+
+    for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+      await new Promise((resolve) =>
+        window.setTimeout(resolve, intervalMilliseconds)
+      );
+
+      try {
+        const verification = await axios.post(
+          `${API_URL}/paystack/verify/${encodeURIComponent(reference)}`
+        );
+
+        if (
+          verification.data?.status === "completed" &&
+          verification.data?.wifi_credentials
+        ) {
+          return verification.data;
+        }
+
+        if (verification.data?.status === "failed") {
+          throw new Error(
+            verification.data?.message || "Payment verification failed"
+          );
+        }
+      } catch (error) {
+        const status = error?.response?.status;
+
+        if (status && status >= 400 && status < 500 && status !== 408) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error(
+      "Payment confirmation is taking longer than expected. Do not pay again; reconnect and check the same transaction."
+    );
+  };
+
   const handlePurchase = async () => {
     if (!selectedPackage) {
       toast.error("Please select a package");
@@ -139,6 +233,18 @@ const CaptivePortal = () => {
 
       if (response.data.success) {
         toast.success(response.data.message || "STK Push sent! Check your phone.");
+
+        const reference = response.data.reference;
+        if (!reference) {
+          throw new Error("Payment reference was not returned.");
+        }
+
+        const completedPayment = await verifyPaymentUntilComplete(reference);
+        toast.success("Payment confirmed. Connecting you to WiFi…");
+
+        submitCredentialsToMikrotik(
+          completedPayment.wifi_credentials
+        );
       } else {
         toast.error(response.data.message || "Payment failed");
       }
