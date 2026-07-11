@@ -286,3 +286,26 @@ def mask_value(
         "*" * (len(normalized) - visible_characters)
         + normalized[-visible_characters:]
     )
+
+
+class OwnerGatewayOwnerCreate(StrictModel):
+    """
+    Owner-facing creation request.
+
+    Owner identity, lifecycle status and verification state are controlled
+    by CAIWAVE and are not accepted from the browser.
+    """
+
+    configuration: OwnerGatewayConfiguration
+
+
+class OwnerGatewayOwnerUpdate(StrictModel):
+    """
+    Owner-facing update request.
+
+    Owners may replace their configuration or suspend a gateway. They
+    cannot self-verify or self-activate a gateway.
+    """
+
+    configuration: Optional[OwnerGatewayConfiguration] = None
+    status: Optional[Literal["draft", "suspended"]] = None

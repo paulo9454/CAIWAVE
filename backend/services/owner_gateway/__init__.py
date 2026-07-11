@@ -10,10 +10,14 @@ from backend.services.owner_gateway.repository import (
     OwnerGatewayRepository,
 )
 from backend.services.owner_gateway.service import OwnerGatewayService
+from backend.services.owner_gateway.router import (
+    create_owner_gateway_router,
+)
 
 __all__ = [
     "OwnerGatewayAlreadyExists",
     "OwnerGatewayNotFound",
     "OwnerGatewayRepository",
     "OwnerGatewayService",
+    "create_owner_gateway_router",
 ]
