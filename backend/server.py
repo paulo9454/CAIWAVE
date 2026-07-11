@@ -2779,7 +2779,40 @@ async def client_pay_wifi_paystack(
     result = await paystack_service.charge_mobile_money(charge_request)
     
     if not result.get("status"):
-        raise HTTPException(status_code=400, detail=result.get("message", "Failed to send STK Push"))
+        failure_data = result.get("data") or {}
+        failure_message = (
+            failure_data.get("message")
+            or result.get("message")
+            or "Failed to send STK Push"
+        )
+        failure_code = result.get("code")
+        failure_type = result.get("type")
+
+        await db.paystack_transactions.update_one(
+            {"id": transaction_id},
+            {"$set": {
+                "status": "failed",
+                "failure_reason": failure_message,
+                "failure_code": failure_code,
+                "failure_type": failure_type,
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+                "provider_response": {
+                    "message": result.get("message"),
+                    "code": failure_code,
+                    "type": failure_type,
+                    "data_status": failure_data.get("status"),
+                },
+            }},
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "M-Pesa could not start this payment. "
+                "Please wait a few minutes and try again, "
+                "or use Paystack Checkout."
+            ),
+        )
     
     await db.paystack_transactions.update_one(
         {"id": transaction_id},
