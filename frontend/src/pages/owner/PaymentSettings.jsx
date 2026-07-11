@@ -3,12 +3,14 @@ import axios from "axios";
 import { toast } from "sonner";
 import {
   AlertCircle,
-  Banknote,
   Building2,
-  CheckCircle,
+  CheckCircle2,
+  ChevronDown,
   CreditCard,
   Loader2,
+  LockKeyhole,
   Save,
+  ShieldCheck,
   Smartphone,
 } from "lucide-react";
 
@@ -18,70 +20,48 @@ import { API_URL } from "../../lib/utils";
 import { getAuthToken } from "../../lib/auth";
 
 
-const EMPTY_FORM = {
-  status: "draft",
-  default_customer_method: "paystack",
-
-  paystack_enabled: true,
-  paystack_subaccount_code: "",
-
-  paybill_enabled: false,
-  paybill_number: "",
-  paybill_business_name: "",
-  paybill_reference_template: "HOTSPOT-{hotspot_id}",
-
-  till_enabled: false,
-  till_number: "",
-  till_business_name: "",
-
-  bank_enabled: false,
-  bank_name: "",
-  bank_branch: "",
-  bank_account_name: "",
-  bank_account_number: "",
-
-  settlement_method: "paystack_subaccount",
-};
-
-
-const METHOD_OPTIONS = [
+const GATEWAYS = [
   {
     value: "paystack",
-    label: "Paystack Checkout",
+    label: "Paystack",
+    description: "Automated checkout, verification and owner settlement.",
+    icon: CreditCard,
+    available: true,
   },
   {
-    value: "mpesa_paybill",
-    label: "M-Pesa Paybill",
+    value: "mpesa_daraja",
+    label: "Safaricom M-Pesa API",
+    description: "Direct STK Push through the owner's Daraja account.",
+    icon: Smartphone,
+    available: false,
   },
   {
-    value: "mpesa_till",
-    label: "M-Pesa Till",
+    value: "kopokopo",
+    label: "Kopo Kopo",
+    description: "Automated M-Pesa collections through Kopo Kopo.",
+    icon: Smartphone,
+    available: false,
   },
   {
-    value: "bank_transfer",
-    label: "Bank Transfer",
+    value: "bank_paybill_api",
+    label: "Bank Paybill API",
+    description: "Automated bank Paybill through a supported bank API.",
+    icon: Building2,
+    available: false,
   },
 ];
 
 
-const SETTLEMENT_OPTIONS = [
-  {
-    value: "paystack_subaccount",
-    label: "Paystack Subaccount",
-  },
-  {
-    value: "direct_paybill",
-    label: "Direct Paybill",
-  },
-  {
-    value: "direct_till",
-    label: "Direct Till",
-  },
-  {
-    value: "bank_account",
-    label: "Bank Account",
-  },
-];
+const EMPTY_FORM = {
+  gateway: "paystack",
+  business_name: "",
+  contact_email: "",
+  contact_phone: "",
+  uses_caiwave_platform_account: true,
+  paystack_subaccount_code: "",
+  settlement_bank_name: "",
+  settlement_account_last4: "",
+};
 
 
 const PaymentSettings = () => {
@@ -89,16 +69,23 @@ const PaymentSettings = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editingSensitiveDetails, setEditingSensitiveDetails] = useState(false);
+  const [replacingConfiguration, setReplacingConfiguration] = useState(false);
 
-  const headers = useMemo(() => ({
-    Authorization: `Bearer ${getAuthToken()}`,
-  }), []);
+  const headers = useMemo(
+    () => ({
+      Authorization: `Bearer ${getAuthToken()}`,
+    }),
+    [],
+  );
 
   useEffect(() => {
-    loadProfile();
+    loadGateway();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectedGateway = GATEWAYS.find(
+    (gateway) => gateway.value === form.gateway,
+  );
 
   const setField = (field, value) => {
     setForm((current) => ({
@@ -107,57 +94,32 @@ const PaymentSettings = () => {
     }));
   };
 
-  const loadProfile = async () => {
+  const loadGateway = async () => {
     setLoading(true);
 
     try {
       const response = await axios.get(
-        `${API_URL}/owner/payment-profile`,
+        `${API_URL}/owner/payment-gateway`,
         { headers },
       );
 
       const data = response.data;
+      const configuration = data.configuration || {};
+
       setProfile(data);
 
-      setForm((current) => ({
-        ...current,
-        status: data.status || "draft",
-        default_customer_method:
-          data.default_customer_method || "paystack",
-
-        paystack_enabled:
-          Boolean(data.customer_payment_methods?.paystack?.enabled),
-
-        paybill_enabled:
-          Boolean(data.customer_payment_methods?.mpesa_paybill?.enabled),
-        paybill_business_name:
-          data.customer_payment_methods?.mpesa_paybill?.business_name || "",
-        paybill_reference_template:
-          data.customer_payment_methods?.mpesa_paybill
-            ?.account_reference_template || "HOTSPOT-{hotspot_id}",
-
-        till_enabled:
-          Boolean(data.customer_payment_methods?.mpesa_till?.enabled),
-        till_business_name:
-          data.customer_payment_methods?.mpesa_till?.business_name || "",
-
-        bank_enabled:
-          Boolean(data.customer_payment_methods?.bank_transfer?.enabled),
-        bank_name:
-          data.customer_payment_methods?.bank_transfer?.bank_name || "",
-        bank_branch:
-          data.customer_payment_methods?.bank_transfer?.branch || "",
-        bank_account_name:
-          data.customer_payment_methods?.bank_transfer?.account_name || "",
-
-        settlement_method:
-          data.settlement?.method || "paystack_subaccount",
-
+      setForm({
+        gateway: configuration.gateway || "paystack",
+        business_name: configuration.business_name || "",
+        contact_email: configuration.contact_email || "",
+        contact_phone: "",
+        uses_caiwave_platform_account:
+          configuration.uses_caiwave_platform_account !== false,
         paystack_subaccount_code: "",
-        paybill_number: "",
-        till_number: "",
-        bank_account_number: "",
-      }));
+        settlement_bank_name: configuration.settlement_bank_name || "",
+        settlement_account_last4:
+          configuration.settlement_account_last4 || "",
+      });
     } catch (error) {
       if (error.response?.status === 404) {
         setProfile(null);
@@ -165,7 +127,7 @@ const PaymentSettings = () => {
       } else {
         toast.error(
           error.response?.data?.detail
-          || "Failed to load payment settings",
+          || "Failed to load payment gateway settings",
         );
       }
     } finally {
@@ -173,252 +135,136 @@ const PaymentSettings = () => {
     }
   };
 
-  const enabledMethods = useMemo(() => ({
-    paystack: form.paystack_enabled,
-    mpesa_paybill: form.paybill_enabled,
-    mpesa_till: form.till_enabled,
-    bank_transfer: form.bank_enabled,
-  }), [form]);
-
-  const validateForm = () => {
-    if (!Object.values(enabledMethods).some(Boolean)) {
-      return "Enable at least one customer payment method.";
+  const validatePaystack = () => {
+    if (!form.business_name.trim()) {
+      return "Enter the business name.";
     }
 
-    if (!enabledMethods[form.default_customer_method]) {
-      return "The default customer method must be enabled.";
+    if (!form.contact_email.trim()) {
+      return "Enter the contact email.";
+    }
+
+    if ((!profile || replacingConfiguration) && !form.contact_phone.trim()) {
+      return "Enter the contact phone number.";
     }
 
     if (
-      form.paystack_enabled
-      && (!profile || editingSensitiveDetails)
+      !form.uses_caiwave_platform_account
+      && (!profile || replacingConfiguration)
       && !form.paystack_subaccount_code.trim()
     ) {
       return "Enter the Paystack subaccount code.";
     }
 
-    if (form.paybill_enabled) {
-      if (
-        (!profile || editingSensitiveDetails)
-        && !form.paybill_number.trim()
-      ) {
-        return "Enter the M-Pesa Paybill number.";
-      }
-
-      if (!form.paybill_reference_template.trim()) {
-        return "Enter a Paybill account-reference template.";
-      }
-    }
-
-    if (
-      form.till_enabled
-      && (!profile || editingSensitiveDetails)
-      && !form.till_number.trim()
-    ) {
-      return "Enter the M-Pesa Till number.";
-    }
-
-    if (form.bank_enabled) {
-      if (!form.bank_name.trim()) {
-        return "Enter the bank name.";
-      }
-
-      if (!form.bank_account_name.trim()) {
-        return "Enter the bank account name.";
-      }
-
-      if (
-        (!profile || editingSensitiveDetails)
-        && !form.bank_account_number.trim()
-      ) {
-        return "Enter the bank account number.";
-      }
-    }
-
-    if (
-      form.settlement_method === "direct_paybill"
-      && !form.paybill_enabled
-    ) {
-      return "Direct Paybill settlement requires Paybill to be enabled.";
-    }
-
-    if (
-      form.settlement_method === "direct_till"
-      && !form.till_enabled
-    ) {
-      return "Direct Till settlement requires Till to be enabled.";
-    }
-
-    if (
-      form.settlement_method === "bank_account"
-      && !form.bank_enabled
-    ) {
-      return "Bank settlement requires bank transfer to be enabled.";
-    }
-
     return null;
   };
 
-  const buildCreatePayload = () => ({
-    owner_id: "self",
-    status: form.status,
-    default_customer_method: form.default_customer_method,
-
-    customer_payment_methods: {
-      paystack: {
-        enabled: form.paystack_enabled,
-        checkout_mode: "hosted",
-        verification_mode: "automatic",
-      },
-
-      mpesa_paybill: {
-        enabled: form.paybill_enabled,
-        paybill_number:
-          form.paybill_enabled ? form.paybill_number.trim() : null,
-        business_name:
-          form.paybill_business_name.trim() || null,
-        account_reference_template:
-          form.paybill_enabled
-            ? form.paybill_reference_template.trim()
-            : null,
-        verification_mode: "manual",
-      },
-
-      mpesa_till: {
-        enabled: form.till_enabled,
-        till_number:
-          form.till_enabled ? form.till_number.trim() : null,
-        business_name:
-          form.till_business_name.trim() || null,
-        verification_mode: "manual",
-      },
-
-      bank_transfer: {
-        enabled: form.bank_enabled,
-        bank_name:
-          form.bank_enabled ? form.bank_name.trim() : null,
-        branch:
-          form.bank_branch.trim() || null,
-        account_name:
-          form.bank_enabled ? form.bank_account_name.trim() : null,
-        account_number:
-          form.bank_enabled ? form.bank_account_number.trim() : null,
-        verification_mode: "manual",
-      },
-    },
-
-    settlement: {
-      method: form.settlement_method,
-
-      paystack_subaccount_code:
-        form.settlement_method === "paystack_subaccount"
-          ? form.paystack_subaccount_code.trim()
-          : null,
-
-      paybill_number:
-        form.settlement_method === "direct_paybill"
-          ? form.paybill_number.trim()
-          : null,
-
-      till_number:
-        form.settlement_method === "direct_till"
-          ? form.till_number.trim()
-          : null,
-
-      bank_name:
-        form.settlement_method === "bank_account"
-          ? form.bank_name.trim()
-          : null,
-
-      bank_branch:
-        form.settlement_method === "bank_account"
-          ? form.bank_branch.trim() || null
-          : null,
-
-      bank_account_name:
-        form.settlement_method === "bank_account"
-          ? form.bank_account_name.trim()
-          : null,
-
-      bank_account_number:
-        form.settlement_method === "bank_account"
-          ? form.bank_account_number.trim()
-          : null,
-    },
+  const buildPaystackConfiguration = () => ({
+    gateway: "paystack",
+    business_name: form.business_name.trim(),
+    contact_email: form.contact_email.trim(),
+    contact_phone: form.contact_phone.trim(),
+    uses_caiwave_platform_account:
+      form.uses_caiwave_platform_account,
+    paystack_subaccount_code:
+      form.uses_caiwave_platform_account
+        ? null
+        : form.paystack_subaccount_code.trim(),
+    settlement_bank_name:
+      form.settlement_bank_name.trim() || null,
+    settlement_account_last4:
+      form.settlement_account_last4.trim() || null,
   });
 
-  const saveProfile = async (event) => {
+  const saveGateway = async (event) => {
     event.preventDefault();
 
-    const validationError = validateForm();
+    if (!selectedGateway?.available) {
+      toast.error(
+        "This gateway requires the secure credential setup module, "
+        + "which is not enabled yet.",
+      );
+      return;
+    }
+
+    const validationError = validatePaystack();
 
     if (validationError) {
       toast.error(validationError);
       return;
     }
 
-    if (profile && !editingSensitiveDetails) {
-      try {
-        setSaving(true);
-
-        const response = await axios.put(
-          `${API_URL}/owner/payment-profile`,
-          {
-            status: form.status,
-            default_customer_method: form.default_customer_method,
-          },
-          { headers },
-        );
-
-        setProfile(response.data);
-        toast.success("Payment profile updated.");
-      } catch (error) {
-        toast.error(
-          error.response?.data?.detail
-          || "Failed to update payment profile",
-        );
-      } finally {
-        setSaving(false);
-      }
-
+    if (profile && !replacingConfiguration) {
+      toast.error(
+        "Choose Replace gateway configuration before changing "
+        + "gateway credentials.",
+      );
       return;
     }
 
-    const payload = buildCreatePayload();
+    const payload = {
+      configuration: buildPaystackConfiguration(),
+    };
 
     try {
       setSaving(true);
 
       const response = profile
         ? await axios.put(
-          `${API_URL}/owner/payment-profile`,
-          {
-            status: payload.status,
-            default_customer_method: payload.default_customer_method,
-            customer_payment_methods: payload.customer_payment_methods,
-            settlement: payload.settlement,
-          },
+          `${API_URL}/owner/payment-gateway`,
+          payload,
           { headers },
         )
         : await axios.post(
-          `${API_URL}/owner/payment-profile`,
+          `${API_URL}/owner/payment-gateway`,
           payload,
           { headers },
         );
 
       setProfile(response.data);
-      setEditingSensitiveDetails(false);
+      setReplacingConfiguration(false);
+
       toast.success(
         profile
-          ? "Payment details updated successfully."
-          : "Payment profile created successfully.",
+          ? "Gateway configuration updated. Verification is required."
+          : "Payment gateway saved as draft.",
       );
 
-      await loadProfile();
+      await loadGateway();
+    } catch (error) {
+      const detail = error.response?.data?.detail;
+
+      if (Array.isArray(detail)) {
+        toast.error(
+          detail
+            .map((item) => item.msg)
+            .filter(Boolean)
+            .join(", "),
+        );
+      } else {
+        toast.error(detail || "Failed to save payment gateway");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const suspendGateway = async () => {
+    try {
+      setSaving(true);
+
+      const response = await axios.put(
+        `${API_URL}/owner/payment-gateway`,
+        { status: "suspended" },
+        { headers },
+      );
+
+      setProfile(response.data);
+      toast.success("Payment gateway suspended.");
     } catch (error) {
       toast.error(
         error.response?.data?.detail
-        || "Failed to save payment profile",
+        || "Failed to suspend payment gateway",
       );
     } finally {
       setSaving(false);
@@ -427,370 +273,383 @@ const PaymentSettings = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
+      <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6" data-testid="payment-settings-page">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Payment Settings</h1>
+        <h1 className="text-2xl font-bold">
+          Payment Gateway Settings
+        </h1>
+
         <p className="mt-1 text-neutral-400">
-          Configure how customers pay and where your hotspot revenue is received.
+          Choose how CAIWAVE processes customer payments and settles
+          hotspot revenue to your account.
         </p>
       </div>
 
-      <div className={`rounded-xl border p-5 ${
-        profile?.status === "active"
-          ? "border-green-500/30 bg-green-500/10"
-          : "border-yellow-500/30 bg-yellow-500/10"
-      }`}>
-        <div className="flex items-start gap-3">
-          {profile?.status === "active" ? (
-            <CheckCircle className="mt-1 h-6 w-6 text-green-400" />
-          ) : (
-            <AlertCircle className="mt-1 h-6 w-6 text-yellow-400" />
-          )}
-
-          <div>
-            <h3 className="font-semibold">
-              {profile
-                ? `Payment profile: ${profile.status}`
-                : "Payment profile not configured"}
-            </h3>
-
-            <p className="mt-1 text-sm text-neutral-400">
-              Manual Paybill, Till and bank payments will not automatically
-              activate internet until payment verification is integrated.
-            </p>
-          </div>
-        </div>
-      </div>
+      <CustomerExperienceNotice />
 
       {profile && (
-        <div className="dashboard-card p-5">
-          <h3 className="mb-4 font-semibold">Saved Payment Details</h3>
-
-          <div className="grid gap-3 text-sm md:grid-cols-2">
-            <p>
-              Default method:{" "}
-              <span className="font-medium">
-                {profile.default_customer_method}
-              </span>
-            </p>
-
-            <p>
-              Settlement:{" "}
-              <span className="font-medium">
-                {profile.settlement?.method}
-              </span>
-            </p>
-
-            {profile.settlement?.paystack_subaccount_masked && (
-              <p>
-                Paystack account:{" "}
-                {profile.settlement.paystack_subaccount_masked}
-              </p>
-            )}
-
-            {profile.settlement?.paybill_number_masked && (
-              <p>
-                Paybill: {profile.settlement.paybill_number_masked}
-              </p>
-            )}
-
-            {profile.settlement?.till_number_masked && (
-              <p>
-                Till: {profile.settlement.till_number_masked}
-              </p>
-            )}
-
-            {profile.settlement?.bank_account_number_masked && (
-              <p>
-                Bank account:{" "}
-                {profile.settlement.bank_account_number_masked}
-              </p>
-            )}
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4"
-            onClick={() => setEditingSensitiveDetails((current) => !current)}
-          >
-            {editingSensitiveDetails
-              ? "Cancel sensitive detail update"
-              : "Replace payment details"}
-          </Button>
-        </div>
+        <GatewayStatusCard
+          profile={profile}
+          onReplace={() => setReplacingConfiguration(true)}
+          onCancelReplace={() => setReplacingConfiguration(false)}
+          replacingConfiguration={replacingConfiguration}
+          onSuspend={suspendGateway}
+          saving={saving}
+        />
       )}
 
-      <form onSubmit={saveProfile} className="space-y-6">
+      <form onSubmit={saveGateway} className="space-y-6">
         <div className="dashboard-card p-6">
-          <h3 className="mb-4 flex items-center gap-2 font-semibold">
-            <CreditCard className="h-5 w-5 text-blue-400" />
-            Customer Payment Methods
-          </h3>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <MethodToggle
-              label="Paystack Checkout"
-              description="Hosted checkout with supported Paystack channels."
-              checked={form.paystack_enabled}
-              onChange={(checked) => setField("paystack_enabled", checked)}
-            />
-
-            <MethodToggle
-              label="M-Pesa Paybill"
-              description="Customer pays using your Paybill and account reference."
-              checked={form.paybill_enabled}
-              onChange={(checked) => setField("paybill_enabled", checked)}
-            />
-
-            <MethodToggle
-              label="M-Pesa Till"
-              description="Customer pays directly to your Buy Goods Till."
-              checked={form.till_enabled}
-              onChange={(checked) => setField("till_enabled", checked)}
-            />
-
-            <MethodToggle
-              label="Bank Transfer"
-              description="Display your bank-transfer instructions."
-              checked={form.bank_enabled}
-              onChange={(checked) => setField("bank_enabled", checked)}
-            />
-          </div>
-
-          <div className="mt-5">
-            <label className="mb-1 block text-sm font-medium">
-              Default customer payment method
-            </label>
-
-            <select
-              value={form.default_customer_method}
-              onChange={(event) => {
-                setField("default_customer_method", event.target.value);
-              }}
-              className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2"
-            >
-              {METHOD_OPTIONS
-                .filter((option) => enabledMethods[option.value])
-                .map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
-
-        {form.paystack_enabled && (!profile || editingSensitiveDetails) && (
-          <PaymentSection
-            icon={CreditCard}
-            title="Paystack Settlement"
-          >
-            <Field
-              label="Paystack Subaccount Code"
-              value={form.paystack_subaccount_code}
-              onChange={(value) => {
-                setField("paystack_subaccount_code", value);
-              }}
-              placeholder="ACCT_xxxxxxxxx"
-            />
-          </PaymentSection>
-        )}
-
-        {form.paybill_enabled && (
-          <PaymentSection icon={Smartphone} title="M-Pesa Paybill">
-            {(!profile || editingSensitiveDetails) && (
-              <Field
-                label="Paybill Number"
-                value={form.paybill_number}
-                onChange={(value) => setField("paybill_number", value)}
-                placeholder="123456"
-              />
-            )}
-
-            <Field
-              label="Business Name"
-              value={form.paybill_business_name}
-              onChange={(value) => {
-                setField("paybill_business_name", value);
-              }}
-              placeholder="Your business name"
-            />
-
-            <Field
-              label="Account Reference Template"
-              value={form.paybill_reference_template}
-              onChange={(value) => {
-                setField("paybill_reference_template", value);
-              }}
-              placeholder="HOTSPOT-{hotspot_id}"
-            />
-          </PaymentSection>
-        )}
-
-        {form.till_enabled && (
-          <PaymentSection icon={Smartphone} title="M-Pesa Till">
-            {(!profile || editingSensitiveDetails) && (
-              <Field
-                label="Till Number"
-                value={form.till_number}
-                onChange={(value) => setField("till_number", value)}
-                placeholder="123456"
-              />
-            )}
-
-            <Field
-              label="Business Name"
-              value={form.till_business_name}
-              onChange={(value) => {
-                setField("till_business_name", value);
-              }}
-              placeholder="Your business name"
-            />
-          </PaymentSection>
-        )}
-
-        {form.bank_enabled && (
-          <PaymentSection icon={Building2} title="Bank Account">
-            <Field
-              label="Bank Name"
-              value={form.bank_name}
-              onChange={(value) => setField("bank_name", value)}
-              placeholder="Bank name"
-            />
-
-            <Field
-              label="Branch"
-              value={form.bank_branch}
-              onChange={(value) => setField("bank_branch", value)}
-              placeholder="Branch"
-            />
-
-            <Field
-              label="Account Name"
-              value={form.bank_account_name}
-              onChange={(value) => {
-                setField("bank_account_name", value);
-              }}
-              placeholder="Account holder name"
-            />
-
-            {(!profile || editingSensitiveDetails) && (
-              <Field
-                label="Account Number"
-                value={form.bank_account_number}
-                onChange={(value) => {
-                  setField("bank_account_number", value);
-                }}
-                placeholder="Account number"
-              />
-            )}
-          </PaymentSection>
-        )}
-
-        <div className="dashboard-card p-6">
-          <h3 className="mb-4 flex items-center gap-2 font-semibold">
-            <Banknote className="h-5 w-5 text-green-400" />
-            Revenue Settlement
-          </h3>
-
-          <label className="mb-1 block text-sm font-medium">
-            Where hotspot revenue should be received
+          <label className="mb-2 block text-sm font-medium">
+            Payment Gateway
           </label>
 
-          <select
-            value={form.settlement_method}
-            onChange={(event) => {
-              setField("settlement_method", event.target.value);
-            }}
-            disabled={Boolean(profile && !editingSensitiveDetails)}
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 disabled:opacity-60"
-          >
-            {SETTLEMENT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <div className="mt-4">
-            <label className="mb-1 block text-sm font-medium">
-              Profile Status
-            </label>
-
+          <div className="relative">
             <select
-              value={form.status}
-              onChange={(event) => setField("status", event.target.value)}
-              className="w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2"
+              value={form.gateway}
+              disabled={Boolean(profile && !replacingConfiguration)}
+              onChange={(event) => {
+                const gateway = GATEWAYS.find(
+                  (item) => item.value === event.target.value,
+                );
+
+                if (!gateway?.available) {
+                  toast.info(
+                    `${gateway?.label} requires secure API credential `
+                    + "storage before it can be enabled.",
+                  );
+                }
+
+                setField("gateway", event.target.value);
+              }}
+              className="w-full appearance-none rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 pr-10 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <option value="draft">Draft</option>
-              <option value="active">Active</option>
-              <option value="suspended">Suspended</option>
+              {GATEWAYS.map((gateway) => (
+                <option
+                  key={gateway.value}
+                  value={gateway.value}
+                >
+                  {gateway.label}
+                  {gateway.available ? "" : " — Secure setup pending"}
+                </option>
+              ))}
             </select>
+
+            <ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-5 w-5 text-neutral-500" />
           </div>
+
+          <GatewayDescription gateway={selectedGateway} />
         </div>
 
-        <Button
-          type="submit"
-          disabled={saving}
-          className="w-full"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              {profile ? "Update Payment Profile" : "Create Payment Profile"}
-            </>
-          )}
-        </Button>
+        {form.gateway === "paystack" && (
+          <PaystackForm
+            form={form}
+            setField={setField}
+            profile={profile}
+            replacingConfiguration={replacingConfiguration}
+          />
+        )}
+
+        {form.gateway !== "paystack" && (
+          <SecureSetupPending gateway={selectedGateway} />
+        )}
+
+        {(!profile || replacingConfiguration) && (
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={saving || !selectedGateway?.available}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="mr-2 h-4 w-4" />
+                {profile
+                  ? "Replace Gateway Configuration"
+                  : "Save Gateway as Draft"}
+              </>
+            )}
+          </Button>
+        )}
       </form>
     </div>
   );
 };
 
 
-const MethodToggle = ({
-  label,
-  description,
-  checked,
-  onChange,
-}) => (
-  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-700 p-4">
-    <input
-      type="checkbox"
-      checked={checked}
-      onChange={(event) => onChange(event.target.checked)}
-      className="mt-1"
-    />
+const CustomerExperienceNotice = () => (
+  <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-5">
+    <div className="flex items-start gap-3">
+      <Smartphone className="mt-0.5 h-6 w-6 text-blue-400" />
 
-    <div>
-      <p className="font-medium">{label}</p>
-      <p className="mt-1 text-xs text-neutral-400">{description}</p>
+      <div>
+        <h3 className="font-semibold">
+          Simple customer payment experience
+        </h3>
+
+        <p className="mt-1 text-sm text-neutral-300">
+          Customers only choose a package, enter their phone number and
+          click Pay. CAIWAVE starts the STK prompt automatically using
+          the gateway configured here.
+        </p>
+      </div>
     </div>
-  </label>
+  </div>
 );
 
 
-const PaymentSection = ({ icon: Icon, title, children }) => (
-  <div className="dashboard-card p-6">
-    <h3 className="mb-4 flex items-center gap-2 font-semibold">
-      <Icon className="h-5 w-5 text-blue-400" />
-      {title}
-    </h3>
+const GatewayStatusCard = ({
+  profile,
+  onReplace,
+  onCancelReplace,
+  replacingConfiguration,
+  onSuspend,
+  saving,
+}) => {
+  const isVerified = profile.verification_status === "verified";
+  const isActive = profile.status === "active";
 
-    <div className="grid gap-4 md:grid-cols-2">
-      {children}
+  return (
+    <div className={`rounded-xl border p-5 ${
+      isVerified
+        ? "border-green-500/30 bg-green-500/10"
+        : "border-yellow-500/30 bg-yellow-500/10"
+    }`}>
+      <div className="flex flex-col justify-between gap-4 md:flex-row">
+        <div className="flex items-start gap-3">
+          {isVerified ? (
+            <CheckCircle2 className="mt-0.5 h-6 w-6 text-green-400" />
+          ) : (
+            <AlertCircle className="mt-0.5 h-6 w-6 text-yellow-400" />
+          )}
+
+          <div>
+            <h3 className="font-semibold">
+              {profile.configuration?.business_name || "Payment Gateway"}
+            </h3>
+
+            <p className="mt-1 text-sm text-neutral-300">
+              Gateway: {profile.configuration?.gateway}
+            </p>
+
+            <p className="text-sm text-neutral-400">
+              Status: {profile.status} · Verification:{" "}
+              {profile.verification_status}
+            </p>
+
+            {profile.verification_message && (
+              <p className="mt-2 text-sm text-neutral-400">
+                {profile.verification_message}
+              </p>
+            )}
+
+            {isActive && (
+              <p className="mt-2 text-sm text-green-300">
+                This gateway is ready to process hotspot payments.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={
+              replacingConfiguration
+                ? onCancelReplace
+                : onReplace
+            }
+          >
+            {replacingConfiguration
+              ? "Cancel replacement"
+              : "Replace configuration"}
+          </Button>
+
+          {profile.status !== "suspended" && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={onSuspend}
+            >
+              Suspend
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+const GatewayDescription = ({ gateway }) => {
+  if (!gateway) return null;
+
+  const Icon = gateway.icon;
+
+  return (
+    <div className="mt-4 flex items-start gap-3 rounded-lg border border-neutral-800 bg-neutral-950/40 p-4">
+      <Icon className="mt-0.5 h-5 w-5 text-blue-400" />
+
+      <div>
+        <p className="font-medium">{gateway.label}</p>
+        <p className="mt-1 text-sm text-neutral-400">
+          {gateway.description}
+        </p>
+
+        {!gateway.available && (
+          <p className="mt-2 flex items-center gap-2 text-xs text-yellow-400">
+            <LockKeyhole className="h-4 w-4" />
+            Secure API credential storage must be completed first.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+const PaystackForm = ({
+  form,
+  setField,
+  profile,
+  replacingConfiguration,
+}) => {
+  const showSensitiveFields = !profile || replacingConfiguration;
+
+  return (
+    <div className="dashboard-card p-6">
+      <h3 className="mb-5 flex items-center gap-2 font-semibold">
+        <ShieldCheck className="h-5 w-5 text-green-400" />
+        Paystack Gateway Details
+      </h3>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field
+          label="Business Name"
+          value={form.business_name}
+          onChange={(value) => setField("business_name", value)}
+          placeholder="Your business name"
+          disabled={Boolean(profile && !replacingConfiguration)}
+        />
+
+        <Field
+          label="Contact Email"
+          type="email"
+          value={form.contact_email}
+          onChange={(value) => setField("contact_email", value)}
+          placeholder="owner@example.com"
+          disabled={Boolean(profile && !replacingConfiguration)}
+        />
+
+        {showSensitiveFields && (
+          <Field
+            label="Contact Phone"
+            value={form.contact_phone}
+            onChange={(value) => setField("contact_phone", value)}
+            placeholder="2547XXXXXXXX"
+          />
+        )}
+
+        <Field
+          label="Settlement Bank"
+          value={form.settlement_bank_name}
+          onChange={(value) => {
+            setField("settlement_bank_name", value);
+          }}
+          placeholder="Optional bank name"
+          disabled={Boolean(profile && !replacingConfiguration)}
+        />
+
+        <Field
+          label="Settlement Account Last 4 Digits"
+          value={form.settlement_account_last4}
+          onChange={(value) => {
+            setField("settlement_account_last4", value);
+          }}
+          placeholder="1234"
+          maxLength={4}
+          disabled={Boolean(profile && !replacingConfiguration)}
+        />
+      </div>
+
+      <label className="mt-5 flex items-start gap-3 rounded-lg border border-neutral-700 p-4">
+        <input
+          type="checkbox"
+          checked={form.uses_caiwave_platform_account}
+          disabled={Boolean(profile && !replacingConfiguration)}
+          onChange={(event) => {
+            setField(
+              "uses_caiwave_platform_account",
+              event.target.checked,
+            );
+          }}
+          className="mt-1"
+        />
+
+        <div>
+          <p className="font-medium">
+            Use CAIWAVE Paystack processing
+          </p>
+
+          <p className="mt-1 text-sm text-neutral-400">
+            CAIWAVE processes the STK payment and settles the owner's
+            revenue through an approved Paystack arrangement.
+          </p>
+        </div>
+      </label>
+
+      {!form.uses_caiwave_platform_account && showSensitiveFields && (
+        <div className="mt-4">
+          <Field
+            label="Paystack Subaccount Code"
+            value={form.paystack_subaccount_code}
+            onChange={(value) => {
+              setField("paystack_subaccount_code", value);
+            }}
+            placeholder="ACCT_xxxxxxxxx"
+          />
+        </div>
+      )}
+
+      <p className="mt-5 text-xs text-neutral-500">
+        Saving creates a draft gateway. CAIWAVE must verify the gateway
+        before it can become active.
+      </p>
+    </div>
+  );
+};
+
+
+const SecureSetupPending = ({ gateway }) => (
+  <div className="dashboard-card p-6">
+    <div className="flex items-start gap-3">
+      <LockKeyhole className="mt-0.5 h-6 w-6 text-yellow-400" />
+
+      <div>
+        <h3 className="font-semibold">
+          {gateway?.label} secure setup is not enabled yet
+        </h3>
+
+        <p className="mt-2 text-sm text-neutral-400">
+          This provider requires encrypted credential storage, gateway
+          verification and signed callback handling. CAIWAVE will not
+          accept raw API secrets through this page until that security
+          layer is complete.
+        </p>
+      </div>
     </div>
   </div>
 );
@@ -801,14 +660,20 @@ const Field = ({
   value,
   onChange,
   placeholder,
+  type = "text",
+  maxLength,
+  disabled = false,
 }) => (
   <div>
     <label className="mb-1 block text-sm font-medium">{label}</label>
 
     <Input
+      type={type}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
+      maxLength={maxLength}
+      disabled={disabled}
     />
   </div>
 );
