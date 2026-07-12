@@ -30,7 +30,6 @@ class PlatformPaymentType(str, Enum):
     WIFI_PACKAGE = "wifi_package"
     OWNER_SUBSCRIPTION = "owner_subscription"
     ADVERTISER_PACKAGE = "advertiser_package"
-    LIFETIME_HOTSPOT = "lifetime_hotspot"
 
 
 class PaymentDestination(str, Enum):
@@ -82,7 +81,6 @@ class OwnerPaymentResolver:
     PLATFORM_PAYMENT_TYPES = {
         PlatformPaymentType.OWNER_SUBSCRIPTION,
         PlatformPaymentType.ADVERTISER_PACKAGE,
-        PlatformPaymentType.LIFETIME_HOTSPOT,
     }
 
     def resolve(

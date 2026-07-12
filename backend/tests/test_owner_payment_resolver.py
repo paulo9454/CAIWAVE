@@ -83,7 +83,6 @@ def resolver():
     [
         PlatformPaymentType.OWNER_SUBSCRIPTION,
         PlatformPaymentType.ADVERTISER_PACKAGE,
-        PlatformPaymentType.LIFETIME_HOTSPOT,
     ],
 )
 def test_platform_revenue_resolves_to_caiwave(resolver, payment_type):
