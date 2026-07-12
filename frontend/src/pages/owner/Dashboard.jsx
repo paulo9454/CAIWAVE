@@ -488,7 +488,9 @@ const DashboardOverview = () => {
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-2 h-2 rounded-full ${
-                          hotspot.is_active ? "bg-green-500" : "bg-neutral-500"
+                          hotspot.status === "active"
+                            ? "bg-green-500"
+                            : "bg-neutral-500"
                         }`}
                       />
                       <span className="text-sm">{hotspot.name}</span>
@@ -717,18 +719,24 @@ const HotspotsPage = () => {
                     <HotspotLocationSummary hotspot={hotspot} />
                   </td>
                   <td>
-                    <span
-                      className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-                        hotspot.is_active ? "badge-active" : "badge-inactive"
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          hotspot.is_active ? "bg-green-500" : "bg-neutral-500"
-                        }`}
-                      />
-                      {hotspot.is_active ? "Active" : "Inactive"}
-                    </span>
+                    {(() => {
+                      const isActive = hotspot.status === "active";
+
+                      return (
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                            isActive ? "badge-active" : "badge-inactive"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isActive ? "bg-green-500" : "bg-neutral-500"
+                            }`}
+                          />
+                          {isActive ? "Active" : "Inactive"}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>{hotspot.total_sessions || 0}</td>
                   <td className="font-medium">
