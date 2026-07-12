@@ -52,6 +52,7 @@ import {
   Copy,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
+import HotspotLocationFields from "../../components/HotspotLocationFields";
 import {
   AreaChart,
   Area,
@@ -1728,10 +1729,14 @@ const AllHotspotsPage = () => {
   const [newHotspot, setNewHotspot] = useState({
     name: "",
     ssid: "",
+    country_code: "KE",
+    country_name: "Kenya",
+    county: "",
+    constituency: "",
+    ward: "",
     location_name: "",
-    address: "",
-    latitude: -1.2921,
-    longitude: 36.8219
+    latitude: null,
+    longitude: null
   });
 
   useEffect(() => {
@@ -1799,10 +1804,14 @@ const AllHotspotsPage = () => {
       setNewHotspot({
         name: "",
         ssid: "",
+        country_code: "KE",
+        country_name: "Kenya",
+        county: "",
+        constituency: "",
+        ward: "",
         location_name: "",
-        address: "",
-        latitude: -1.2921,
-        longitude: 36.8219
+        latitude: null,
+        longitude: null
       });
       fetchHotspots();
     } catch (error) {
@@ -1870,23 +1879,11 @@ const AllHotspotsPage = () => {
                   data-testid="hotspot-ssid-input"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Location Name *</label>
-                <Input
-                  value={newHotspot.location_name}
-                  onChange={(e) => setNewHotspot({...newHotspot, location_name: e.target.value})}
-                  placeholder="e.g., Nairobi CBD"
-                  required
-                  data-testid="hotspot-location-input"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Address</label>
-                <Input
-                  value={newHotspot.address}
-                  onChange={(e) => setNewHotspot({...newHotspot, address: e.target.value})}
-                  placeholder="e.g., Kimathi Street, Nairobi"
-                  data-testid="hotspot-address-input"
+              <div className="grid gap-4 md:grid-cols-2">
+                <HotspotLocationFields
+                  value={newHotspot}
+                  onChange={setNewHotspot}
+                  inputComponent={Input}
                 />
               </div>
               <div className="flex gap-4">

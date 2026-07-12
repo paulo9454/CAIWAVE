@@ -31,6 +31,7 @@ import {
   Copy,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
+import HotspotLocationFields from "../../components/HotspotLocationFields";
 import PaymentSettings from "./PaymentSettings";
 import {
   AreaChart,
@@ -521,9 +522,12 @@ const HotspotsPage = () => {
   const [formData, setFormData] = useState({
     name: "",
     ssid: "",
-    location_name: "",
-    ward: "",
+    country_code: "KE",
+    country_name: "Kenya",
+    county: "",
     constituency: "",
+    ward: "",
+    location_name: "",
   });
 
   const copyToClipboard = (text) => {
@@ -567,9 +571,12 @@ const HotspotsPage = () => {
       setFormData({
         name: "",
         ssid: "",
-        location_name: "",
-        ward: "",
+        country_code: "KE",
+        country_name: "Kenya",
+        county: "",
         constituency: "",
+        ward: "",
+        location_name: "",
       });
       fetchHotspots();
     } catch (error) {
@@ -625,19 +632,10 @@ const HotspotsPage = () => {
                 required
               />
             </div>
-            <div>
-              <label className="text-sm text-neutral-400">Location</label>
-              <input
-                type="text"
-                value={formData.location_name}
-                onChange={(e) =>
-                  setFormData({ ...formData, location_name: e.target.value })
-                }
-                className="w-full mt-1 px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-md"
-                placeholder="e.g., Nairobi CBD"
-                required
-              />
-            </div>
+            <HotspotLocationFields
+              value={formData}
+              onChange={setFormData}
+            />
           </div>
           <p className="text-sm text-neutral-500 mt-2">
             After creating your hotspot, go to "MikroTik Setup" to configure your router.
