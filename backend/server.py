@@ -25,6 +25,11 @@ from backend.services.hotspot_location import (
     HotspotLocationValidationError,
     validate_hotspot_location,
 )
+from backend.services.campaign_targeting import (
+    CampaignCoverageScope,
+    CampaignValidationError,
+    build_campaign_write_payload,
+)
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -707,12 +712,21 @@ class CampaignBase(BaseModel):
     description: Optional[str] = None
     start_date: datetime
     end_date: datetime
-    target_regions: List[str] = Field(default_factory=list)  # counties, constituencies
+
+    coverage_scope: CampaignCoverageScope = CampaignCoverageScope.NATIONAL
+    country_code: str = "KE"
+    country_name: str = "Kenya"
+    target_counties: List[str] = Field(default_factory=list)
+    target_constituencies: List[str] = Field(default_factory=list)
     target_hotspot_ids: List[str] = Field(default_factory=list)
     assigned_ad_ids: List[str] = Field(default_factory=list)
-    stream_id: Optional[str] = None  # Link to CAIWAVE TV stream
-    subsidized_uptime_id: Optional[str] = None  # Link to subsidized uptime
-    image_url: Optional[str] = None  # Campaign banner/thumbnail image
+
+    # Legacy compatibility only. New campaign writes always store this empty.
+    target_regions: List[str] = Field(default_factory=list)
+
+    stream_id: Optional[str] = None
+    subsidized_uptime_id: Optional[str] = None
+    image_url: Optional[str] = None
 
 class CampaignCreate(CampaignBase):
     pass
@@ -4145,23 +4159,73 @@ async def get_campaign(
         raise HTTPException(status_code=404, detail="Campaign not found")
     return campaign
 
+async def build_validated_campaign_payload(
+    campaign_data: CampaignCreate,
+) -> dict:
+    known_hotspot_ids = await db.hotspots.distinct("id")
+
+    assigned_ids = list(dict.fromkeys(campaign_data.assigned_ad_ids))
+    ads = await db.ads.find(
+        {"id": {"$in": assigned_ids}},
+        {"_id": 0},
+    ).to_list(None)
+
+    ads_by_id = {
+        ad["id"]: ad
+        for ad in ads
+        if ad.get("id")
+    }
+
+    try:
+        return build_campaign_write_payload(
+            name=campaign_data.name,
+            description=campaign_data.description,
+            start_date=campaign_data.start_date,
+            end_date=campaign_data.end_date,
+            coverage_scope=campaign_data.coverage_scope,
+            country_code=campaign_data.country_code,
+            country_name=campaign_data.country_name,
+            target_counties=campaign_data.target_counties,
+            target_constituencies=campaign_data.target_constituencies,
+            target_hotspot_ids=campaign_data.target_hotspot_ids,
+            assigned_ad_ids=campaign_data.assigned_ad_ids,
+            locations_by_county=KENYA_LOCATIONS,
+            known_hotspot_ids=known_hotspot_ids,
+            ads_by_id=ads_by_id,
+            stream_id=campaign_data.stream_id,
+            subsidized_uptime_id=campaign_data.subsidized_uptime_id,
+            image_url=campaign_data.image_url,
+        )
+    except CampaignValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+
 @campaigns_router.post("/", response_model=Campaign)
 async def create_campaign(
     campaign_data: CampaignCreate,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
-    """Create a new campaign - Admin only"""
+    """Create a validated Campaign Targeting v2 record."""
+    validated = await build_validated_campaign_payload(campaign_data)
+
     campaign = Campaign(
-        **campaign_data.model_dump(),
-        created_by=user["id"]
+        **validated,
+        created_by=user["id"],
     )
-    
+
     campaign_dict = campaign.model_dump()
-    campaign_dict["start_date"] = campaign_dict["start_date"].isoformat()
-    campaign_dict["end_date"] = campaign_dict["end_date"].isoformat()
-    campaign_dict["created_at"] = campaign_dict["created_at"].isoformat()
-    campaign_dict["updated_at"] = campaign_dict["updated_at"].isoformat()
-    
+    campaign_dict["coverage_scope"] = campaign.coverage_scope.value
+    campaign_dict["start_date"] = campaign.start_date.isoformat()
+    campaign_dict["end_date"] = campaign.end_date.isoformat()
+    campaign_dict["created_at"] = campaign.created_at.isoformat()
+    campaign_dict["updated_at"] = campaign.updated_at.isoformat()
+
     await db.campaigns.insert_one(campaign_dict)
     return campaign
 
@@ -4171,19 +4235,33 @@ async def update_campaign(
     campaign_data: CampaignCreate,
     user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
 ):
-    """Update a campaign - Admin only"""
-    existing = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    """Update a campaign through Campaign Targeting v2 validation."""
+    existing = await db.campaigns.find_one(
+        {"id": campaign_id},
+        {"_id": 0},
+    )
+
     if not existing:
         raise HTTPException(status_code=404, detail="Campaign not found")
-    
-    update_data = campaign_data.model_dump()
-    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    update_data["start_date"] = update_data["start_date"].isoformat()
-    update_data["end_date"] = update_data["end_date"].isoformat()
-    
-    await db.campaigns.update_one({"id": campaign_id}, {"$set": update_data})
-    
-    updated = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+
+    validated = await build_validated_campaign_payload(campaign_data)
+
+    update_data = {
+        **validated,
+        "start_date": validated["start_date"].isoformat(),
+        "end_date": validated["end_date"].isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.campaigns.update_one(
+        {"id": campaign_id},
+        {"$set": update_data},
+    )
+
+    updated = await db.campaigns.find_one(
+        {"id": campaign_id},
+        {"_id": 0},
+    )
     return updated
 
 @campaigns_router.post("/{campaign_id}/status")
