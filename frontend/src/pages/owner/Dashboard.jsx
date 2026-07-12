@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import HotspotLocationFields from "../../components/HotspotLocationFields";
+import HotspotLocationEditor from "../../components/HotspotLocationEditor";
+import HotspotLocationSummary from "../../components/HotspotLocationSummary";
 import PaymentSettings from "./PaymentSettings";
 import {
   AreaChart,
@@ -519,6 +521,7 @@ const HotspotsPage = () => {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingLocationHotspot, setEditingLocationHotspot] = useState(null);
   const [formData, setFormData] = useState({
     name: "",
     ssid: "",
@@ -656,6 +659,14 @@ const HotspotsPage = () => {
         </form>
       )}
 
+      {editingLocationHotspot && (
+        <HotspotLocationEditor
+          hotspot={editingLocationHotspot}
+          onClose={() => setEditingLocationHotspot(null)}
+          onSaved={fetchHotspots}
+        />
+      )}
+
       {/* Hotspots Table */}
       <div className="dashboard-card overflow-hidden">
         {loading ? (
@@ -681,6 +692,7 @@ const HotspotsPage = () => {
                 <th>Status</th>
                 <th>Sessions</th>
                 <th>Revenue</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -701,7 +713,9 @@ const HotspotsPage = () => {
                     </div>
                   </td>
                   <td className="font-mono text-sm text-neutral-400">{hotspot.ssid}</td>
-                  <td>{hotspot.location_name}</td>
+                  <td>
+                    <HotspotLocationSummary hotspot={hotspot} />
+                  </td>
                   <td>
                     <span
                       className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
@@ -719,6 +733,15 @@ const HotspotsPage = () => {
                   <td>{hotspot.total_sessions || 0}</td>
                   <td className="font-medium">
                     {formatCurrency(hotspot.total_revenue || 0)}
+                  </td>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingLocationHotspot(hotspot)}
+                    >
+                      Edit Location
+                    </Button>
                   </td>
                 </tr>
               ))}

@@ -53,6 +53,8 @@ import {
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import HotspotLocationFields from "../../components/HotspotLocationFields";
+import HotspotLocationEditor from "../../components/HotspotLocationEditor";
+import HotspotLocationSummary from "../../components/HotspotLocationSummary";
 import {
   AreaChart,
   Area,
@@ -1726,6 +1728,7 @@ const AllHotspotsPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [generatedMikroTik, setGeneratedMikroTik] = useState(null);
+  const [editingLocationHotspot, setEditingLocationHotspot] = useState(null);
   const [newHotspot, setNewHotspot] = useState({
     name: "",
     ssid: "",
@@ -1951,6 +1954,15 @@ const AllHotspotsPage = () => {
           </div>
         </div>
       )}
+      {editingLocationHotspot && (
+        <HotspotLocationEditor
+          hotspot={editingLocationHotspot}
+          onClose={() => setEditingLocationHotspot(null)}
+          onSaved={fetchHotspots}
+          inputComponent={Input}
+        />
+      )}
+
       <div className="dashboard-card overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
@@ -1996,7 +2008,9 @@ const AllHotspotsPage = () => {
                     </div>
                   </td>
                   <td className="font-mono text-sm text-neutral-400">{hotspot.ssid}</td>
-                  <td>{hotspot.location_name}</td>
+                  <td>
+                    <HotspotLocationSummary hotspot={hotspot} />
+                  </td>
                   <td>
                     <span
                       className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
@@ -2039,6 +2053,14 @@ const AllHotspotsPage = () => {
                         Activate
                       </Button>
                     )}
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingLocationHotspot(hotspot)}
+                    >
+                      Edit Location
+                    </Button>
 
                     <Button
                       size="sm"
