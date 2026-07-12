@@ -383,6 +383,18 @@ class HotspotBase(BaseModel):
 class HotspotCreate(HotspotBase):
     owner_id: Optional[str] = None
 
+
+class HotspotLocationUpdate(BaseModel):
+    country_code: str = "KE"
+    country_name: str = "Kenya"
+    county: str
+    constituency: str
+    ward: Optional[str] = None
+    location_name: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
 class Hotspot(HotspotBase):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1424,6 +1436,66 @@ async def create_hotspot(
         await create_invoice_for_owner(owner_id, [hotspot.id], is_trial=True)
     
     return hotspot
+
+@hotspots_router.put("/{hotspot_id}/location", response_model=Hotspot)
+async def update_hotspot_location(
+    hotspot_id: str,
+    location_data: HotspotLocationUpdate,
+    user: dict = Depends(
+        require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER])
+    ),
+):
+    query = {"id": hotspot_id}
+
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        query["owner_id"] = user["id"]
+
+    existing = await db.hotspots.find_one(query, {"_id": 0})
+
+    if not existing:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found or access denied",
+        )
+
+    try:
+        validated_location = validate_hotspot_location(
+            country_code=location_data.country_code,
+            country_name=location_data.country_name,
+            county=location_data.county,
+            constituency=location_data.constituency,
+            location_name=location_data.location_name,
+            ward=location_data.ward,
+            locations_by_county=KENYA_LOCATIONS,
+        )
+    except HotspotLocationValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    update_data = {
+        **validated_location,
+        "latitude": location_data.latitude,
+        "longitude": location_data.longitude,
+        "location_updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.hotspots.update_one(
+        {"id": hotspot_id},
+        {"$set": update_data},
+    )
+
+    updated = await db.hotspots.find_one(
+        {"id": hotspot_id},
+        {"_id": 0},
+    )
+
+    return updated
+
 
 @hotspots_router.put("/{hotspot_id}/packages", response_model=Hotspot)
 async def update_hotspot_packages(
