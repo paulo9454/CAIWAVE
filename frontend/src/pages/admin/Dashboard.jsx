@@ -55,6 +55,8 @@ import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import HotspotLocationFields from "../../components/HotspotLocationFields";
 import HotspotLocationEditor from "../../components/HotspotLocationEditor";
 import HotspotLocationSummary from "../../components/HotspotLocationSummary";
+import CampaignTargetSelector from "../../components/CampaignTargetSelector";
+import CampaignAdSelector from "../../components/CampaignAdSelector";
 import {
   AreaChart,
   Area,
@@ -2153,22 +2155,27 @@ const CampaignsPage = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(null);
-  const [formData, setFormData] = useState({
+  const emptyCampaignForm = {
     name: "",
     description: "",
     start_date: "",
     end_date: "",
-    target_regions: [],
+    coverage_scope: "national",
+    country_code: "KE",
+    country_name: "Kenya",
+    target_counties: [],
+    target_constituencies: [],
     target_hotspot_ids: [],
     assigned_ad_ids: [],
+    target_regions: [],
     image_url: "",
-  });
-  const [availableAds, setAvailableAds] = useState([]);
+  };
+
+  const [formData, setFormData] = useState(emptyCampaignForm);
   const user = getUser();
 
   useEffect(() => {
     fetchCampaigns();
-    fetchApprovedAds();
   }, []);
 
   const fetchCampaigns = async () => {
@@ -2181,17 +2188,6 @@ const CampaignsPage = () => {
       toast.error("Failed to load campaigns");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchApprovedAds = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/ads/?status=approved`, {
-        headers: { Authorization: `Bearer ${getAuthToken()}` },
-      });
-      setAvailableAds(response.data);
-    } catch (error) {
-      console.error("Failed to fetch ads");
     }
   };
 
@@ -2245,7 +2241,7 @@ const CampaignsPage = () => {
       
       setShowCreate(false);
       setEditingCampaign(null);
-      setFormData({ name: "", description: "", start_date: "", end_date: "", target_regions: [], target_hotspot_ids: [], assigned_ad_ids: [], image_url: "" });
+      setFormData(emptyCampaignForm);
       fetchCampaigns();
     } catch (error) {
       toast.error(safeError(error));
@@ -2280,13 +2276,20 @@ const CampaignsPage = () => {
   const openEdit = (campaign) => {
     setEditingCampaign(campaign);
     setFormData({
+      ...emptyCampaignForm,
       name: campaign.name,
       description: campaign.description || "",
       start_date: campaign.start_date?.split("T")[0] || "",
       end_date: campaign.end_date?.split("T")[0] || "",
-      target_regions: campaign.target_regions || [],
+      coverage_scope: campaign.coverage_scope || "national",
+      country_code: campaign.country_code || "KE",
+      country_name: campaign.country_name || "Kenya",
+      target_counties: campaign.target_counties || [],
+      target_constituencies:
+        campaign.target_constituencies || [],
       target_hotspot_ids: campaign.target_hotspot_ids || [],
       assigned_ad_ids: campaign.assigned_ad_ids || [],
+      image_url: campaign.image_url || "",
     });
     setShowCreate(true);
   };
@@ -2309,7 +2312,14 @@ const CampaignsPage = () => {
           <h1 className="text-2xl font-bold">Campaigns</h1>
           <p className="text-neutral-400 mt-1">Create and manage advertising campaigns (Admin Only)</p>
         </div>
-        <Button onClick={() => { setShowCreate(true); setEditingCampaign(null); setFormData({ name: "", description: "", start_date: "", end_date: "", target_regions: [], target_hotspot_ids: [], assigned_ad_ids: [] }); }} data-testid="create-campaign-btn">
+        <Button
+          onClick={() => {
+            setShowCreate(true);
+            setEditingCampaign(null);
+            setFormData(emptyCampaignForm);
+          }}
+          data-testid="create-campaign-btn"
+        >
           <Plus className="w-4 h-4 mr-2" /> Create Campaign
         </Button>
       </div>
@@ -2338,10 +2348,20 @@ const CampaignsPage = () => {
                 <input type="date" value={formData.end_date} onChange={(e) => setFormData({ ...formData, end_date: e.target.value })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" required />
               </div>
             </div>
-            <div>
-              <label className="block text-sm text-neutral-400 mb-1">Target Regions (comma-separated)</label>
-              <input type="text" value={formData.target_regions.join(", ")} onChange={(e) => setFormData({ ...formData, target_regions: e.target.value.split(",").map(r => r.trim()).filter(Boolean) })} className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-4 py-2" placeholder="Nairobi, Mombasa, Kisumu" />
-            </div>
+            <CampaignTargetSelector
+              value={formData}
+              onChange={setFormData}
+            />
+
+            <CampaignAdSelector
+              value={formData.assigned_ad_ids}
+              onChange={(assignedAdIds) =>
+                setFormData({
+                  ...formData,
+                  assigned_ad_ids: assignedAdIds,
+                })
+              }
+            />
             <div className="flex gap-3">
               <Button type="submit">{editingCampaign ? "Update Campaign" : "Create Campaign"}</Button>
               <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setEditingCampaign(null); }}>Cancel</Button>
