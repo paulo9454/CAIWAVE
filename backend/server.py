@@ -29,6 +29,7 @@ from backend.services.campaign_targeting import (
     CampaignCoverageScope,
     CampaignValidationError,
     build_campaign_write_payload,
+    is_ad_eligible_for_campaign,
 )
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -4147,6 +4148,49 @@ async def get_campaigns(
     
     campaigns = await db.campaigns.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     return campaigns
+
+@campaigns_router.get("/eligible-ads")
+async def get_campaign_eligible_ads(
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+):
+    """Return paid, approved, active and unexpired ads for campaigns."""
+    now = datetime.now(timezone.utc)
+
+    candidates = await db.ads.find(
+        {
+            "status": AdStatus.ACTIVE.value,
+            "is_active": True,
+            "approved_at": {"$nin": [None, ""]},
+            "paid_at": {"$nin": [None, ""]},
+            "expires_at": {"$nin": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "id": 1,
+            "title": 1,
+            "ad_type": 1,
+            "advertiser_id": 1,
+            "package_id": 1,
+            "package_name": 1,
+            "media_url": 1,
+            "targeting": 1,
+            "status": 1,
+            "is_active": 1,
+            "approved_at": 1,
+            "paid_at": 1,
+            "starts_at": 1,
+            "expires_at": 1,
+            "impressions": 1,
+            "clicks": 1,
+        },
+    ).sort("created_at", -1).to_list(1000)
+
+    return [
+        ad
+        for ad in candidates
+        if is_ad_eligible_for_campaign(ad, now=now)
+    ]
+
 
 @campaigns_router.get("/{campaign_id}")
 async def get_campaign(
