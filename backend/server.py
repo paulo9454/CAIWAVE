@@ -21,6 +21,10 @@ from backend.services.owner_gateway import (
     OwnerGatewayRepository,
     create_owner_gateway_router,
 )
+from backend.services.hotspot_location import (
+    HotspotLocationValidationError,
+    validate_hotspot_location,
+)
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -363,6 +367,8 @@ class HotspotBase(BaseModel):
     name: str
     ssid: str
     location_name: str
+    country_code: str = "KE"
+    country_name: str = "Kenya"
     ward: Optional[str] = None
     constituency: Optional[str] = None
     county: Optional[str] = None
@@ -1361,8 +1367,30 @@ async def create_hotspot(
         hotspot_data.owner_id = user["id"]
     
     now = datetime.now(timezone.utc)
-    
-    hotspot = Hotspot(**hotspot_data.model_dump())
+
+    try:
+        validated_location = validate_hotspot_location(
+            country_code=hotspot_data.country_code,
+            country_name=hotspot_data.country_name,
+            county=hotspot_data.county,
+            constituency=hotspot_data.constituency,
+            location_name=hotspot_data.location_name,
+            ward=hotspot_data.ward,
+            locations_by_county=KENYA_LOCATIONS,
+        )
+    except HotspotLocationValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    hotspot_payload = hotspot_data.model_dump()
+    hotspot_payload.update(validated_location)
+
+    hotspot = Hotspot(**hotspot_payload)
     hotspot.status = HotspotStatus.ACTIVE  # Default to active for new hotspots
     
     # Admin gets lifetime subscription (no payment required)
