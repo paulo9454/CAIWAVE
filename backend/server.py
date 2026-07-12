@@ -540,36 +540,58 @@ class MPesaSTKCallback(BaseModel):
 # ==================== Advertising Package Models ====================
 
 class AdPackage(BaseModel):
-    """Admin-created advertising packages with fixed pricing"""
-    model_config = ConfigDict(extra="ignore")
+    """Admin-created advertising package."""
+    model_config = ConfigDict(
+        extra="ignore",
+        str_strip_whitespace=True,
+    )
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str  # Small Area, Large Area, Wide Area
-    description: str
-    coverage_scope: AdCoverageScope  # constituency, county, national
-    duration_days: int
-    price: float  # Price in KES
-    max_impressions: Optional[int] = None  # Optional cap
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=1000)
+    coverage_scope: AdCoverageScope
+    duration_days: int = Field(ge=1, le=3650)
+    price: float = Field(ge=1)
+    max_impressions: Optional[int] = Field(default=None, ge=1)
     status: AdPackageStatus = AdPackageStatus.ACTIVE
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Optional[datetime] = None
 
+
 class AdPackageCreate(BaseModel):
-    """Create a new ad package (Admin only)"""
-    name: str
-    description: str
+    """Create a new advertising package (Admin only)."""
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    name: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=1000)
     coverage_scope: AdCoverageScope
-    duration_days: int
-    price: float
-    max_impressions: Optional[int] = None
+    duration_days: int = Field(ge=1, le=3650)
+    price: float = Field(ge=1)
+    max_impressions: Optional[int] = Field(default=None, ge=1)
+
 
 class AdPackageUpdate(BaseModel):
-    """Update an ad package (Admin only)"""
-    name: Optional[str] = None
-    description: Optional[str] = None
+    """Update an advertising package (Admin only)."""
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    description: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=1000,
+    )
     coverage_scope: Optional[AdCoverageScope] = None
-    duration_days: Optional[int] = None
-    price: Optional[float] = None
-    max_impressions: Optional[int] = None
+    duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    price: Optional[float] = Field(default=None, ge=1)
+    max_impressions: Optional[int] = Field(default=None, ge=1)
     status: Optional[AdPackageStatus] = None
 
 # ==================== Ad Targeting and Coverage ====================
@@ -3636,43 +3658,70 @@ async def get_ad_package(package_id: str):
 @ad_packages_router.post("/")
 async def create_ad_package(
     package: AdPackageCreate,
-    user: dict = Depends(require_admin)
+    user: dict = Depends(require_admin),
 ):
-    """Create a new ad package (Admin only)"""
-    new_package = AdPackage(
-        name=package.name,
-        description=package.description,
-        coverage_scope=package.coverage_scope,
-        duration_days=package.duration_days,
-        price=package.price,
-        max_impressions=package.max_impressions
-    )
-    
-    pkg_dict = new_package.model_dump()
-    pkg_dict["created_at"] = pkg_dict["created_at"].isoformat()
-    
+    """Create a validated advertising package."""
+    new_package = AdPackage(**package.model_dump())
+
+    pkg_dict = new_package.model_dump(mode="json")
     await db.ad_packages.insert_one(pkg_dict)
-    
-    return {"success": True, "package": pkg_dict}
+
+    stored = await db.ad_packages.find_one(
+        {"id": new_package.id},
+        {"_id": 0},
+    )
+
+    return {
+        "success": True,
+        "package": stored,
+    }
 
 @ad_packages_router.put("/{package_id}")
 async def update_ad_package(
     package_id: str,
     update: AdPackageUpdate,
-    user: dict = Depends(require_admin)
+    user: dict = Depends(require_admin),
 ):
-    """Update an ad package (Admin only)"""
-    existing = await db.ad_packages.find_one({"id": package_id})
+    """Update a validated advertising package."""
+    existing = await db.ad_packages.find_one(
+        {"id": package_id},
+        {"_id": 0},
+    )
+
     if not existing:
         raise HTTPException(status_code=404, detail="Package not found")
-    
-    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
-    if update_data:
-        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-        await db.ad_packages.update_one({"id": package_id}, {"$set": update_data})
-    
-    updated = await db.ad_packages.find_one({"id": package_id}, {"_id": 0})
-    return {"success": True, "package": updated}
+
+    update_data = update.model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude_unset=True,
+    )
+
+    if not update_data:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "field": "package",
+                "message": "Provide at least one package field to update.",
+            },
+        )
+
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    await db.ad_packages.update_one(
+        {"id": package_id},
+        {"$set": update_data},
+    )
+
+    updated = await db.ad_packages.find_one(
+        {"id": package_id},
+        {"_id": 0},
+    )
+
+    return {
+        "success": True,
+        "package": updated,
+    }
 
 @ad_packages_router.delete("/{package_id}")
 async def delete_ad_package(
