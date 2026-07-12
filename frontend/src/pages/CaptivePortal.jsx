@@ -310,8 +310,16 @@ const CaptivePortal = () => {
         });
         toast.success(`🎉 You got ${response.data.duration_minutes} minutes free WiFi!`);
         
-        // Track ad click
+        // Track ad click before handing the browser back to MikroTik.
         await axios.post(`${API_URL}/ads/${currentAd.id}/click`).catch(() => {});
+
+        const submitted = submitCredentialsToMikrotik(response.data);
+
+        if (!submitted) {
+          throw new Error(
+            "Free WiFi was activated, but the router login could not be completed."
+          );
+        }
       }
     } catch (error) {
       toast.error(safeError(error));
