@@ -70,3 +70,24 @@ frontend/node_modules/.cache/default-development/0.pack
 frontend/node_modules/.cache/default-development/2.pack
 .venv/
 artifacts/
+
+# Local development and emergency backups
+*.BACKUP*
+*.BEFORE_*
+*.bak
+*.bak_*
+*~
+
+# Local repository checkpoints
+/backups/
+/checkpoints/
+
+# Runtime-uploaded media
+/backend/uploads/ads/images/*
+/backend/uploads/ads/videos/*
+/backend/uploads/campaigns/*
+
+# Keep upload directory placeholders when present
+!/backend/uploads/ads/images/.gitkeep
+!/backend/uploads/ads/videos/.gitkeep
+!/backend/uploads/campaigns/.gitkeep
