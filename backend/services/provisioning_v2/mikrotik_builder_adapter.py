@@ -25,6 +25,9 @@ from backend.services.provisioning_v2.interface_classification import classify_i
 from backend.services.provisioning_v2.interface_inventory import build_interface_inventory
 from backend.services.provisioning_v2.nat_planner import plan_nat
 from backend.services.provisioning_v2.portal_planner import plan_portal
+from backend.services.provisioning_v2.production_input import (
+    validate_production_router_input,
+)
 from backend.services.provisioning_v2.provisioning_bundle import build_provisioning_bundle
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.routeros_render_orchestrator import render_routeros_bundle
@@ -63,7 +66,31 @@ def _router_interfaces(router: dict) -> list[dict]:
 
 
 def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2BuilderOutput:
-    router_id = router.get("id") or router.get("router_id") or "router-1"
+    validated = validate_production_router_input(router)
+
+    router = {
+        **router,
+        "id": validated.router_id,
+        "name": validated.router_name,
+        "owner_id": validated.owner_id,
+        "hotspot_id": validated.hotspot_id,
+        "nas_identifier": validated.nas_identifier,
+        "wan_interface": validated.wan_interface,
+        "lan_interfaces": list(validated.lan_interfaces),
+        "create_bridge": validated.create_bridge,
+        "bridge_name": validated.bridge_name,
+        "hotspot_cidr": validated.hotspot_cidr,
+        "hotspot_gateway": validated.hotspot_gateway,
+        "dhcp_pool": validated.dhcp_pool,
+        "dns_name": validated.captive_dns_name,
+        "radius_host": validated.radius_host,
+        "radius_secret": validated.radius_secret,
+        "portal_public_url": validated.portal_public_url,
+        "api_public_url": validated.api_public_url,
+        "heartbeat_url": validated.heartbeat_url,
+    }
+
+    router_id = validated.router_id
     hotspot_id = router.get("hotspot_id") or "hotspot-1"
     owner_id = router.get("owner_id") or "owner-1"
 

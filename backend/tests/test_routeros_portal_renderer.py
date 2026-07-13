@@ -32,12 +32,12 @@ def build_bundle(portal_strategy="redirect"):
         "hotspot_cidr": "10.10.0.0/24",
         "hotspot_gateway": "10.10.0.1",
         "dhcp_pool": "10.10.0.10-10.10.0.254",
-        "dns_name": "wifi.caiwave.com",
+        "dns_name": "login.caiwave.local",
     }
     hotspot = {"id": "hotspot-1", "owner_id": "owner-1"}
     config = {
         "radius_host": "radius.caiwave.com",
-        "portal_public_url": "https://caiwave.com/portal",
+        "portal_public_url": "https://caiwave.com",
         "api_public_url": "https://caiwave.com/api",
         "heartbeat_url": "https://caiwave.com/api/mikrotik-onboard/heartbeat",
         "router_dns_upstreams": ["1.1.1.1"],
@@ -102,7 +102,20 @@ def test_renders_portal_section():
     assert section.checksum
     assert "# CAIWAVE Portal" in section.content
     assert "# Portal strategy: redirect" in section.content
-    assert "# Login redirect URL: https://caiwave.com/portal/login" in section.content
+    assert "wifi.caiwave.com" not in section.content
+    expected_login_url = (
+        "https://caiwave.com/portal/hotspot-1"
+        "?mac=\\$(mac)"
+        "&ip=\\$(ip)"
+        "&dst=\\$(link-orig-esc)"
+        "&login_url=\\$(link-login-only)"
+    )
+
+    assert f"# Login redirect URL: {expected_login_url}" in section.content
+    assert 'name="hotspot/login.html"' in section.content
+    assert expected_login_url in section.content
+    assert "/portal/login?hotspot=" not in section.content
+    assert "?hotspot=" not in section.content
     assert '/ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="caiwave.com"' in section.content
     assert '/ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="checkout.paystack.com"' in section.content
     assert '/ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="static.caiwave.com"' in section.content

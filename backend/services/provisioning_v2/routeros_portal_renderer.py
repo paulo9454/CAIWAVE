@@ -23,8 +23,8 @@ def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
     portal = bundle.portal
 
     login_redirect_url = (
-        f"{portal.login_redirect_url}?hotspot={bundle.hotspot_id}"
-        "&mac=\\$(mac)"
+        f"{portal.login_redirect_url}/{bundle.hotspot_id}"
+        "?mac=\\$(mac)"
         "&ip=\\$(ip)"
         "&dst=\\$(link-orig-esc)"
         "&login_url=\\$(link-login-only)"

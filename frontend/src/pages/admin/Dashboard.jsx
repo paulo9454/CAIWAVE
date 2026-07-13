@@ -57,6 +57,7 @@ import HotspotLocationEditor from "../../components/HotspotLocationEditor";
 import HotspotLocationSummary from "../../components/HotspotLocationSummary";
 import CampaignTargetSelector from "../../components/CampaignTargetSelector";
 import CampaignAdSelector from "../../components/CampaignAdSelector";
+import AdminAdvertisingPackages from "../../components/AdminAdvertisingPackages";
 import {
   AreaChart,
   Area,
@@ -894,9 +895,11 @@ const PackagesPage = () => {
       <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-blue-400 mt-0.5" />
         <div>
-          <p className="text-blue-400 font-medium">Fixed Package Pricing</p>
+          <p className="text-blue-400 font-medium">
+            Customer WiFi pricing
+          </p>
           <p className="text-neutral-400 text-sm mt-1">
-            Packages are predefined by CAIWAVE. Hotspot owners can only enable/disable packages for their locations - they cannot modify pricing or create new packages.
+            These packages control customer internet access duration, speed and price. Advertising prices are managed separately under Advertising Packages.
           </p>
         </div>
       </div>
@@ -3297,7 +3300,12 @@ const AdminDashboard = () => {
     { name: "Ad Approval", href: "/admin/ads", icon: Megaphone, badge: true },
     { name: "Invoices", href: "/admin/invoices", icon: FileText },
     { name: "Hotspots", href: "/admin/hotspots", icon: Radio },
-    { name: "Packages", href: "/admin/packages", icon: Package },
+    { name: "WiFi Packages", href: "/admin/packages", icon: Package },
+    {
+      name: "Advertising Packages",
+      href: "/admin/ad-packages",
+      icon: Megaphone,
+    },
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Revenue Settings", href: "/admin/revenue", icon: Sliders },
     { name: "Integrations", href: "/admin/integrations", icon: Settings },
@@ -3417,6 +3425,10 @@ const AdminDashboard = () => {
             <Route path="invoices" element={<InvoiceManagementPage />} />
             <Route path="hotspots" element={<AllHotspotsPage />} />
             <Route path="packages" element={<PackagesPage />} />
+            <Route
+              path="ad-packages"
+              element={<AdminAdvertisingPackages />}
+            />
             <Route path="users" element={<UsersPage />} />
             <Route path="revenue" element={<RevenueSettingsPage />} />
             <Route path="integrations" element={<IntegrationSettingsPage />} />

@@ -32,7 +32,7 @@ def build_bundle(auth_mode=HotspotAuthMode.RADIUS):
         "hotspot_cidr": "10.10.0.0/24",
         "hotspot_gateway": "10.10.0.1",
         "dhcp_pool": "10.10.0.10-10.10.0.254",
-        "dns_name": "wifi.caiwave.com",
+        "dns_name": "login.caiwave.local",
     }
     hotspot = {"id": "hotspot-1", "owner_id": "owner-1"}
     config = {
@@ -103,7 +103,15 @@ def test_renders_hotspot_section():
     assert section.checksum
     assert "# CAIWAVE Hotspot" in section.content
     assert "# Hotspot auth mode: radius" in section.content
-    assert '/ip hotspot profile add dns-name="wifi.caiwave.com" hotspot-address="10.10.0.1" login-by=http-pap name="caiwave-profile" use-radius=yes' in section.content
+    assert "/ip hotspot profile add" in section.content
+    assert 'dns-name="login.caiwave.local"' in section.content
+    assert 'hotspot-address="10.10.0.1"' in section.content
+    assert "login-by=http-pap" in section.content
+    assert 'name="caiwave-profile"' in section.content
+    assert "use-radius=yes" in section.content
+    assert "radius-accounting=yes" in section.content
+    assert "radius-interim-update=5m" in section.content
+    assert "wifi.caiwave.com" not in section.content
     assert '/ip hotspot add address-pool="caiwave-pool-hotspot" disabled=no interface="bridge-hotspot" name="caiwave-hotspot" profile="caiwave-profile"' in section.content
 
 

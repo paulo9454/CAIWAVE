@@ -43,8 +43,16 @@ def render_hotspot_section(bundle: ProvisioningBundle) -> RouterOSRenderedSectio
                     "hotspot-address": bundle.address.gateway_ip,
                     "dns-name": hotspot.dns_name,
                     "use-radius": hotspot.use_radius,
-                    "login-by": RawRouterOSValue(",".join(hotspot.login_methods)),
-                            },
+                    "radius-accounting": hotspot.accounting_enabled,
+                    "radius-interim-update": (
+                        RawRouterOSValue("5m")
+                        if hotspot.accounting_enabled
+                        else RawRouterOSValue("received")
+                    ),
+                    "login-by": RawRouterOSValue(
+                        ",".join(hotspot.login_methods)
+                    ),
+                },
             )
         )
         commands.append(

@@ -113,7 +113,7 @@ def plan_portal(
         strategy=strategy,
         portal_public_url=portal_url,
         api_public_url=api_url,
-        login_redirect_url=_join(portal_url, "login"),
+        login_redirect_url=_join(portal_url, "portal"),
         success_url=_join(portal_url, "success"),
         failure_url=_join(portal_url, "failed"),
         captive_dns_name=dns_plan.captive_dns_name,

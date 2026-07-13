@@ -17,7 +17,7 @@ from backend.services.provisioning_v2.snapshot_builder import build_provisioning
 from backend.services.provisioning_v2.topology_planner import plan_topology
 
 
-def build_plans(portal_strategy="redirect", portal_url="https://caiwave.com/portal", api_url="https://caiwave.com/api"):
+def build_plans(portal_strategy="redirect", portal_url="https://caiwave.com", api_url="https://caiwave.com/api"):
     router = {
         "id": "router-1",
         "name": "GOODlife",
@@ -33,7 +33,7 @@ def build_plans(portal_strategy="redirect", portal_url="https://caiwave.com/port
         "hotspot_cidr": "10.10.0.0/24",
         "hotspot_gateway": "10.10.0.1",
         "dhcp_pool": "10.10.0.10-10.10.0.254",
-        "dns_name": "wifi.caiwave.com",
+        "dns_name": "login.caiwave.local",
     }
     hotspot = {"id": "hotspot-1", "owner_id": "owner-1"}
     config = {
@@ -82,12 +82,12 @@ def test_plans_redirect_portal():
 
     assert plan.enabled is True
     assert plan.strategy == PortalStrategy.REDIRECT
-    assert plan.portal_public_url == "https://caiwave.com/portal"
+    assert plan.portal_public_url == "https://caiwave.com"
     assert plan.api_public_url == "https://caiwave.com/api"
-    assert plan.login_redirect_url == "https://caiwave.com/portal/login"
-    assert plan.success_url == "https://caiwave.com/portal/success"
-    assert plan.failure_url == "https://caiwave.com/portal/failed"
-    assert plan.captive_dns_name == "wifi.caiwave.com"
+    assert plan.login_redirect_url == "https://caiwave.com/portal"
+    assert plan.success_url == "https://caiwave.com/success"
+    assert plan.failure_url == "https://caiwave.com/failed"
+    assert plan.captive_dns_name == "login.caiwave.local"
 
 
 def test_includes_required_walled_garden_hosts():
@@ -111,7 +111,7 @@ def test_includes_required_walled_garden_hosts():
 
 def test_deduplicates_required_hosts():
     snapshot, hotspot_plan, dns = build_plans(
-        portal_url="https://caiwave.com/portal",
+        portal_url="https://caiwave.com",
         api_url="https://caiwave.com/api",
     )
 
