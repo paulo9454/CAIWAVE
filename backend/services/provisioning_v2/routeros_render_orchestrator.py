@@ -30,6 +30,9 @@ from backend.services.provisioning_v2.routeros_identity_renderer import render_i
 from backend.services.provisioning_v2.routeros_nat_renderer import render_nat_section
 from backend.services.provisioning_v2.routeros_portal_renderer import render_portal_section
 from backend.services.provisioning_v2.routeros_radius_renderer import render_radius_section
+from backend.services.provisioning_v2.routeros_scheduler_renderer import (
+    render_scheduler_section,
+)
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedArtifact,
@@ -71,6 +74,7 @@ def _render_section(bundle: ProvisioningBundle, section_name: RouterOSSectionNam
         RouterOSSectionName.PORTAL: render_portal_section,
         RouterOSSectionName.RADIUS: render_radius_section,
         RouterOSSectionName.FIREWALL: render_firewall_section,
+        RouterOSSectionName.SCHEDULERS: render_scheduler_section,
     }
 
     renderer = renderers.get(section_name)
