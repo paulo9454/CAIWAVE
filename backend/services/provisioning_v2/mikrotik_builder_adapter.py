@@ -31,7 +31,10 @@ from backend.services.provisioning_v2.production_input import (
 from backend.services.provisioning_v2.provisioning_bundle import build_provisioning_bundle
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.routeros_render_orchestrator import render_routeros_bundle
-from backend.services.provisioning_v2.routeros_script_linter import lint_routeros_script
+from backend.services.provisioning_v2.routeros_script_linter import (
+    ProductionRouterOSLintContext,
+    lint_production_routeros_script,
+)
 from backend.services.provisioning_v2.snapshot_builder import build_provisioning_snapshot
 from backend.services.provisioning_v2.topology_planner import plan_topology
 
@@ -181,10 +184,25 @@ def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2Builder
         firewall=firewall,
     )
     artifact = render_routeros_bundle(bundle=bundle)
-    lint = lint_routeros_script(artifact.content)
+    lint = lint_production_routeros_script(
+        artifact.content,
+        context=ProductionRouterOSLintContext(
+            router_id=validated.router_id,
+            hotspot_id=validated.hotspot_id,
+            nas_identifier=validated.nas_identifier,
+            captive_dns_name=validated.captive_dns_name,
+            portal_public_url=validated.portal_public_url,
+            radius_host=validated.radius_host,
+            heartbeat_url=validated.heartbeat_url,
+        ),
+    )
 
     if not lint.valid:
-        raise ValueError("Provisioning Engine v2 generated invalid RouterOS script: " + "; ".join(lint.errors))
+        raise ValueError(
+            "Provisioning Engine v2 generated an unsafe production "
+            "RouterOS script: "
+            + "; ".join(lint.errors)
+        )
 
     return ProvisioningV2BuilderOutput(
         filename=f"{_safe(router_input['name'])}-{_safe(router_input['nas_identifier'])}.rsc",
