@@ -34,6 +34,7 @@ from backend.services.campaign_targeting import (
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo.errors import DuplicateKeyError
 from services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
 import os
@@ -177,6 +178,17 @@ async def startup():
     except Exception:
         logger.exception("Failed to create owner gateway profile indexes")
 
+    # Ensure voucher indexes exist
+    try:
+        await db.vouchers.create_index(
+            "code",
+            unique=True,
+            name="unique_voucher_code",
+        )
+        logger.info("Voucher indexes ensured")
+    except Exception:
+        logger.exception("Failed to create voucher indexes")
+
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
     app.state.tasks.append(task)
@@ -251,6 +263,16 @@ class PaymentMethod(str, Enum):
     BANK = "bank"
     VOUCHER = "voucher"
     FREE_AD = "free_ad"
+
+
+class VoucherPurpose(str, Enum):
+    STANDARD = "standard"
+    TEST = "test"
+    COMPENSATION = "compensation"
+    PROMOTION = "promotion"
+    STAFF = "staff"
+    OFFLINE_SALE = "offline_sale"
+
 
 class HotspotStatus(str, Enum):
     ACTIVE = "active"
@@ -667,20 +689,34 @@ class AdPaymentRequest(BaseModel):
 class VoucherBase(BaseModel):
     package_id: str
     hotspot_id: str
-    quantity: int = 1
+    quantity: int = Field(default=1, ge=1, le=1000)
+    validity_days: int = Field(default=30, ge=1, le=365)
+    purpose: VoucherPurpose = VoucherPurpose.STANDARD
 
 class Voucher(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     code: str
     package_id: str
     hotspot_id: str
     owner_id: str
+    generated_by: str
+    purpose: VoucherPurpose = VoucherPurpose.STANDARD
+
     username: str
     password: str
+
     is_used: bool = False
+    redemption_status: str = "unused"
     used_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    used_mac: Optional[str] = None
+    used_ip: Optional[str] = None
+    redeemed_session_id: Optional[str] = None
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     expires_at: datetime
 
 # Notification Models
@@ -6168,43 +6204,109 @@ async def monitor_router_health():
 @vouchers_router.post("/generate", response_model=List[Voucher])
 async def generate_vouchers(
     voucher_data: VoucherBase,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
-):
-    """Generate vouchers for a hotspot"""
-    package = await db.packages.find_one({"id": voucher_data.package_id}, {"_id": 0})
-    if not package:
-        raise HTTPException(status_code=404, detail="Package not found")
-    
-    hotspot = await db.hotspots.find_one({"id": voucher_data.hotspot_id}, {"_id": 0})
-    if not hotspot:
-        raise HTTPException(status_code=404, detail="Hotspot not found")
-    
-    # Check access
-    if user["role"] == UserRole.HOTSPOT_OWNER.value and hotspot["owner_id"] != user["id"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    vouchers = []
-    for _ in range(voucher_data.quantity):
-        code = generate_voucher_code()
-        username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
-        
-        voucher = Voucher(
-            code=code,
-            package_id=voucher_data.package_id,
-            hotspot_id=voucher_data.hotspot_id,
-            owner_id=hotspot["owner_id"],
-            username=username,
-            password=password,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30)  # Voucher validity
+    user: dict = Depends(
+        require_role(
+            [
+                UserRole.SUPER_ADMIN,
+                UserRole.HOTSPOT_OWNER,
+            ]
         )
-        
-        voucher_dict = voucher.model_dump()
-        voucher_dict["created_at"] = voucher_dict["created_at"].isoformat()
-        voucher_dict["expires_at"] = voucher_dict["expires_at"].isoformat()
-        
-        await db.vouchers.insert_one(voucher_dict)
-        vouchers.append(voucher)
-    
+    ),
+):
+    """Generate one or more vouchers for an active hotspot."""
+
+    package = await db.packages.find_one(
+        {
+            "id": voucher_data.package_id,
+            "is_active": True,
+        },
+        {"_id": 0},
+    )
+
+    if not package:
+        raise HTTPException(
+            status_code=404,
+            detail="Package not found or inactive",
+        )
+
+    hotspot = await db.hotspots.find_one(
+        {"id": voucher_data.hotspot_id},
+        {"_id": 0},
+    )
+
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found",
+        )
+
+    if hotspot.get("status") != HotspotStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Vouchers can only be generated for active hotspots",
+        )
+
+    if (
+        user["role"] == UserRole.HOTSPOT_OWNER.value
+        and hotspot.get("owner_id") != user["id"]
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied",
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(
+        days=voucher_data.validity_days
+    )
+
+    vouchers: List[Voucher] = []
+
+    for _ in range(voucher_data.quantity):
+        created_voucher = None
+
+        for _attempt in range(10):
+            username, password = generate_radius_credentials(
+                hotspot.get("username_prefix", "")
+            )
+
+            voucher = Voucher(
+                code=generate_voucher_code(),
+                package_id=voucher_data.package_id,
+                hotspot_id=voucher_data.hotspot_id,
+                owner_id=hotspot["owner_id"],
+                generated_by=user["id"],
+                purpose=voucher_data.purpose,
+                username=username,
+                password=password,
+                expires_at=expires_at,
+            )
+
+            voucher_dict = voucher.model_dump()
+            voucher_dict["purpose"] = voucher.purpose.value
+            voucher_dict["created_at"] = (
+                voucher.created_at.isoformat()
+            )
+            voucher_dict["expires_at"] = (
+                voucher.expires_at.isoformat()
+            )
+
+            try:
+                await db.vouchers.insert_one(voucher_dict)
+            except DuplicateKeyError:
+                continue
+
+            created_voucher = voucher
+            break
+
+        if created_voucher is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not generate a unique voucher code",
+            )
+
+        vouchers.append(created_voucher)
+
     return vouchers
 
 @vouchers_router.get("/")
@@ -6228,66 +6330,212 @@ async def get_vouchers(
     return vouchers
 
 @vouchers_router.post("/redeem/{code}")
-async def redeem_voucher(code: str, hotspot_id: str, user_mac: Optional[str] = None):
-    """Redeem a voucher"""
-    voucher = await db.vouchers.find_one(
-        {"code": code.upper(), "is_used": False},
-        {"_id": 0}
+async def redeem_voucher(
+    code: str,
+    hotspot_id: str,
+    user_mac: Optional[str] = None,
+    user_ip: Optional[str] = None,
+):
+    """Redeem a voucher and create a WiFi session."""
+
+    normalized_code = code.strip().upper()
+    now = datetime.now(timezone.utc)
+
+    hotspot = await db.hotspots.find_one(
+        {"id": hotspot_id},
+        {"_id": 0},
     )
-    
-    if not voucher:
-        raise HTTPException(status_code=404, detail="Invalid or already used voucher")
-    
-    if voucher["hotspot_id"] != hotspot_id:
-        raise HTTPException(status_code=400, detail="Voucher not valid for this hotspot")
-    
-    # Check expiry
-    if datetime.fromisoformat(voucher["expires_at"]) < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Voucher has expired")
-    
-    package = await db.packages.find_one({"id": voucher["package_id"]}, {"_id": 0})
-    
-    # Create session
-    session = Session(
-        package_id=voucher["package_id"],
-        hotspot_id=hotspot_id,
-        user_mac=user_mac,
-        username=voucher["username"],
-        password=voucher["password"],
-        rate_limit=build_rate_limit_from_package(package),
-        voucher_code=code,
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=package["duration_minutes"])
-    )
-    
-    session_dict = session.model_dump()
-    session_dict["started_at"] = session_dict["started_at"].isoformat()
-    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
-    
-    await db.sessions.insert_one(session_dict)
-    
-    # Mark voucher as used
-    await db.vouchers.update_one(
-        {"code": code.upper()},
+
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found",
+        )
+
+    if hotspot.get("status") != HotspotStatus.ACTIVE.value:
+        raise HTTPException(
+            status_code=400,
+            detail="This hotspot is not currently active",
+        )
+
+    voucher = await db.vouchers.find_one_and_update(
+        {
+            "code": normalized_code,
+            "hotspot_id": hotspot_id,
+            "is_used": False,
+            "expires_at": {"$gt": now.isoformat()},
+        },
         {
             "$set": {
                 "is_used": True,
-                "used_at": datetime.now(timezone.utc).isoformat()
+                "used_at": now.isoformat(),
+                "used_mac": normalize_mac(user_mac),
+                "used_ip": user_ip,
+                "redemption_status": "processing",
             }
-        }
+        },
+        return_document=True,
     )
-    
-    # Update hotspot stats
-    await db.hotspots.update_one(
-        {"id": hotspot_id},
-        {"$inc": {"total_sessions": 1}}
+
+    if not voucher:
+        existing = await db.vouchers.find_one(
+            {"code": normalized_code},
+            {"_id": 0},
+        )
+
+        if not existing:
+            raise HTTPException(
+                status_code=404,
+                detail="Invalid voucher",
+            )
+
+        if existing.get("hotspot_id") != hotspot_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Voucher not valid for this hotspot",
+            )
+
+        if existing.get("is_used"):
+            raise HTTPException(
+                status_code=409,
+                detail="Voucher has already been used",
+            )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Voucher has expired",
+        )
+
+    voucher.pop("_id", None)
+
+    package = await db.packages.find_one(
+        {
+            "id": voucher["package_id"],
+            "is_active": True,
+        },
+        {"_id": 0},
     )
-    
+
+    if not package:
+        await db.vouchers.update_one(
+            {
+                "id": voucher["id"],
+                "redemption_status": "processing",
+            },
+            {
+                "$set": {
+                    "is_used": False,
+                    "used_at": None,
+                    "used_mac": None,
+                    "used_ip": None,
+                    "redemption_status": "unused",
+                }
+            },
+        )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Voucher package is unavailable",
+        )
+
+    session = Session(
+        package_id=voucher["package_id"],
+        hotspot_id=hotspot_id,
+        user_mac=normalize_mac(user_mac),
+        user_ip=user_ip,
+        username=voucher["username"],
+        password=voucher["password"],
+        rate_limit=build_rate_limit_from_package(package),
+        voucher_code=normalized_code,
+        expires_at=now + timedelta(
+            minutes=package["duration_minutes"]
+        ),
+    )
+
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session.started_at.isoformat()
+    session_dict["expires_at"] = session.expires_at.isoformat()
+
+    session_inserted = False
+    hotspot_incremented = False
+
+    try:
+        await db.sessions.insert_one(session_dict)
+        session_inserted = True
+
+        hotspot_result = await db.hotspots.update_one(
+            {"id": hotspot_id},
+            {"$inc": {"total_sessions": 1}},
+        )
+
+        if hotspot_result.matched_count != 1:
+            raise RuntimeError(
+                "Hotspot session counter could not be updated"
+            )
+
+        hotspot_incremented = True
+
+        voucher_result = await db.vouchers.update_one(
+            {
+                "id": voucher["id"],
+                "redemption_status": "processing",
+            },
+            {
+                "$set": {
+                    "redemption_status": "redeemed",
+                    "redeemed_session_id": session.id,
+                }
+            },
+        )
+
+        if voucher_result.modified_count != 1:
+            raise RuntimeError(
+                "Voucher redemption state could not be finalized"
+            )
+
+    except Exception:
+        if session_inserted:
+            await db.sessions.delete_one({"id": session.id})
+
+        if hotspot_incremented:
+            await db.hotspots.update_one(
+                {"id": hotspot_id},
+                {"$inc": {"total_sessions": -1}},
+            )
+
+        await db.vouchers.update_one(
+            {
+                "id": voucher["id"],
+                "redemption_status": {
+                    "$in": ["processing", "redeemed"],
+                },
+            },
+            {
+                "$set": {
+                    "is_used": False,
+                    "used_at": None,
+                    "used_mac": None,
+                    "used_ip": None,
+                    "redemption_status": "unused",
+                    "redeemed_session_id": None,
+                }
+            },
+        )
+
+        raise
+
     return {
+        "success": True,
+        "status": "completed",
+        "payment_type": "voucher",
         "session_id": session.id,
-        "username": session.username,
-        "password": session.password,
-        "expires_at": session.expires_at.isoformat(),
-        "duration_minutes": package["duration_minutes"]
+        "wifi_credentials": {
+            "username": session.username,
+            "password": session.password,
+            "expires_at": session.expires_at.isoformat(),
+            "duration_minutes": package["duration_minutes"],
+        },
+        "message": "Voucher redeemed successfully.",
     }
 
 # ==================== Sessions Routes ====================
