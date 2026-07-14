@@ -33,6 +33,8 @@ const CaptivePortal = () => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [voucherCode, setVoucherCode] = useState("");
+  const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
 
@@ -252,6 +254,66 @@ const CaptivePortal = () => {
       toast.error(safeError(error));
     } finally {
       setPaying(false);
+    }
+  };
+
+  const handleVoucherRedemption = async () => {
+    const normalizedCode = voucherCode.trim().toUpperCase();
+
+    if (!normalizedCode) {
+      toast.error("Please enter your voucher code.");
+      return;
+    }
+
+    if (!hotspotId) {
+      toast.error(
+        "This hotspot could not be identified. Reconnect to the WiFi and open the portal again."
+      );
+      return;
+    }
+
+    if (!mikrotikLoginUrl) {
+      toast.error(
+        "The router login link is missing. Reconnect to the hotspot before redeeming your voucher."
+      );
+      return;
+    }
+
+    setRedeemingVoucher(true);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/vouchers/redeem/${encodeURIComponent(normalizedCode)}`,
+        null,
+        {
+          params: {
+            hotspot_id: hotspotId,
+            user_mac: clientMac || undefined,
+            user_ip: clientIp || undefined,
+          },
+        }
+      );
+
+      const credentials = response.data?.wifi_credentials;
+
+      if (
+        response.data?.status !== "completed" ||
+        !credentials
+      ) {
+        throw new Error(
+          response.data?.message ||
+            "The voucher was accepted, but WiFi credentials were not returned."
+        );
+      }
+
+      toast.success("Voucher accepted. Connecting you to WiFi…");
+      setVoucherCode("");
+
+      submitCredentialsToMikrotik(credentials);
+    } catch (error) {
+      toast.error(safeError(error));
+    } finally {
+      setRedeemingVoucher(false);
     }
   };
 
@@ -672,6 +734,69 @@ const CaptivePortal = () => {
             </div>
           </div>
         )}
+
+        {/* Voucher Access */}
+        <div className="rounded-xl border border-blue-700/50 bg-gradient-to-br from-blue-950/80 to-indigo-950/60 p-5">
+          <div className="mb-4">
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-blue-300">
+              <Wifi className="h-5 w-5" />
+              Have a Voucher?
+            </h2>
+            <p className="mt-1 text-sm text-neutral-400">
+              Enter your CAIWAVE voucher code to connect without making a payment.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              type="text"
+              value={voucherCode}
+              onChange={(event) =>
+                setVoucherCode(
+                  event.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9-]/g, "")
+                    .slice(0, 32)
+                )
+              }
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  !redeemingVoucher
+                ) {
+                  handleVoucherRedemption();
+                }
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Enter voucher code"
+              className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 font-mono uppercase tracking-wider text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+            />
+
+            <Button
+              type="button"
+              onClick={handleVoucherRedemption}
+              disabled={
+                redeemingVoucher ||
+                !voucherCode.trim()
+              }
+              className="bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 sm:w-auto"
+            >
+              {redeemingVoucher ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <>
+                  <Wifi className="mr-2 h-5 w-5" />
+                  Redeem Voucher
+                </>
+              )}
+            </Button>
+          </div>
+
+          <p className="mt-3 text-xs text-neutral-500">
+            Each voucher can only be redeemed once and is valid for its assigned hotspot.
+          </p>
+        </div>
 
         {/* WiFi Packages */}
         <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
