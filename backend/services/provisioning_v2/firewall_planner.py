@@ -56,6 +56,8 @@ class FirewallRuleIntent(StrictModel):
     destination_host: Optional[str] = None
     protocol: Optional[str] = None
     destination_port: Optional[int] = None
+    connection_state: Optional[str] = None
+    hotspot_state: Optional[str] = None
 
 
 class FirewallPlan(StrictModel):
@@ -103,6 +105,23 @@ def plan_firewall(
             chain=FirewallChain.INPUT,
             action=FirewallAction.ACCEPT,
             purpose="Allow established and related traffic",
+            connection_state="established,related",
+        ),
+        FirewallRuleIntent(
+            name="allow-established-related-forward",
+            chain=FirewallChain.FORWARD,
+            action=FirewallAction.ACCEPT,
+            purpose="Allow established and related forwarding",
+            connection_state="established,related",
+        ),
+        FirewallRuleIntent(
+            name="allow-authenticated-hotspot-forward",
+            chain=FirewallChain.FORWARD,
+            action=FirewallAction.ACCEPT,
+            purpose=(
+                "Allow authenticated hotspot clients to internet"
+            ),
+            hotspot_state="auth",
         ),
         FirewallRuleIntent(
             name="drop-invalid",

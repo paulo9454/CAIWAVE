@@ -108,3 +108,37 @@ def test_renders_default_drop_rules():
 
     assert '/ip firewall filter add action="drop" chain="input" comment="CAIWAVE default drop WAN input" in-interface="ether1"' in section.content
     assert '/ip firewall filter add action="drop" chain="forward" comment="CAIWAVE default drop unmatched forward"' in section.content
+
+
+def test_renders_established_related_forward_accept_before_drop():
+    content = render_firewall_section(build_bundle()).content
+
+    allow = (
+        '/ip firewall filter add action="accept" chain="forward" '
+        'comment="CAIWAVE: Allow established and related forwarding" '
+        'connection-state="established,related"'
+    )
+    drop = (
+        '/ip firewall filter add action="drop" chain="forward" '
+        'comment="CAIWAVE default drop unmatched forward"'
+    )
+
+    assert allow in content
+    assert content.index(allow) < content.index(drop)
+
+
+def test_renders_authenticated_hotspot_forward_accept_before_drop():
+    content = render_firewall_section(build_bundle()).content
+
+    allow = (
+        '/ip firewall filter add action="accept" chain="forward" '
+        'comment="CAIWAVE: Allow authenticated hotspot clients '
+        'to internet" hotspot="auth"'
+    )
+    drop = (
+        '/ip firewall filter add action="drop" chain="forward" '
+        'comment="CAIWAVE default drop unmatched forward"'
+    )
+
+    assert allow in content
+    assert content.index(allow) < content.index(drop)

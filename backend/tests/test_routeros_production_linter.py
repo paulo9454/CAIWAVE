@@ -135,3 +135,52 @@ def test_rejects_wrong_router_identity_contract():
         sample_router()["nas_identifier"] in error
         for error in result.errors
     )
+
+
+def test_production_artifact_includes_wan_dhcp_client():
+    content = production_script()
+
+    assert "/ip dhcp-client add" in content
+    assert 'interface="ether1"' in content
+    assert "disabled=no" in content
+
+
+def test_production_artifact_allows_established_forwarding_before_drop():
+    content = production_script()
+
+    established_position = content.find("established,related")
+    final_drop_position = content.find(
+        "CAIWAVE default drop unmatched forward"
+    )
+
+    assert established_position >= 0
+    assert final_drop_position >= 0
+    assert established_position < final_drop_position
+
+
+def test_production_artifact_allows_authenticated_hotspot_before_drop():
+    content = production_script()
+
+    authenticated_position = content.find('hotspot="auth"')
+    final_drop_position = content.find(
+        "CAIWAVE default drop unmatched forward"
+    )
+
+    assert authenticated_position >= 0
+    assert final_drop_position >= 0
+    assert authenticated_position < final_drop_position
+
+
+def test_production_artifact_uses_real_radius_secret():
+    router = sample_router()
+    content = production_script()
+
+    assert router["radius_secret"] in content
+    assert "router-radius-secret:" not in content
+
+
+def test_interface_section_is_rendered_not_planned():
+    content = production_script()
+
+    assert "# CAIWAVE Interfaces" in content
+    assert "# section planned: interfaces" not in content

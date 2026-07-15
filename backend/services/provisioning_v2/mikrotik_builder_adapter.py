@@ -119,7 +119,11 @@ def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2Builder
         "owner_id": owner_id,
     }
     config = {
-        "radius_host": router.get("radius_host", os.environ.get("RADIUS_HOST", "radius.caiwave.com")),
+        "radius_host": router.get(
+            "radius_host",
+            os.environ.get("RADIUS_HOST", "radius.caiwave.com"),
+        ),
+        "radius_secret_ref": router["radius_secret"],
         "portal_public_url": router.get("portal_public_url", os.environ.get("PUBLIC_URL", "https://caiwave.com")),
         "api_public_url": router.get("api_public_url", os.environ.get("API_PUBLIC_URL", "https://caiwave.com/api")),
         "heartbeat_url": router.get("heartbeat_url", os.environ.get("HEARTBEAT_URL", "https://caiwave.com/api/mikrotik-onboard/heartbeat")),

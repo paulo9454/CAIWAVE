@@ -41,6 +41,8 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
                 "dst-address": rule.destination_host,
                 "protocol": rule.protocol,
                 "dst-port": rule.destination_port,
+                "connection-state": rule.connection_state,
+                "hotspot": rule.hotspot_state,
             }
             commands.append(build_command("/ip firewall filter", "add", args))
 

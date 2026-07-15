@@ -27,6 +27,7 @@ from backend.services.provisioning_v2.routeros_dns_renderer import render_dns_se
 from backend.services.provisioning_v2.routeros_firewall_renderer import render_firewall_section
 from backend.services.provisioning_v2.routeros_hotspot_renderer import render_hotspot_section
 from backend.services.provisioning_v2.routeros_identity_renderer import render_identity_section
+from backend.services.provisioning_v2.routeros_interface_renderer import render_interface_section
 from backend.services.provisioning_v2.routeros_nat_renderer import render_nat_section
 from backend.services.provisioning_v2.routeros_portal_renderer import render_portal_section
 from backend.services.provisioning_v2.routeros_radius_renderer import render_radius_section
@@ -65,6 +66,7 @@ def _planned_placeholder(section_name: RouterOSSectionName) -> RouterOSRenderedS
 def _render_section(bundle: ProvisioningBundle, section_name: RouterOSSectionName) -> RouterOSRenderedSection:
     renderers = {
         RouterOSSectionName.IDENTITY: render_identity_section,
+        RouterOSSectionName.INTERFACES: render_interface_section,
         RouterOSSectionName.BRIDGE: render_bridge_section,
         RouterOSSectionName.ADDRESSING: render_address_section,
         RouterOSSectionName.DHCP: render_dhcp_section,
