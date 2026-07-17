@@ -1,5 +1,5 @@
 import { safeError } from "../../utils/safeError";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { getUser, logout, getAuthToken, ROLES } from "../../lib/auth";
@@ -30,6 +30,9 @@ import {
   Wallet,
   Copy,
   Ticket,
+  RefreshCw,
+  Ban,
+  Wifi,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import HotspotLocationFields from "../../components/HotspotLocationFields";
@@ -1652,24 +1655,366 @@ const BillingPage = () => {
 };
 
 // Voucher Management Page
+const EMPTY_VOUCHER_SUMMARY = {
+  total: 0,
+  unused: 0,
+  processing: 0,
+  redeemed: 0,
+  revoked: 0,
+  expired: 0,
+};
+
 const VoucherManagementPage = () => {
+
+  const [hotspots, setHotspots] = useState([]);
+  const [selectedHotspotId, setSelectedHotspotId] = useState("");
+  const [summary, setSummary] = useState(EMPTY_VOUCHER_SUMMARY);
+  const [batches, setBatches] = useState([]);
+  const [loadingHotspots, setLoadingHotspots] = useState(true);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [loadError, setLoadError] = useState("");
+
+  const authHeaders = () => ({
+    Authorization: `Bearer ${getAuthToken()}`,
+  });
+
+  const fetchHotspots = useCallback(async () => {
+    setLoadingHotspots(true);
+    setLoadError("");
+
+    try {
+      const response = await axios.get(
+        `${API_URL}/hotspots/`,
+        { headers: authHeaders() }
+      );
+
+      const ownerHotspots = Array.isArray(response.data)
+        ? response.data
+        : [];
+
+      setHotspots(ownerHotspots);
+
+      setSelectedHotspotId((current) => {
+        if (
+          current &&
+          ownerHotspots.some((hotspot) => hotspot.id === current)
+        ) {
+          return current;
+        }
+
+        return ownerHotspots[0]?.id || "";
+      });
+    } catch (error) {
+      setLoadError(safeError(error));
+      setHotspots([]);
+      setSelectedHotspotId("");
+    } finally {
+      setLoadingHotspots(false);
+    }
+  }, []);
+
+  const fetchVoucherData = useCallback(async (hotspotId) => {
+    if (!hotspotId) {
+      setSummary(EMPTY_VOUCHER_SUMMARY);
+      setBatches([]);
+      return;
+    }
+
+    setLoadingVouchers(true);
+    setLoadError("");
+
+    try {
+      const headers = authHeaders();
+      const params = { hotspot_id: hotspotId };
+
+      const [summaryResponse, batchesResponse] = await Promise.all([
+        axios.get(`${API_URL}/vouchers/summary`, {
+          headers,
+          params,
+        }),
+        axios.get(`${API_URL}/vouchers/batches`, {
+          headers,
+          params,
+        }),
+      ]);
+
+      setSummary({
+        ...EMPTY_VOUCHER_SUMMARY,
+        ...(summaryResponse.data || {}),
+      });
+
+      setBatches(
+        Array.isArray(batchesResponse.data)
+          ? batchesResponse.data
+          : []
+      );
+    } catch (error) {
+      setLoadError(safeError(error));
+      setSummary(EMPTY_VOUCHER_SUMMARY);
+      setBatches([]);
+    } finally {
+      setLoadingVouchers(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchHotspots();
+  }, [fetchHotspots]);
+
+  useEffect(() => {
+    fetchVoucherData(selectedHotspotId);
+  }, [fetchVoucherData, selectedHotspotId]);
+
+  const selectedHotspot = hotspots.find(
+    (hotspot) => hotspot.id === selectedHotspotId
+  );
+
+  const summaryCards = [
+    {
+      label: "Total",
+      value: summary.total,
+      icon: Ticket,
+      className: "text-blue-400",
+    },
+    {
+      label: "Unused",
+      value: summary.unused,
+      icon: CheckCircle,
+      className: "text-green-400",
+    },
+    {
+      label: "Redeemed",
+      value: summary.redeemed,
+      icon: Wifi,
+      className: "text-purple-400",
+    },
+    {
+      label: "Revoked",
+      value: summary.revoked,
+      icon: Ban,
+      className: "text-red-400",
+    },
+    {
+      label: "Expired",
+      value: summary.expired,
+      icon: Clock,
+      className: "text-orange-400",
+    },
+  ];
+
+  const formatVoucherDate = (value) => {
+    if (!value) return "—";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "—";
+    }
+
+    return date.toLocaleString();
+  };
+
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold">Voucher Management</h1>
-        <p className="mt-1 text-neutral-400">
-          Generate, manage, and track prepaid WiFi vouchers for your hotspots.
-        </p>
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Voucher Management</h1>
+          <p className="mt-1 text-neutral-400">
+            Generate, manage, and track prepaid WiFi vouchers for your hotspots.
+          </p>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="border-neutral-700"
+          onClick={() => {
+            fetchHotspots();
+
+            if (selectedHotspotId) {
+              fetchVoucherData(selectedHotspotId);
+            }
+          }}
+          disabled={loadingHotspots || loadingVouchers}
+        >
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${
+              loadingHotspots || loadingVouchers
+                ? "animate-spin"
+                : ""
+            }`}
+          />
+          Refresh
+        </Button>
       </div>
 
-      <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
-        <Ticket className="mx-auto mb-4 h-12 w-12 text-blue-400" />
-        <h2 className="mb-2 text-lg font-semibold">
-          Voucher Management
-        </h2>
-        <p className="text-sm text-neutral-400">
-          Voucher generation and batch management controls will appear here.
-        </p>
+      {loadError && (
+        <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 text-red-400" />
+            <div>
+              <p className="font-medium text-red-300">
+                Voucher data could not be loaded
+              </p>
+              <p className="mt-1 text-sm text-red-200/70">
+                {loadError}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-6 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+        <label
+          htmlFor="voucher-hotspot"
+          className="mb-2 block text-sm font-medium text-neutral-300"
+        >
+          Hotspot
+        </label>
+
+        {loadingHotspots ? (
+          <div className="flex items-center gap-2 text-sm text-neutral-400">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            Loading hotspots…
+          </div>
+        ) : hotspots.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-neutral-700 p-5 text-sm text-neutral-400">
+            No hotspots are available. Create and activate a hotspot before
+            generating vouchers.
+          </div>
+        ) : (
+          <>
+            <select
+              id="voucher-hotspot"
+              value={selectedHotspotId}
+              onChange={(event) =>
+                setSelectedHotspotId(event.target.value)
+              }
+              className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+            >
+              {hotspots.map((hotspot) => (
+                <option key={hotspot.id} value={hotspot.id}>
+                  {hotspot.name || hotspot.ssid || hotspot.id}
+                </option>
+              ))}
+            </select>
+
+            {selectedHotspot && (
+              <p className="mt-2 text-xs text-neutral-500">
+                {selectedHotspot.ssid
+                  ? `SSID: ${selectedHotspot.ssid}`
+                  : "Selected hotspot"}
+                {selectedHotspot.location_name
+                  ? ` • ${selectedHotspot.location_name}`
+                  : ""}
+              </p>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {summaryCards.map((card) => (
+          <div
+            key={card.label}
+            className="rounded-xl border border-neutral-800 bg-neutral-900 p-5"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-neutral-400">
+                {card.label}
+              </p>
+              <card.icon className={`h-5 w-5 ${card.className}`} />
+            </div>
+
+            <p className="mt-3 text-3xl font-bold">
+              {loadingVouchers ? "—" : card.value}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900">
+        <div className="border-b border-neutral-800 px-5 py-4">
+          <h2 className="font-semibold">Voucher Batches</h2>
+          <p className="mt-1 text-sm text-neutral-400">
+            Voucher batches created for the selected hotspot.
+          </p>
+        </div>
+
+        {loadingVouchers ? (
+          <div className="flex items-center justify-center gap-3 p-12 text-neutral-400">
+            <RefreshCw className="h-5 w-5 animate-spin" />
+            Loading voucher batches…
+          </div>
+        ) : !selectedHotspotId ? (
+          <div className="p-12 text-center text-neutral-400">
+            Select a hotspot to view voucher batches.
+          </div>
+        ) : batches.length === 0 ? (
+          <div className="p-12 text-center">
+            <Ticket className="mx-auto mb-4 h-10 w-10 text-neutral-600" />
+            <h3 className="font-medium">No voucher batches yet</h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              Generated voucher batches will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-neutral-800">
+              <thead className="bg-neutral-950/60">
+                <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                  <th className="px-5 py-3">Batch</th>
+                  <th className="px-5 py-3">Purpose</th>
+                  <th className="px-5 py-3">Created</th>
+                  <th className="px-5 py-3">Total</th>
+                  <th className="px-5 py-3">Unused</th>
+                  <th className="px-5 py-3">Redeemed</th>
+                  <th className="px-5 py-3">Revoked</th>
+                  <th className="px-5 py-3">Expired</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-neutral-800">
+                {batches.map((batch) => (
+                  <tr
+                    key={batch.batch_id}
+                    className="text-sm hover:bg-neutral-800/40"
+                  >
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-white">
+                        {batch.batch_name || "Unnamed batch"}
+                      </p>
+                      <p className="mt-1 font-mono text-xs text-neutral-500">
+                        {batch.batch_id}
+                      </p>
+                    </td>
+                    <td className="px-5 py-4 capitalize text-neutral-300">
+                      {(batch.purpose || "standard").replaceAll("_", " ")}
+                    </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-neutral-400">
+                      {formatVoucherDate(batch.created_at)}
+                    </td>
+                    <td className="px-5 py-4 font-medium">
+                      {batch.total}
+                    </td>
+                    <td className="px-5 py-4 text-green-400">
+                      {batch.unused}
+                    </td>
+                    <td className="px-5 py-4 text-purple-400">
+                      {batch.redeemed}
+                    </td>
+                    <td className="px-5 py-4 text-red-400">
+                      {batch.revoked}
+                    </td>
+                    <td className="px-5 py-4 text-orange-400">
+                      {batch.expired}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
