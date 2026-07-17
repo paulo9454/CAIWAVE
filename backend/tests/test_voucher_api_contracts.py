@@ -616,3 +616,142 @@ def test_revoked_voucher_cannot_be_redeemed(environment):
     assert response.status_code == 400
     assert response.json()["detail"] == "Voucher has been revoked"
     assert len(fake_db.sessions.documents) == 0
+
+
+def test_owner_voucher_summary_is_scoped_and_status_aware(environment):
+    client, fake_db = environment
+    now = datetime.now(timezone.utc)
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="unused-own",
+            code="SUMMARY1",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            redemption_status="unused",
+            expires_at=(now + timedelta(days=1)).isoformat(),
+        ),
+        unused_voucher(
+            id="redeemed-own",
+            code="SUMMARY2",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            is_used=True,
+            redemption_status="redeemed",
+        ),
+        unused_voucher(
+            id="revoked-own",
+            code="SUMMARY3",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            redemption_status="revoked",
+        ),
+        unused_voucher(
+            id="expired-own",
+            code="SUMMARY4",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            redemption_status="unused",
+            expires_at=(now - timedelta(minutes=1)).isoformat(),
+        ),
+        unused_voucher(
+            id="other-hotspot",
+            code="SUMMARY5",
+            owner_id="owner-1",
+            hotspot_id="hotspot-2",
+        ),
+        unused_voucher(
+            id="other-owner",
+            code="SUMMARY6",
+            owner_id="owner-2",
+            hotspot_id="hotspot-1",
+        ),
+    ]
+
+    response = client.get(
+        "/api/vouchers/summary",
+        params={"hotspot_id": "hotspot-1"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total": 4,
+        "unused": 1,
+        "processing": 0,
+        "redeemed": 1,
+        "revoked": 1,
+        "expired": 1,
+    }
+
+
+def test_owner_batch_listing_groups_vouchers(environment):
+    client, fake_db = environment
+    now = datetime.now(timezone.utc)
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="batch-one-a",
+            code="BATCHA01",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            batch_id="batch-one",
+            batch_name="Weekend sales",
+            created_at=(now - timedelta(hours=1)).isoformat(),
+        ),
+        unused_voucher(
+            id="batch-one-b",
+            code="BATCHA02",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            batch_id="batch-one",
+            batch_name="Weekend sales",
+            is_used=True,
+            redemption_status="redeemed",
+            created_at=(now - timedelta(hours=1)).isoformat(),
+        ),
+        unused_voucher(
+            id="batch-two-a",
+            code="BATCHB01",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+            batch_id="batch-two",
+            batch_name=None,
+            redemption_status="revoked",
+            created_at=now.isoformat(),
+        ),
+        unused_voucher(
+            id="other-owner",
+            code="BATCHC01",
+            owner_id="owner-2",
+            hotspot_id="hotspot-1",
+            batch_id="other-batch",
+        ),
+    ]
+
+    response = client.get(
+        "/api/vouchers/batches",
+        params={"hotspot_id": "hotspot-1"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    batches = response.json()
+
+    assert [batch["batch_id"] for batch in batches] == [
+        "batch-two",
+        "batch-one",
+    ]
+
+    batch_one = next(
+        batch for batch in batches
+        if batch["batch_id"] == "batch-one"
+    )
+
+    assert batch_one["batch_name"] == "Weekend sales"
+    assert batch_one["total"] == 2
+    assert batch_one["unused"] == 1
+    assert batch_one["redeemed"] == 1
+    assert batch_one["revoked"] == 0
+    assert batch_one["hotspot_id"] == "hotspot-1"

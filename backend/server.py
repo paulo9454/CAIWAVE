@@ -6151,6 +6151,46 @@ async def monitor_router_health():
         # Safety reset if task is cancelled
         app.state.router_monitor_running = False
         
+def get_effective_voucher_status(
+    voucher: dict,
+    *,
+    now: datetime,
+) -> str:
+    status = voucher.get(
+        "redemption_status",
+        VoucherRedemptionStatus.UNUSED.value,
+    )
+
+    if status == VoucherRedemptionStatus.UNUSED.value:
+        expires_at_value = voucher.get("expires_at")
+
+        if expires_at_value:
+            expires_at = datetime.fromisoformat(
+                str(expires_at_value).replace("Z", "+00:00")
+            )
+
+            if expires_at <= now:
+                return "expired"
+
+    return status
+
+
+def build_voucher_scope_query(
+    user: dict,
+    *,
+    hotspot_id: Optional[str] = None,
+) -> dict:
+    query = {}
+
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        query["owner_id"] = user["id"]
+
+    if hotspot_id:
+        query["hotspot_id"] = hotspot_id
+
+    return query
+
+
 # ==================== Voucher Routes ====================
 
 @vouchers_router.post("/generate", response_model=List[Voucher])
@@ -6280,19 +6320,142 @@ async def get_vouchers(
     unused_only: bool = False
 ):
     """Get vouchers"""
-    query = {}
-
-    if user["role"] == UserRole.HOTSPOT_OWNER.value:
-        query["owner_id"] = user["id"]
-
-    if hotspot_id:
-        query["hotspot_id"] = hotspot_id
+    query = build_voucher_scope_query(
+        user,
+        hotspot_id=hotspot_id,
+    )
 
     if unused_only:
         query["is_used"] = False
     
     vouchers = await db.vouchers.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return vouchers
+
+@vouchers_router.get("/summary")
+async def get_voucher_summary(
+    user: dict = Depends(
+        require_role(
+            [
+                UserRole.SUPER_ADMIN,
+                UserRole.HOTSPOT_OWNER,
+            ]
+        )
+    ),
+    hotspot_id: Optional[str] = None,
+):
+    """Return owner-scoped voucher lifecycle counts."""
+
+    query = build_voucher_scope_query(
+        user,
+        hotspot_id=hotspot_id,
+    )
+
+    vouchers = await db.vouchers.find(
+        query,
+        {"_id": 0},
+    ).to_list(5000)
+
+    now = datetime.now(timezone.utc)
+
+    summary = {
+        "total": len(vouchers),
+        "unused": 0,
+        "processing": 0,
+        "redeemed": 0,
+        "revoked": 0,
+        "expired": 0,
+    }
+
+    for voucher in vouchers:
+        status = get_effective_voucher_status(
+            voucher,
+            now=now,
+        )
+
+        if status in summary:
+            summary[status] += 1
+
+    return summary
+
+
+@vouchers_router.get("/batches")
+async def get_voucher_batches(
+    user: dict = Depends(
+        require_role(
+            [
+                UserRole.SUPER_ADMIN,
+                UserRole.HOTSPOT_OWNER,
+            ]
+        )
+    ),
+    hotspot_id: Optional[str] = None,
+):
+    """Return owner-scoped voucher batches and lifecycle counts."""
+
+    query = build_voucher_scope_query(
+        user,
+        hotspot_id=hotspot_id,
+    )
+
+    vouchers = await db.vouchers.find(
+        query,
+        {"_id": 0},
+    ).to_list(5000)
+
+    now = datetime.now(timezone.utc)
+    grouped = {}
+
+    for voucher in vouchers:
+        batch_id = voucher.get("batch_id") or (
+            f"legacy-{voucher['id']}"
+        )
+
+        batch = grouped.setdefault(
+            batch_id,
+            {
+                "batch_id": batch_id,
+                "batch_name": voucher.get("batch_name"),
+                "hotspot_id": voucher.get("hotspot_id"),
+                "package_id": voucher.get("package_id"),
+                "purpose": voucher.get("purpose", "standard"),
+                "created_at": voucher.get("created_at"),
+                "expires_at": voucher.get("expires_at"),
+                "total": 0,
+                "unused": 0,
+                "processing": 0,
+                "redeemed": 0,
+                "revoked": 0,
+                "expired": 0,
+            },
+        )
+
+        batch["total"] += 1
+
+        status = get_effective_voucher_status(
+            voucher,
+            now=now,
+        )
+
+        if status in batch:
+            batch[status] += 1
+
+        created_at = voucher.get("created_at")
+
+        if (
+            created_at
+            and (
+                not batch.get("created_at")
+                or created_at > batch["created_at"]
+            )
+        ):
+            batch["created_at"] = created_at
+
+    return sorted(
+        grouped.values(),
+        key=lambda batch: batch.get("created_at") or "",
+        reverse=True,
+    )
+
 
 @vouchers_router.post("/{voucher_id}/revoke")
 async def revoke_voucher(
