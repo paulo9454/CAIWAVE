@@ -6234,6 +6234,9 @@ async def generate_vouchers(
 
             voucher_dict = voucher.model_dump()
             voucher_dict["purpose"] = voucher.purpose.value
+            voucher_dict["redemption_status"] = (
+                voucher.redemption_status.value
+            )
             voucher_dict["created_at"] = (
                 voucher.created_at.isoformat()
             )

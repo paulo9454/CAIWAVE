@@ -22,6 +22,13 @@ class VoucherPurpose(str, Enum):
     OFFLINE_SALE = "offline_sale"
 
 
+class VoucherRedemptionStatus(str, Enum):
+    UNUSED = "unused"
+    PROCESSING = "processing"
+    REDEEMED = "redeemed"
+    REVOKED = "revoked"
+
+
 class VoucherBase(BaseModel):
     package_id: str
     hotspot_id: str
@@ -41,15 +48,26 @@ class Voucher(BaseModel):
     generated_by: str
     purpose: VoucherPurpose = VoucherPurpose.STANDARD
 
+    batch_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )
+    batch_name: Optional[str] = None
+
     username: str
     password: str
 
     is_used: bool = False
-    redemption_status: str = "unused"
+    redemption_status: VoucherRedemptionStatus = (
+        VoucherRedemptionStatus.UNUSED
+    )
     used_at: Optional[datetime] = None
     used_mac: Optional[str] = None
     used_ip: Optional[str] = None
     redeemed_session_id: Optional[str] = None
+
+    revoked_at: Optional[datetime] = None
+    revoked_by: Optional[str] = None
+    revocation_reason: Optional[str] = None
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
