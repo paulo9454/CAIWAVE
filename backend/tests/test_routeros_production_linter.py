@@ -286,3 +286,129 @@ def test_linter_rejects_preauth_allowance_after_final_drop():
         and "drop" in error.lower()
         for error in result.errors
     )
+
+
+def test_linter_rejects_missing_established_forwarding():
+    content = production_script().replace(
+        (
+            '/ip firewall filter add action="accept" chain="forward" '
+            'comment="CAIWAVE: Allow established and related forwarding" '
+            'connection-state="established,related"'
+        ),
+        (
+            '/ip firewall filter add action="accept" chain="forward" '
+            'comment="CAIWAVE: Allow established and related forwarding" '
+            'connection-state="invalid"'
+        ),
+        1,
+    )
+
+    result = lint_production_routeros_script(
+        content,
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "established" in error.lower()
+        and "forward" in error.lower()
+        for error in result.errors
+    )
+
+
+def test_linter_rejects_established_forwarding_after_final_drop():
+    content = production_script()
+    lines = content.splitlines()
+
+    established_index = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("/ip firewall filter add")
+        and 'chain="forward"' in line
+        and 'connection-state="established,related"' in line
+    )
+
+    drop_index = next(
+        index
+        for index, line in enumerate(lines)
+        if "CAIWAVE default drop unmatched forward" in line
+    )
+
+    established_line = lines.pop(established_index)
+
+    if established_index < drop_index:
+        drop_index -= 1
+
+    lines.insert(drop_index + 1, established_line)
+
+    result = lint_production_routeros_script(
+        "\n".join(lines) + "\n",
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "established" in error.lower()
+        and "before" in error.lower()
+        and "drop" in error.lower()
+        for error in result.errors
+    )
+
+
+def test_linter_rejects_missing_authenticated_hotspot_forwarding():
+    content = production_script().replace(
+        'hotspot="auth"',
+        'hotspot="from-client,!auth"',
+        1,
+    )
+
+    result = lint_production_routeros_script(
+        content,
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "authenticated" in error.lower()
+        and "forward" in error.lower()
+        for error in result.errors
+    )
+
+
+def test_linter_rejects_authenticated_hotspot_after_final_drop():
+    content = production_script()
+    lines = content.splitlines()
+
+    authenticated_index = next(
+        index
+        for index, line in enumerate(lines)
+        if line.startswith("/ip firewall filter add")
+        and 'chain="forward"' in line
+        and 'hotspot="auth"' in line
+    )
+
+    drop_index = next(
+        index
+        for index, line in enumerate(lines)
+        if "CAIWAVE default drop unmatched forward" in line
+    )
+
+    authenticated_line = lines.pop(authenticated_index)
+
+    if authenticated_index < drop_index:
+        drop_index -= 1
+
+    lines.insert(drop_index + 1, authenticated_line)
+
+    result = lint_production_routeros_script(
+        "\n".join(lines) + "\n",
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "authenticated" in error.lower()
+        and "before" in error.lower()
+        and "drop" in error.lower()
+        for error in result.errors
+    )

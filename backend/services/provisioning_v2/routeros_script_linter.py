@@ -245,6 +245,40 @@ def lint_production_routeros_script(
         None,
     )
 
+    established_forward_position = next(
+        (
+            index
+            for index, line in enumerate(command_lines)
+            if line.startswith("/ip firewall filter add")
+            and 'chain="forward"' in line
+            and 'action="accept"' in line
+            and 'connection-state="established,related"' in line
+        ),
+        None,
+    )
+
+    authenticated_forward_position = next(
+        (
+            index
+            for index, line in enumerate(command_lines)
+            if line.startswith("/ip firewall filter add")
+            and 'chain="forward"' in line
+            and 'action="accept"' in line
+            and 'hotspot="auth"' in line
+        ),
+        None,
+    )
+
+    if established_forward_position is None:
+        errors.append(
+            "Missing production established and related forward allowance"
+        )
+
+    if authenticated_forward_position is None:
+        errors.append(
+            "Missing production authenticated HotSpot forward allowance"
+        )
+
     if preauth_allow_position is None:
         errors.append(
             "Missing production pre-auth forward allowance for "
@@ -254,6 +288,26 @@ def lint_production_routeros_script(
     if final_forward_drop_position is None:
         errors.append(
             "Missing production final unmatched forward drop"
+        )
+
+    if (
+        established_forward_position is not None
+        and final_forward_drop_position is not None
+        and established_forward_position > final_forward_drop_position
+    ):
+        errors.append(
+            "Production established forwarding must appear before "
+            "the final unmatched forward drop"
+        )
+
+    if (
+        authenticated_forward_position is not None
+        and final_forward_drop_position is not None
+        and authenticated_forward_position > final_forward_drop_position
+    ):
+        errors.append(
+            "Production authenticated HotSpot forwarding must appear "
+            "before the final unmatched forward drop"
         )
 
     if (
