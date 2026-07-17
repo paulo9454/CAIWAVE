@@ -33,6 +33,7 @@ import {
   RefreshCw,
   Ban,
   Wifi,
+  Printer,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import HotspotLocationFields from "../../components/HotspotLocationFields";
@@ -1989,6 +1990,380 @@ const VoucherManagementPage = () => {
     }
   };
 
+  const printVoucherBatch = () => {
+    if (!selectedVoucherBatch || batchVouchers.length === 0) {
+      return;
+    }
+
+    const escapeHtml = (value) =>
+      String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+
+    const batchPackage = packages.find(
+      (item) =>
+        item.id === selectedVoucherBatch.package_id
+    );
+
+    const hotspotName =
+      selectedHotspot?.name ||
+      selectedHotspot?.ssid ||
+      selectedHotspotId ||
+      "CAIWAVE Hotspot";
+
+    const hotspotSsid =
+      selectedHotspot?.ssid || hotspotName;
+
+    const packageName =
+      batchPackage?.name ||
+      selectedVoucherBatch.package_id ||
+      "WiFi Package";
+
+    const packageDetails = [
+      batchPackage?.duration_minutes
+        ? `${batchPackage.duration_minutes} minutes`
+        : null,
+      batchPackage?.speed_mbps
+        ? `${batchPackage.speed_mbps} Mbps`
+        : null,
+      batchPackage?.data_limit_mb
+        ? `${batchPackage.data_limit_mb} MB`
+        : "Unlimited data",
+    ]
+      .filter(Boolean)
+      .join(" • ");
+
+    const voucherCards = batchVouchers
+      .map((voucher) => {
+        const status = getVoucherDisplayStatus(voucher);
+
+        return `
+          <article class="voucher-card">
+            <header class="voucher-header">
+              <div>
+                <div class="brand">CAIWAVE WiFi</div>
+                <div class="hotspot">${escapeHtml(hotspotName)}</div>
+              </div>
+              <div class="status">${escapeHtml(status)}</div>
+            </header>
+
+            <section class="voucher-body">
+              <div class="access-code-label">Voucher Code</div>
+              <div class="access-code">${escapeHtml(voucher.code)}</div>
+
+              <div class="credentials">
+                <div class="credential">
+                  <span>Username</span>
+                  <strong>${escapeHtml(voucher.username)}</strong>
+                </div>
+
+                <div class="credential">
+                  <span>Password</span>
+                  <strong>${escapeHtml(voucher.password)}</strong>
+                </div>
+              </div>
+
+              <div class="instructions">
+                Join <strong>${escapeHtml(hotspotSsid)}</strong>, open the
+                CAIWAVE portal, and enter this voucher code.
+              </div>
+            </section>
+
+            <footer class="voucher-footer">
+              <div>
+                <span>Package</span>
+                <strong>${escapeHtml(packageName)}</strong>
+              </div>
+
+              <div>
+                <span>Expires</span>
+                <strong>${escapeHtml(
+                  formatVoucherDate(voucher.expires_at)
+                )}</strong>
+              </div>
+
+              <div class="batch-reference">
+                Batch: ${escapeHtml(
+                  selectedVoucherBatch.batch_name ||
+                    selectedVoucherBatch.batch_id
+                )}
+              </div>
+            </footer>
+          </article>
+        `;
+      })
+      .join("");
+
+    const printWindow = window.open(
+      "",
+      "_blank",
+      "width=1100,height=800"
+    );
+
+    if (!printWindow) {
+      toast.error(
+        "The print window was blocked. Allow pop-ups and try again."
+      );
+      return;
+    }
+
+    printWindow.opener = null;
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1"
+          />
+          <title>${escapeHtml(
+            selectedVoucherBatch.batch_name ||
+              "CAIWAVE Voucher Batch"
+          )}</title>
+
+          <style>
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              padding: 24px;
+              background: #f3f4f6;
+              color: #111827;
+              font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+            }
+
+            .document-header {
+              max-width: 1100px;
+              margin: 0 auto 20px;
+            }
+
+            .document-header h1 {
+              margin: 0;
+              font-size: 24px;
+            }
+
+            .document-header p {
+              margin: 6px 0 0;
+              color: #4b5563;
+              font-size: 14px;
+            }
+
+            .voucher-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 14px;
+              max-width: 1100px;
+              margin: 0 auto;
+            }
+
+            .voucher-card {
+              display: flex;
+              min-height: 310px;
+              flex-direction: column;
+              overflow: hidden;
+              border: 2px solid #111827;
+              border-radius: 14px;
+              background: #ffffff;
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .voucher-header {
+              display: flex;
+              align-items: flex-start;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 18px 20px;
+              background: #111827;
+              color: #ffffff;
+            }
+
+            .brand {
+              font-size: 19px;
+              font-weight: 800;
+              letter-spacing: 0.04em;
+            }
+
+            .hotspot {
+              margin-top: 4px;
+              color: #d1d5db;
+              font-size: 13px;
+            }
+
+            .status {
+              border: 1px solid #6b7280;
+              border-radius: 999px;
+              padding: 5px 9px;
+              font-size: 11px;
+              font-weight: 700;
+              text-transform: uppercase;
+            }
+
+            .voucher-body {
+              flex: 1;
+              padding: 22px 20px;
+            }
+
+            .access-code-label {
+              color: #6b7280;
+              font-size: 11px;
+              font-weight: 700;
+              letter-spacing: 0.12em;
+              text-align: center;
+              text-transform: uppercase;
+            }
+
+            .access-code {
+              margin-top: 7px;
+              font-family:
+                "Courier New",
+                monospace;
+              font-size: 30px;
+              font-weight: 800;
+              letter-spacing: 0.12em;
+              text-align: center;
+            }
+
+            .credentials {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 12px;
+              margin-top: 22px;
+            }
+
+            .credential {
+              border: 1px solid #d1d5db;
+              border-radius: 9px;
+              padding: 11px;
+            }
+
+            .credential span,
+            .voucher-footer span {
+              display: block;
+              color: #6b7280;
+              font-size: 10px;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              text-transform: uppercase;
+            }
+
+            .credential strong {
+              display: block;
+              margin-top: 5px;
+              font-family:
+                "Courier New",
+                monospace;
+              font-size: 14px;
+              overflow-wrap: anywhere;
+            }
+
+            .instructions {
+              margin-top: 18px;
+              color: #4b5563;
+              font-size: 12px;
+              line-height: 1.5;
+              text-align: center;
+            }
+
+            .voucher-footer {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 10px;
+              border-top: 1px dashed #9ca3af;
+              padding: 14px 20px;
+              background: #f9fafb;
+              font-size: 11px;
+            }
+
+            .voucher-footer strong {
+              display: block;
+              margin-top: 4px;
+              font-size: 11px;
+            }
+
+            .batch-reference {
+              grid-column: 1 / -1;
+              color: #6b7280;
+              font-size: 9px;
+              overflow-wrap: anywhere;
+            }
+
+            @media print {
+              @page {
+                size: A4;
+                margin: 10mm;
+              }
+
+              body {
+                padding: 0;
+                background: #ffffff;
+              }
+
+              .document-header {
+                margin-bottom: 12px;
+              }
+
+              .voucher-grid {
+                gap: 8mm;
+              }
+            }
+
+            @media screen and (max-width: 760px) {
+              .voucher-grid {
+                grid-template-columns: 1fr;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <header class="document-header">
+            <h1>${escapeHtml(
+              selectedVoucherBatch.batch_name ||
+                "CAIWAVE Voucher Batch"
+            )}</h1>
+
+            <p>
+              ${batchVouchers.length} voucher${
+                batchVouchers.length === 1 ? "" : "s"
+              }
+              • ${escapeHtml(hotspotName)}
+              • ${escapeHtml(packageName)}
+              ${
+                packageDetails
+                  ? `• ${escapeHtml(packageDetails)}`
+                  : ""
+              }
+            </p>
+          </header>
+
+          <main class="voucher-grid">
+            ${voucherCards}
+          </main>
+
+          <script>
+            window.addEventListener("load", () => {
+              window.focus();
+              window.print();
+            });
+          </script>
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+  };
+
   const summaryCards = [
     {
       label: "Total",
@@ -2598,7 +2973,21 @@ const VoucherManagementPage = () => {
               )}
             </div>
 
-            <div className="flex justify-end border-t border-neutral-800 px-5 py-4">
+            <div className="flex flex-col-reverse gap-3 border-t border-neutral-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-neutral-700"
+                onClick={printVoucherBatch}
+                disabled={
+                  loadingBatchVouchers ||
+                  batchVouchers.length === 0
+                }
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Print / Save PDF
+              </Button>
+
               <Button
                 type="button"
                 variant="outline"
