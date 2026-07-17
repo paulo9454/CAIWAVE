@@ -141,6 +141,13 @@ def lint_production_routeros_script(
         "/system scheduler add",
         "/system script run caiwave-confirm",
         "/system script run caiwave-heartbeat",
+        "require-message-auth=no",
+        'list="CAIWAVE-PREAUTH"',
+        'address="www.caiwave.com"',
+        'address="checkout.paystack.com"',
+        'dst-address-list="CAIWAVE-PREAUTH"',
+        'hotspot="from-client,!auth"',
+        'dst-port="80,443"',
     ]
 
     for token in required_tokens:
@@ -209,6 +216,54 @@ def lint_production_routeros_script(
     if context.heartbeat_url.startswith("http://"):
         errors.append(
             "Production heartbeat_url must use HTTPS"
+        )
+
+    preauth_allow_position = next(
+        (
+            index
+            for index, line in enumerate(command_lines)
+            if line.startswith("/ip firewall filter add")
+            and 'dst-address-list="CAIWAVE-PREAUTH"' in line
+            and 'hotspot="from-client,!auth"' in line
+            and 'dst-port="80,443"' in line
+            and 'protocol="tcp"' in line
+            and 'action="accept"' in line
+            and 'chain="forward"' in line
+        ),
+        None,
+    )
+
+    final_forward_drop_position = next(
+        (
+            index
+            for index, line in enumerate(command_lines)
+            if line.startswith("/ip firewall filter add")
+            and 'chain="forward"' in line
+            and 'action="drop"' in line
+            and "CAIWAVE default drop unmatched forward" in line
+        ),
+        None,
+    )
+
+    if preauth_allow_position is None:
+        errors.append(
+            "Missing production pre-auth forward allowance for "
+            "CAIWAVE-PREAUTH on TCP ports 80,443"
+        )
+
+    if final_forward_drop_position is None:
+        errors.append(
+            "Missing production final unmatched forward drop"
+        )
+
+    if (
+        preauth_allow_position is not None
+        and final_forward_drop_position is not None
+        and preauth_allow_position > final_forward_drop_position
+    ):
+        errors.append(
+            "Production pre-auth forward allowance must appear before "
+            "the final unmatched forward drop"
         )
 
     return RouterOSLintResult(

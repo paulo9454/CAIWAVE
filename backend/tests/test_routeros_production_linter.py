@@ -210,3 +210,79 @@ def test_production_artifact_allows_preauth_portal_before_drop():
     assert allow_position >= 0
     assert drop_position >= 0
     assert allow_position < drop_position
+
+
+def test_linter_rejects_radius_message_auth_requirement():
+    content = production_script().replace(
+        "require-message-auth=no",
+        "require-message-auth=yes-for-request-resp",
+    )
+
+    result = lint_production_routeros_script(
+        content,
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "require-message-auth=no" in error
+        for error in result.errors
+    )
+
+
+def test_linter_rejects_missing_preauth_forward_allowance():
+    content = production_script().replace(
+        'dst-address-list="CAIWAVE-PREAUTH"',
+        'dst-address-list="BROKEN-PREAUTH"',
+    )
+
+    result = lint_production_routeros_script(
+        content,
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "CAIWAVE-PREAUTH" in error
+        for error in result.errors
+    )
+
+
+def test_linter_rejects_preauth_allowance_after_final_drop():
+    content = production_script()
+
+    lines = content.splitlines()
+
+    allow_index = next(
+        index
+        for index, line in enumerate(lines)
+        if 'dst-address-list="CAIWAVE-PREAUTH"' in line
+        and line.startswith("/ip firewall filter add")
+    )
+
+    drop_index = next(
+        index
+        for index, line in enumerate(lines)
+        if "CAIWAVE default drop unmatched forward" in line
+    )
+
+    allow_line = lines.pop(allow_index)
+
+    if allow_index < drop_index:
+        drop_index -= 1
+
+    lines.insert(drop_index + 1, allow_line)
+
+    broken_content = "\n".join(lines) + "\n"
+
+    result = lint_production_routeros_script(
+        broken_content,
+        context=context(),
+    )
+
+    assert result.valid is False
+    assert any(
+        "before" in error.lower()
+        and "drop" in error.lower()
+        for error in result.errors
+    )
