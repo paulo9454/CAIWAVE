@@ -45,6 +45,7 @@ def render_radius_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
                     "accounting-port": radius.accounting_port,
                     "secret": radius.secret_ref,
                     "timeout": "3s",
+                    "require-message-auth": False,
                     "comment": "CAIWAVE managed RADIUS server",
                 },
             )

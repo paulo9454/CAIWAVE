@@ -103,7 +103,7 @@ def test_renders_radius_section():
     assert section.checksum
     assert "# CAIWAVE RADIUS" in section.content
     assert "# NAS identifier: CAIWAVE-GOODLIFE" in section.content
-    assert '/radius add accounting-port="1813" address="radius.caiwave.com" authentication-port="1812" comment="CAIWAVE managed RADIUS server" secret="router-radius-secret:router-1" service=hotspot timeout="3s"' in section.content
+    assert '/radius add accounting-port="1813" address="radius.caiwave.com" authentication-port="1812" comment="CAIWAVE managed RADIUS server" require-message-auth=no secret="router-radius-secret:router-1" service=hotspot timeout="3s"' in section.content
     assert "/radius incoming set accept=no" in section.content
 
 
@@ -112,3 +112,9 @@ def test_renders_disabled_radius_comment():
 
     assert "# RADIUS disabled by provisioning plan" in section.content
     assert "/radius add" not in section.content
+
+
+def test_renders_routeros_message_auth_compatibility():
+    content = render_radius_section(build_bundle()).content
+
+    assert 'require-message-auth=no' in content

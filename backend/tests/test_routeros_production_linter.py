@@ -184,3 +184,9 @@ def test_interface_section_is_rendered_not_planned():
 
     assert "# CAIWAVE Interfaces" in content
     assert "# section planned: interfaces" not in content
+
+
+def test_production_artifact_disables_radius_message_auth_requirement():
+    content = production_script()
+
+    assert 'require-message-auth=no' in content
