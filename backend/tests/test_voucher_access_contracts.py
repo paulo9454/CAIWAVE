@@ -3,13 +3,15 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
+from backend.models.voucher import (
+    Voucher,
+    VoucherBase,
+    VoucherPurpose,
+)
 from backend.server import (
     HotspotStatus,
     SessionStatus,
     UserRole,
-    Voucher,
-    VoucherBase,
-    VoucherPurpose,
 )
 
 
@@ -112,3 +114,16 @@ def test_voucher_quantity_has_upper_limit():
             hotspot_id="hotspot-1",
             quantity=1001,
         )
+
+
+def test_server_uses_canonical_voucher_models():
+    from backend.models.voucher import (
+        Voucher as CanonicalVoucher,
+        VoucherBase as CanonicalVoucherBase,
+        VoucherPurpose as CanonicalVoucherPurpose,
+    )
+    import backend.server as server
+
+    assert server.Voucher is CanonicalVoucher
+    assert server.VoucherBase is CanonicalVoucherBase
+    assert server.VoucherPurpose is CanonicalVoucherPurpose

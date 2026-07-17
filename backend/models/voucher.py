@@ -1,29 +1,57 @@
 """
-CAIWAVE Voucher Models
-Pydantic models for pre-paid vouchers.
+Canonical CAIWAVE voucher models.
+
+These contracts are shared by voucher generation, owner management,
+captive-portal redemption, tests, and API response validation.
 """
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+
 from datetime import datetime, timezone
+from enum import Enum
+from typing import Optional
 import uuid
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class VoucherPurpose(str, Enum):
+    STANDARD = "standard"
+    TEST = "test"
+    COMPENSATION = "compensation"
+    PROMOTION = "promotion"
+    STAFF = "staff"
+    OFFLINE_SALE = "offline_sale"
 
 
 class VoucherBase(BaseModel):
     package_id: str
     hotspot_id: str
-    quantity: int = 1
+    quantity: int = Field(default=1, ge=1, le=1000)
+    validity_days: int = Field(default=30, ge=1, le=365)
+    purpose: VoucherPurpose = VoucherPurpose.STANDARD
 
 
 class Voucher(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     code: str
     package_id: str
     hotspot_id: str
     owner_id: str
+    generated_by: str
+    purpose: VoucherPurpose = VoucherPurpose.STANDARD
+
     username: str
     password: str
+
     is_used: bool = False
+    redemption_status: str = "unused"
     used_at: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    used_mac: Optional[str] = None
+    used_ip: Optional[str] = None
+    redeemed_session_id: Optional[str] = None
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     expires_at: datetime

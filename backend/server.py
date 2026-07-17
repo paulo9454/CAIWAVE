@@ -40,6 +40,11 @@ from backend.services.provisioning_v2.mikrotik_builder_adapter import build_prov
 from backend.services.provisioning_v2.production_input import (
     build_persisted_production_router_record,
 )
+from backend.models.voucher import (
+    Voucher,
+    VoucherBase,
+    VoucherPurpose,
+)
 import os
 import logging
 import json
@@ -266,15 +271,6 @@ class PaymentMethod(str, Enum):
     BANK = "bank"
     VOUCHER = "voucher"
     FREE_AD = "free_ad"
-
-
-class VoucherPurpose(str, Enum):
-    STANDARD = "standard"
-    TEST = "test"
-    COMPENSATION = "compensation"
-    PROMOTION = "promotion"
-    STAFF = "staff"
-    OFFLINE_SALE = "offline_sale"
 
 
 class HotspotStatus(str, Enum):
@@ -687,40 +683,6 @@ class AdApproval(BaseModel):
 class AdPaymentRequest(BaseModel):
     """Request payment for an approved ad"""
     phone_number: str
-
-# Voucher Models
-class VoucherBase(BaseModel):
-    package_id: str
-    hotspot_id: str
-    quantity: int = Field(default=1, ge=1, le=1000)
-    validity_days: int = Field(default=30, ge=1, le=365)
-    purpose: VoucherPurpose = VoucherPurpose.STANDARD
-
-class Voucher(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    code: str
-    package_id: str
-    hotspot_id: str
-    owner_id: str
-    generated_by: str
-    purpose: VoucherPurpose = VoucherPurpose.STANDARD
-
-    username: str
-    password: str
-
-    is_used: bool = False
-    redemption_status: str = "unused"
-    used_at: Optional[datetime] = None
-    used_mac: Optional[str] = None
-    used_ip: Optional[str] = None
-    redeemed_session_id: Optional[str] = None
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
-    expires_at: datetime
 
 # Notification Models
 class NotificationRequest(BaseModel):

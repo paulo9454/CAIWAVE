@@ -17,7 +17,7 @@ from .payment import PaymentBase, PaymentCreate, Payment, MPesaSTKPushRequest, M
 from .ad import (
     AdPackage, AdPackageCreate, AdPackageUpdate, AdTargeting, Ad, AdApproval, AdPaymentRequest
 )
-from .voucher import VoucherBase, Voucher
+from .voucher import VoucherPurpose, VoucherBase, Voucher
 from .campaign import (
     CampaignBase, CampaignCreate, Campaign, StreamBase, StreamCreate, Stream,
     SubsidizedUptimeBase, SubsidizedUptimeCreate, SubsidizedUptime
@@ -47,7 +47,7 @@ __all__ = [
     # Ad models
     "AdPackage", "AdPackageCreate", "AdPackageUpdate", "AdTargeting", "Ad", "AdApproval", "AdPaymentRequest",
     # Voucher models
-    "VoucherBase", "Voucher",
+    "VoucherPurpose", "VoucherBase", "Voucher",
     # Campaign models
     "CampaignBase", "CampaignCreate", "Campaign", "StreamBase", "StreamCreate", "Stream",
     "SubsidizedUptimeBase", "SubsidizedUptimeCreate", "SubsidizedUptime",
