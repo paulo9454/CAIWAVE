@@ -37,6 +37,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
 from services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
+from backend.services.provisioning_v2.production_input import (
+    build_persisted_production_router_record,
+)
 import os
 import logging
 import json
@@ -5475,6 +5478,17 @@ async def register_mikrotik(
         "last_alert_at": None
     }
 
+    router_record = build_persisted_production_router_record(
+        router_record,
+        radius_host=radius_host,
+        portal_public_url="https://www.caiwave.com",
+        api_public_url="https://www.caiwave.com/api",
+        heartbeat_url=callback_url.replace(
+            "/confirm",
+            "/heartbeat",
+        ),
+    )
+
     await db.mikrotik_routers.insert_one(router_record)
 
     # ================================
@@ -5499,26 +5513,9 @@ async def register_mikrotik(
     # GENERATE PROVISIONING OUTPUTS
     # ================================
 
-    single_rsc = build_provisioning_v2_rsc_from_router({
-            "id": router_id,
-            "name": request.name,
-            "owner_id": user["id"],
-            "hotspot_id": request.hotspot_id,
-            "nas_identifier": nas_id,
-            "radius_secret": radius_secret,
-            "radius_host": radius_host,
-            "portal_public_url": "https://www.caiwave.com",
-            "api_public_url": "https://www.caiwave.com/api",
-            "heartbeat_url": callback_url.replace("/confirm", "/heartbeat"),
-            "wan_interface": wan_interface,
-            "lan_interfaces": lan_interfaces,
-            "create_bridge": request.create_bridge,
-            "bridge_name": request.bridge_name,
-            "hotspot_cidr": hotspot_network,
-            "hotspot_gateway": hotspot_gateway,
-            "dhcp_pool": request.dhcp_pool,
-            "dns_name": "login.caiwave.local",
-        })
+    single_rsc = build_provisioning_v2_rsc_from_router(
+        router_record
+    )
 
     return {
         "router_id": router_id,
@@ -7883,4 +7880,3 @@ class MikroTikBootstrapRequest(BaseModel):
     wan_interface: str
     lan_interfaces: List[str] = []
     notes: Optional[str] = None
-

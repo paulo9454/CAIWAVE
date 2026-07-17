@@ -218,3 +218,36 @@ def validate_production_router_input(
         api_public_url=api_public_url,
         heartbeat_url=heartbeat_url,
     )
+
+
+def build_persisted_production_router_record(
+    router_record: dict[str, Any],
+    *,
+    radius_host: str,
+    portal_public_url: str,
+    api_public_url: str,
+    heartbeat_url: str,
+) -> dict[str, Any]:
+    """
+    Complete and validate the normalized router snapshot that is both
+    persisted to MongoDB and supplied to Provisioning Engine v2.
+    """
+
+    hotspot_network = _required_string(
+        router_record,
+        "hotspot_network",
+    )
+
+    completed = {
+        **router_record,
+        "hotspot_cidr": hotspot_network,
+        "dns_name": "login.caiwave.local",
+        "radius_host": radius_host,
+        "portal_public_url": portal_public_url,
+        "api_public_url": api_public_url,
+        "heartbeat_url": heartbeat_url,
+    }
+
+    validate_production_router_input(completed)
+
+    return completed
