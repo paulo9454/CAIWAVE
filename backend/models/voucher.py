@@ -35,6 +35,10 @@ class VoucherBase(BaseModel):
     quantity: int = Field(default=1, ge=1, le=1000)
     validity_days: int = Field(default=30, ge=1, le=365)
     purpose: VoucherPurpose = VoucherPurpose.STANDARD
+    batch_name: Optional[str] = Field(
+        default=None,
+        max_length=120,
+    )
 
 
 class Voucher(BaseModel):

@@ -182,3 +182,22 @@ def test_voucher_redemption_status_rejects_unknown_value():
             redemption_status="deleted",
             expires_at=datetime.now(timezone.utc) + timedelta(days=30),
         )
+
+
+def test_voucher_request_accepts_batch_name():
+    request = VoucherBase(
+        package_id="pkg-30min",
+        hotspot_id="hotspot-1",
+        batch_name="Weekend sales",
+    )
+
+    assert request.batch_name == "Weekend sales"
+
+
+def test_voucher_batch_name_has_length_limit():
+    with pytest.raises(ValidationError):
+        VoucherBase(
+            package_id="pkg-30min",
+            hotspot_id="hotspot-1",
+            batch_name="x" * 121,
+        )

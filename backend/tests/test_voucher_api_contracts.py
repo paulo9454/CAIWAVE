@@ -169,6 +169,11 @@ def environment(monkeypatch):
     app = FastAPI()
     app.include_router(server.vouchers_router, prefix="/api")
 
+    app.dependency_overrides[server.get_current_user] = lambda: {
+        "id": "owner-1",
+        "role": server.UserRole.HOTSPOT_OWNER.value,
+    }
+
     with TestClient(app) as client:
         yield client, fake_db
 
@@ -339,3 +344,56 @@ def test_second_redemption_cannot_create_second_session(environment):
     assert second.status_code == 409
     assert len(fake_db.sessions.documents) == 1
     assert fake_db.hotspots.documents[0]["total_sessions"] == 1
+
+
+def test_generated_vouchers_share_one_batch(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = []
+
+    response = client.post(
+        "/api/vouchers/generate",
+        json={
+            "package_id": "pkg-30min",
+            "hotspot_id": "hotspot-1",
+            "quantity": 3,
+            "validity_days": 14,
+            "purpose": "standard",
+            "batch_name": "Weekend sales",
+        },
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    vouchers = response.json()
+
+    assert len(vouchers) == 3
+    assert len({voucher["batch_id"] for voucher in vouchers}) == 1
+    assert all(
+        voucher["batch_name"] == "Weekend sales"
+        for voucher in vouchers
+    )
+
+
+def test_generated_batch_name_defaults_to_none(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = []
+
+    response = client.post(
+        "/api/vouchers/generate",
+        json={
+            "package_id": "pkg-30min",
+            "hotspot_id": "hotspot-1",
+            "quantity": 2,
+        },
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    vouchers = response.json()
+
+    assert len({voucher["batch_id"] for voucher in vouchers}) == 1
+    assert all(voucher["batch_name"] is None for voucher in vouchers)

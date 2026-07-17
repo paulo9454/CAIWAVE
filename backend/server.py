@@ -6211,6 +6211,13 @@ async def generate_vouchers(
     )
 
     vouchers: List[Voucher] = []
+    batch_id = str(uuid.uuid4())
+
+    batch_name = (
+        voucher_data.batch_name.strip()
+        if voucher_data.batch_name
+        else None
+    )
 
     for _ in range(voucher_data.quantity):
         created_voucher = None
@@ -6227,6 +6234,8 @@ async def generate_vouchers(
                 owner_id=hotspot["owner_id"],
                 generated_by=user["id"],
                 purpose=voucher_data.purpose,
+                batch_id=batch_id,
+                batch_name=batch_name,
                 username=username,
                 password=password,
                 expires_at=expires_at,
