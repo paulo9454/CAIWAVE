@@ -1674,6 +1674,20 @@ const VoucherManagementPage = () => {
   const [loadingVouchers, setLoadingVouchers] = useState(false);
   const [loadError, setLoadError] = useState("");
 
+  const [packages, setPackages] = useState([]);
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  const [loadingPackages, setLoadingPackages] = useState(true);
+
+  const [generationForm, setGenerationForm] = useState({
+    batch_name: "",
+    quantity: 1,
+    validity_days: 30,
+    purpose: "standard",
+  });
+  const [generatingVouchers, setGeneratingVouchers] = useState(false);
+  const [generationError, setGenerationError] = useState("");
+  const [generationSuccess, setGenerationSuccess] = useState("");
+
   const authHeaders = () => ({
     Authorization: `Bearer ${getAuthToken()}`,
   });
@@ -1710,6 +1724,43 @@ const VoucherManagementPage = () => {
       setSelectedHotspotId("");
     } finally {
       setLoadingHotspots(false);
+    }
+  }, []);
+
+  const fetchPackages = useCallback(async () => {
+    setLoadingPackages(true);
+    setGenerationError("");
+
+    try {
+      const response = await axios.get(
+        `${API_URL}/packages/`,
+        { headers: authHeaders() }
+      );
+
+      const activePackages = Array.isArray(response.data)
+        ? response.data
+        : Array.isArray(response.data?.packages)
+          ? response.data.packages
+          : [];
+
+      setPackages(activePackages);
+
+      setSelectedPackageId((current) => {
+        if (
+          current &&
+          activePackages.some((item) => item.id === current)
+        ) {
+          return current;
+        }
+
+        return activePackages[0]?.id || "";
+      });
+    } catch (error) {
+      setGenerationError(safeError(error));
+      setPackages([]);
+      setSelectedPackageId("");
+    } finally {
+      setLoadingPackages(false);
     }
   }, []);
 
@@ -1762,12 +1813,107 @@ const VoucherManagementPage = () => {
   }, [fetchHotspots]);
 
   useEffect(() => {
+    fetchPackages();
+  }, [fetchPackages]);
+
+  useEffect(() => {
     fetchVoucherData(selectedHotspotId);
   }, [fetchVoucherData, selectedHotspotId]);
 
   const selectedHotspot = hotspots.find(
     (hotspot) => hotspot.id === selectedHotspotId
   );
+
+  const selectedPackage = packages.find(
+    (item) => item.id === selectedPackageId
+  );
+
+  const updateGenerationForm = (field, value) => {
+    setGenerationForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handleGenerateVouchers = async (event) => {
+    event.preventDefault();
+
+    setGenerationError("");
+    setGenerationSuccess("");
+
+    if (!selectedHotspotId) {
+      setGenerationError("Select a hotspot before generating vouchers.");
+      return;
+    }
+
+    if (!selectedPackageId) {
+      setGenerationError("Select a WiFi package before generating vouchers.");
+      return;
+    }
+
+    const quantity = Number(generationForm.quantity);
+    const validityDays = Number(generationForm.validity_days);
+
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) {
+      setGenerationError(
+        "Voucher quantity must be a whole number between 1 and 1000."
+      );
+      return;
+    }
+
+    if (
+      !Number.isInteger(validityDays) ||
+      validityDays < 1 ||
+      validityDays > 365
+    ) {
+      setGenerationError(
+        "Voucher validity must be a whole number between 1 and 365 days."
+      );
+      return;
+    }
+
+    setGeneratingVouchers(true);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/vouchers/generate`,
+        {
+          package_id: selectedPackageId,
+          hotspot_id: selectedHotspotId,
+          quantity,
+          validity_days: validityDays,
+          purpose: generationForm.purpose,
+          batch_name: generationForm.batch_name.trim() || null,
+        },
+        {
+          headers: authHeaders(),
+        }
+      );
+
+      const generatedCount = Array.isArray(response.data)
+        ? response.data.length
+        : quantity;
+
+      setGenerationSuccess(
+        `${generatedCount} voucher${
+          generatedCount === 1 ? "" : "s"
+        } generated successfully.`
+      );
+
+      setGenerationForm({
+        batch_name: "",
+        quantity: 1,
+        validity_days: 30,
+        purpose: "standard",
+      });
+
+      await fetchVoucherData(selectedHotspotId);
+    } catch (error) {
+      setGenerationError(safeError(error));
+    } finally {
+      setGeneratingVouchers(false);
+    }
+  };
 
   const summaryCards = [
     {
@@ -1830,6 +1976,7 @@ const VoucherManagementPage = () => {
           className="border-neutral-700"
           onClick={() => {
             fetchHotspots();
+            fetchPackages();
 
             if (selectedHotspotId) {
               fetchVoucherData(selectedHotspotId);
@@ -1911,6 +2058,219 @@ const VoucherManagementPage = () => {
             )}
           </>
         )}
+      </div>
+
+      <div className="mb-8 rounded-xl border border-neutral-800 bg-neutral-900 p-5">
+        <div className="mb-5">
+          <h2 className="font-semibold">Generate Voucher Batch</h2>
+          <p className="mt-1 text-sm text-neutral-400">
+            Create prepaid vouchers using one of the active WiFi packages.
+          </p>
+        </div>
+
+        {generationError && (
+          <div className="mb-5 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 text-red-400" />
+              <p className="text-sm text-red-200">
+                {generationError}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {generationSuccess && (
+          <div className="mb-5 rounded-lg border border-green-500/30 bg-green-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle className="mt-0.5 h-5 w-5 text-green-400" />
+              <p className="text-sm text-green-200">
+                {generationSuccess}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleGenerateVouchers}>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            <div>
+              <label
+                htmlFor="voucher-package"
+                className="mb-2 block text-sm font-medium text-neutral-300"
+              >
+                WiFi Package
+              </label>
+
+              <select
+                id="voucher-package"
+                value={selectedPackageId}
+                onChange={(event) => {
+                  setSelectedPackageId(event.target.value);
+                  setGenerationError("");
+                  setGenerationSuccess("");
+                }}
+                disabled={loadingPackages || packages.length === 0}
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-white outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                required
+              >
+                {loadingPackages ? (
+                  <option value="">Loading packages…</option>
+                ) : packages.length === 0 ? (
+                  <option value="">No active packages available</option>
+                ) : (
+                  packages.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} — KES {item.price}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              {selectedPackage && (
+                <p className="mt-2 text-xs text-neutral-500">
+                  {selectedPackage.duration_minutes} minutes
+                  {" • "}
+                  {selectedPackage.speed_mbps} Mbps
+                  {selectedPackage.data_limit_mb
+                    ? ` • ${selectedPackage.data_limit_mb} MB`
+                    : " • Unlimited data"}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="voucher-batch-name"
+                className="mb-2 block text-sm font-medium text-neutral-300"
+              >
+                Batch Name
+              </label>
+
+              <input
+                id="voucher-batch-name"
+                type="text"
+                maxLength={120}
+                value={generationForm.batch_name}
+                onChange={(event) =>
+                  updateGenerationForm("batch_name", event.target.value)
+                }
+                placeholder="Example: Weekend vouchers"
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-white outline-none placeholder:text-neutral-600 focus:border-blue-500"
+              />
+
+              <p className="mt-2 text-xs text-neutral-500">
+                Optional administrative name for this batch.
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="voucher-purpose"
+                className="mb-2 block text-sm font-medium text-neutral-300"
+              >
+                Purpose
+              </label>
+
+              <select
+                id="voucher-purpose"
+                value={generationForm.purpose}
+                onChange={(event) =>
+                  updateGenerationForm("purpose", event.target.value)
+                }
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+              >
+                <option value="standard">Standard</option>
+                <option value="test">Test</option>
+                <option value="compensation">Compensation</option>
+                <option value="promotion">Promotion</option>
+                <option value="staff">Staff</option>
+                <option value="offline_sale">Offline sale</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="voucher-quantity"
+                className="mb-2 block text-sm font-medium text-neutral-300"
+              >
+                Quantity
+              </label>
+
+              <input
+                id="voucher-quantity"
+                type="number"
+                min="1"
+                max="1000"
+                step="1"
+                value={generationForm.quantity}
+                onChange={(event) =>
+                  updateGenerationForm("quantity", event.target.value)
+                }
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+                required
+              />
+
+              <p className="mt-2 text-xs text-neutral-500">
+                Between 1 and 1,000 vouchers.
+              </p>
+            </div>
+
+            <div>
+              <label
+                htmlFor="voucher-validity"
+                className="mb-2 block text-sm font-medium text-neutral-300"
+              >
+                Validity in Days
+              </label>
+
+              <input
+                id="voucher-validity"
+                type="number"
+                min="1"
+                max="365"
+                step="1"
+                value={generationForm.validity_days}
+                onChange={(event) =>
+                  updateGenerationForm(
+                    "validity_days",
+                    event.target.value
+                  )
+                }
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+                required
+              />
+
+              <p className="mt-2 text-xs text-neutral-500">
+                Time allowed before unused vouchers expire.
+              </p>
+            </div>
+
+            <div className="flex items-end">
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={
+                  generatingVouchers ||
+                  loadingPackages ||
+                  loadingHotspots ||
+                  !selectedHotspotId ||
+                  !selectedPackageId
+                }
+              >
+                {generatingVouchers ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Ticket className="mr-2 h-4 w-4" />
+                    Generate Vouchers
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </form>
       </div>
 
       <div className="mb-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
