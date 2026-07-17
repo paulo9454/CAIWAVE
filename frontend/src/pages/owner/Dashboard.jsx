@@ -1688,6 +1688,11 @@ const VoucherManagementPage = () => {
   const [generationError, setGenerationError] = useState("");
   const [generationSuccess, setGenerationSuccess] = useState("");
 
+  const [selectedVoucherBatch, setSelectedVoucherBatch] = useState(null);
+  const [batchVouchers, setBatchVouchers] = useState([]);
+  const [loadingBatchVouchers, setLoadingBatchVouchers] = useState(false);
+  const [batchVoucherError, setBatchVoucherError] = useState("");
+
   const authHeaders = () => ({
     Authorization: `Bearer ${getAuthToken()}`,
   });
@@ -1912,6 +1917,75 @@ const VoucherManagementPage = () => {
       setGenerationError(safeError(error));
     } finally {
       setGeneratingVouchers(false);
+    }
+  };
+
+  const closeVoucherBatchViewer = () => {
+    setSelectedVoucherBatch(null);
+    setBatchVouchers([]);
+    setBatchVoucherError("");
+    setLoadingBatchVouchers(false);
+  };
+
+  const openVoucherBatchViewer = async (batch) => {
+    setSelectedVoucherBatch(batch);
+    setBatchVouchers([]);
+    setBatchVoucherError("");
+    setLoadingBatchVouchers(true);
+
+    try {
+      const response = await axios.get(
+        `${API_URL}/vouchers/`,
+        {
+          headers: authHeaders(),
+          params: {
+            hotspot_id: selectedHotspotId,
+            batch_id: batch.batch_id,
+          },
+        }
+      );
+
+      setBatchVouchers(
+        Array.isArray(response.data)
+          ? response.data
+          : []
+      );
+    } catch (error) {
+      setBatchVoucherError(safeError(error));
+      setBatchVouchers([]);
+    } finally {
+      setLoadingBatchVouchers(false);
+    }
+  };
+
+  const getVoucherDisplayStatus = (voucher) => {
+    const status = voucher.redemption_status || (
+      voucher.is_used ? "redeemed" : "unused"
+    );
+
+    if (
+      status === "unused" &&
+      voucher.expires_at &&
+      new Date(voucher.expires_at).getTime() <= Date.now()
+    ) {
+      return "expired";
+    }
+
+    return status;
+  };
+
+  const getVoucherStatusClassName = (status) => {
+    switch (status) {
+      case "redeemed":
+        return "bg-purple-500/10 text-purple-300";
+      case "revoked":
+        return "bg-red-500/10 text-red-300";
+      case "expired":
+        return "bg-orange-500/10 text-orange-300";
+      case "processing":
+        return "bg-blue-500/10 text-blue-300";
+      default:
+        return "bg-green-500/10 text-green-300";
     }
   };
 
@@ -2331,6 +2405,7 @@ const VoucherManagementPage = () => {
                   <th className="px-5 py-3">Redeemed</th>
                   <th className="px-5 py-3">Revoked</th>
                   <th className="px-5 py-3">Expired</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
 
@@ -2369,6 +2444,18 @@ const VoucherManagementPage = () => {
                     <td className="px-5 py-4 text-orange-400">
                       {batch.expired}
                     </td>
+                    <td className="whitespace-nowrap px-5 py-4 text-right">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="border-neutral-700"
+                        onClick={() => openVoucherBatchViewer(batch)}
+                      >
+                        <Ticket className="mr-2 h-4 w-4" />
+                        View Vouchers
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -2376,6 +2463,154 @@ const VoucherManagementPage = () => {
           </div>
         )}
       </div>
+
+      {selectedVoucherBatch && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="voucher-batch-dialog-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeVoucherBatchViewer();
+            }
+          }}
+        >
+          <div className="flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-neutral-800 px-5 py-4">
+              <div>
+                <h2
+                  id="voucher-batch-dialog-title"
+                  className="text-lg font-semibold"
+                >
+                  {selectedVoucherBatch.batch_name || "Unnamed batch"}
+                </h2>
+                <p className="mt-1 text-sm text-neutral-400">
+                  {selectedVoucherBatch.total} voucher
+                  {selectedVoucherBatch.total === 1 ? "" : "s"}
+                  {" • "}
+                  {(selectedVoucherBatch.purpose || "standard")
+                    .replaceAll("_", " ")}
+                </p>
+                <p className="mt-1 font-mono text-xs text-neutral-600">
+                  {selectedVoucherBatch.batch_id}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeVoucherBatchViewer}
+                className="rounded-lg p-2 text-neutral-400 transition-colors hover:bg-neutral-800 hover:text-white"
+                aria-label="Close voucher batch"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              {loadingBatchVouchers ? (
+                <div className="flex items-center justify-center gap-3 p-16 text-neutral-400">
+                  <RefreshCw className="h-5 w-5 animate-spin" />
+                  Loading voucher credentials…
+                </div>
+              ) : batchVoucherError ? (
+                <div className="p-6">
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 text-red-400" />
+                      <div>
+                        <p className="font-medium text-red-300">
+                          Voucher credentials could not be loaded
+                        </p>
+                        <p className="mt-1 text-sm text-red-200/70">
+                          {batchVoucherError}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : batchVouchers.length === 0 ? (
+                <div className="p-16 text-center">
+                  <Ticket className="mx-auto mb-4 h-10 w-10 text-neutral-600" />
+                  <h3 className="font-medium">
+                    No vouchers found
+                  </h3>
+                  <p className="mt-1 text-sm text-neutral-500">
+                    This batch does not contain any accessible vouchers.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-neutral-800">
+                    <thead className="sticky top-0 bg-neutral-950">
+                      <tr className="text-left text-xs uppercase tracking-wide text-neutral-500">
+                        <th className="px-5 py-3">Voucher Code</th>
+                        <th className="px-5 py-3">Username</th>
+                        <th className="px-5 py-3">Password</th>
+                        <th className="px-5 py-3">Status</th>
+                        <th className="px-5 py-3">Expires</th>
+                      </tr>
+                    </thead>
+
+                    <tbody className="divide-y divide-neutral-800">
+                      {batchVouchers.map((voucher) => {
+                        const displayStatus =
+                          getVoucherDisplayStatus(voucher);
+
+                        return (
+                          <tr
+                            key={voucher.id}
+                            className="text-sm hover:bg-neutral-800/40"
+                          >
+                            <td className="px-5 py-4">
+                              <span className="font-mono font-semibold text-white">
+                                {voucher.code}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span className="font-mono text-neutral-200">
+                                {voucher.username}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span className="font-mono text-neutral-200">
+                                {voucher.password}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4">
+                              <span
+                                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${getVoucherStatusClassName(
+                                  displayStatus
+                                )}`}
+                              >
+                                {displayStatus}
+                              </span>
+                            </td>
+                            <td className="whitespace-nowrap px-5 py-4 text-neutral-400">
+                              {formatVoucherDate(voucher.expires_at)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end border-t border-neutral-800 px-5 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-neutral-700"
+                onClick={closeVoucherBatchViewer}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
