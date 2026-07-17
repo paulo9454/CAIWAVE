@@ -46,6 +46,44 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
             }
             commands.append(build_command("/ip firewall filter", "add", args))
 
+    # Resolve portal and payment hostnames through RouterOS firewall
+    # address lists. The forward rule is limited to unauthenticated
+    # HotSpot clients and web traffic only.
+    preauth_hosts = list(dict.fromkeys(firewall.portal_hosts))
+
+    for host in preauth_hosts:
+        commands.append(
+            build_command(
+                "/ip firewall address-list",
+                "add",
+                {
+                    "list": "CAIWAVE-PREAUTH",
+                    "address": host,
+                    "comment": "CAIWAVE pre-auth host",
+                },
+            )
+        )
+
+    if preauth_hosts:
+        commands.append(
+            build_command(
+                "/ip firewall filter",
+                "add",
+                {
+                    "chain": "forward",
+                    "action": "accept",
+                    "protocol": "tcp",
+                    "dst-port": "80,443",
+                    "dst-address-list": "CAIWAVE-PREAUTH",
+                    "hotspot": "from-client,!auth",
+                    "comment": (
+                        "CAIWAVE: Allow pre-auth portal "
+                        "and payment traffic"
+                    ),
+                },
+            )
+        )
+
     if firewall.default_input_policy == FirewallAction.DROP:
         commands.append(
             build_command(

@@ -190,3 +190,23 @@ def test_production_artifact_disables_radius_message_auth_requirement():
     content = production_script()
 
     assert 'require-message-auth=no' in content
+
+
+def test_production_artifact_allows_preauth_portal_before_drop():
+    content = production_script()
+
+    allow_position = content.find(
+        'dst-address-list="CAIWAVE-PREAUTH"'
+    )
+    drop_position = content.find(
+        "CAIWAVE default drop unmatched forward"
+    )
+
+    assert 'list="CAIWAVE-PREAUTH"' in content
+    assert 'address="www.caiwave.com"' in content
+    assert 'address="checkout.paystack.com"' in content
+    assert 'hotspot="from-client,!auth"' in content
+    assert 'dst-port="80,443"' in content
+    assert allow_position >= 0
+    assert drop_position >= 0
+    assert allow_position < drop_position

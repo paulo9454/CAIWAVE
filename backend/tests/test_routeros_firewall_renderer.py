@@ -142,3 +142,63 @@ def test_renders_authenticated_hotspot_forward_accept_before_drop():
 
     assert allow in content
     assert content.index(allow) < content.index(drop)
+
+
+def test_renders_preauth_portal_address_list_entries():
+    content = render_firewall_section(build_bundle()).content
+
+    assert (
+        '/ip firewall address-list add '
+        'address="caiwave.com" '
+        'comment="CAIWAVE pre-auth host" '
+        'list="CAIWAVE-PREAUTH"'
+    ) in content
+
+    assert (
+        '/ip firewall address-list add '
+        'address="checkout.paystack.com" '
+        'comment="CAIWAVE pre-auth host" '
+        'list="CAIWAVE-PREAUTH"'
+    ) in content
+
+
+def test_renders_preauth_forward_allow_before_final_drop():
+    content = render_firewall_section(build_bundle()).content
+
+    allow = (
+        '/ip firewall filter add action="accept" chain="forward" '
+        'comment="CAIWAVE: Allow pre-auth portal and payment traffic" '
+        'dst-address-list="CAIWAVE-PREAUTH" dst-port="80,443" '
+        'hotspot="from-client,!auth" protocol="tcp"'
+    )
+    drop = (
+        '/ip firewall filter add action="drop" chain="forward" '
+        'comment="CAIWAVE default drop unmatched forward"'
+    )
+
+    assert allow in content
+    assert content.index(allow) < content.index(drop)
+
+
+def test_deduplicates_preauth_portal_hosts():
+    bundle = build_bundle()
+    duplicated = bundle.model_copy(
+        update={
+            "firewall": bundle.firewall.model_copy(
+                update={
+                    "portal_hosts": [
+                        "caiwave.com",
+                        "checkout.paystack.com",
+                        "caiwave.com",
+                    ]
+                }
+            )
+        }
+    )
+
+    content = render_firewall_section(duplicated).content
+
+    assert content.count(
+        'address="caiwave.com" '
+        'comment="CAIWAVE pre-auth host"'
+    ) == 1
