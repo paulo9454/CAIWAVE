@@ -100,12 +100,6 @@ def validate_campaign_targeting(
             "Country name must be Kenya for country code KE.",
         )
 
-    if not targeting["assigned_ad_ids"]:
-        raise CampaignTargetingValidationError(
-            "assigned_ad_ids",
-            "At least one eligible advertisement must be assigned.",
-        )
-
     selected_counties = targeting["counties"]
     selected_constituencies = targeting["constituencies"]
     selected_hotspots = targeting["hotspot_ids"]

@@ -95,6 +95,16 @@ def test_ad_eligibility_does_not_require_payment_id():
     assert is_ad_eligible_for_campaign(ad, now=NOW)
 
 
+def test_validate_campaign_ads_allows_no_assigned_advertisements():
+    result = validate_campaign_ads(
+        assigned_ad_ids=[],
+        ads_by_id={},
+        now=NOW,
+    )
+
+    assert result == []
+
+
 def test_validate_campaign_ads_deduplicates_ids():
     result = validate_campaign_ads(
         assigned_ad_ids=["ad-active", "ad-active"],
@@ -108,7 +118,6 @@ def test_validate_campaign_ads_deduplicates_ids():
 @pytest.mark.parametrize(
     ("expected_message_part", "assigned_ids", "ads"),
     [
-        ("At least one", [], {}),
         ("do not exist", ["missing"], {}),
         (
             "unpaid, inactive, unapproved or expired",

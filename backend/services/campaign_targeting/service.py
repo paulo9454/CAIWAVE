@@ -127,10 +127,7 @@ def validate_campaign_ads(
         normalized_ids.append(ad_id)
 
     if not normalized_ids:
-        raise CampaignValidationError(
-            "assigned_ad_ids",
-            "At least one eligible advertisement must be assigned.",
-        )
+        return []
 
     missing_ids = [
         ad_id

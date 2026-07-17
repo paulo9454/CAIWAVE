@@ -91,13 +91,18 @@ def test_valid_hotspot_campaign():
     assert result["hotspot_ids"] == ["hotspot-mtwapa"]
 
 
+def test_campaign_targeting_allows_no_assigned_advertisements():
+    result = validate(assigned_ad_ids=[])
+
+    assert result["assigned_ad_ids"] == []
+
+
 @pytest.mark.parametrize(
     ("field", "overrides"),
     [
         ("coverage_scope", {"coverage_scope": "region"}),
         ("country_code", {"country_code": "UG"}),
         ("country_name", {"country_name": "Uganda"}),
-        ("assigned_ad_ids", {"assigned_ad_ids": []}),
         ("counties", {"coverage_scope": "county", "counties": []}),
         (
             "counties",
