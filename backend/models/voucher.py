@@ -41,6 +41,13 @@ class VoucherBase(BaseModel):
     )
 
 
+class VoucherRevocationRequest(BaseModel):
+    reason: str = Field(
+        min_length=3,
+        max_length=250,
+    )
+
+
 class Voucher(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

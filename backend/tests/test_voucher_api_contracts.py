@@ -43,10 +43,49 @@ def matches(document, query):
     return True
 
 
+class FakeCursor:
+    def __init__(self, documents):
+        self.documents = deepcopy(documents)
+
+    def sort(self, field, direction):
+        reverse = direction < 0
+        self.documents.sort(
+            key=lambda document: document.get(field) or "",
+            reverse=reverse,
+        )
+        return self
+
+    def limit(self, count):
+        self.documents = self.documents[:count]
+        return self
+
+    async def to_list(self, length=None):
+        if length is None:
+            return deepcopy(self.documents)
+
+        return deepcopy(self.documents[:length])
+
+
 class FakeCollection:
     def __init__(self, documents=None, *, fail_insert=False):
         self.documents = deepcopy(documents or [])
         self.fail_insert = fail_insert
+
+    def find(self, query, projection=None):
+        matched = []
+
+        for document in self.documents:
+            if not matches(document, query):
+                continue
+
+            result = deepcopy(document)
+
+            if projection and projection.get("_id") == 0:
+                result.pop("_id", None)
+
+            matched.append(result)
+
+        return FakeCursor(matched)
 
     async def find_one(self, query, projection=None):
         for document in self.documents:
@@ -397,3 +436,183 @@ def test_generated_batch_name_defaults_to_none(environment):
 
     assert len({voucher["batch_id"] for voucher in vouchers}) == 1
     assert all(voucher["batch_name"] is None for voucher in vouchers)
+
+
+def test_owner_can_filter_own_vouchers_by_hotspot(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-own-one",
+            code="OWNONE01",
+            owner_id="owner-1",
+            hotspot_id="hotspot-1",
+        ),
+        unused_voucher(
+            id="voucher-own-two",
+            code="OWNTWO02",
+            owner_id="owner-1",
+            hotspot_id="hotspot-2",
+        ),
+        unused_voucher(
+            id="voucher-other",
+            code="OTHER003",
+            owner_id="owner-2",
+            hotspot_id="hotspot-1",
+        ),
+    ]
+
+    response = client.get(
+        "/api/vouchers/",
+        params={"hotspot_id": "hotspot-1"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    vouchers = response.json()
+
+    assert [voucher["id"] for voucher in vouchers] == [
+        "voucher-own-one"
+    ]
+
+
+def test_owner_listing_never_exposes_other_owner_vouchers(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-own",
+            code="OWNER001",
+            owner_id="owner-1",
+        ),
+        unused_voucher(
+            id="voucher-other",
+            code="OTHER001",
+            owner_id="owner-2",
+        ),
+    ]
+
+    response = client.get(
+        "/api/vouchers/",
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    vouchers = response.json()
+
+    assert [voucher["id"] for voucher in vouchers] == [
+        "voucher-own"
+    ]
+
+
+def test_owner_can_revoke_own_unused_voucher(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-revoke",
+            code="REVOKE01",
+            owner_id="owner-1",
+        )
+    ]
+
+    response = client.post(
+        "/api/vouchers/voucher-revoke/revoke",
+        json={"reason": "Issued by mistake"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["success"] is True
+    assert body["voucher"]["redemption_status"] == "revoked"
+    assert body["voucher"]["revoked_by"] == "owner-1"
+    assert body["voucher"]["revocation_reason"] == (
+        "Issued by mistake"
+    )
+    assert body["voucher"]["revoked_at"]
+
+    voucher = fake_db.vouchers.documents[0]
+
+    assert voucher["is_used"] is False
+    assert voucher["redemption_status"] == "revoked"
+    assert voucher["revoked_by"] == "owner-1"
+
+
+def test_owner_cannot_revoke_another_owners_voucher(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-other-owner",
+            code="OTHER999",
+            owner_id="owner-2",
+        )
+    ]
+
+    response = client.post(
+        "/api/vouchers/voucher-other-owner/revoke",
+        json={"reason": "Not mine"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Voucher not found"
+
+    voucher = fake_db.vouchers.documents[0]
+
+    assert voucher["redemption_status"] == "unused"
+    assert voucher["is_used"] is False
+
+
+def test_redeemed_voucher_cannot_be_revoked(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-redeemed",
+            code="USED0001",
+            is_used=True,
+            redemption_status="redeemed",
+            redeemed_session_id="session-1",
+        )
+    ]
+
+    response = client.post(
+        "/api/vouchers/voucher-redeemed/revoke",
+        json={"reason": "Too late"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Only unused vouchers can be revoked"
+    )
+
+
+def test_revoked_voucher_cannot_be_redeemed(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-revoked",
+            code="REVOKED1",
+            redemption_status="revoked",
+            revoked_at=datetime.now(timezone.utc).isoformat(),
+            revoked_by="owner-1",
+            revocation_reason="Issued by mistake",
+        )
+    ]
+
+    response = client.post(
+        "/api/vouchers/redeem/REVOKED1",
+        params={"hotspot_id": "hotspot-1"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Voucher has been revoked"
+    assert len(fake_db.sessions.documents) == 0

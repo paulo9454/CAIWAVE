@@ -21,6 +21,7 @@ from .voucher import (
     VoucherPurpose,
     VoucherRedemptionStatus,
     VoucherBase,
+    VoucherRevocationRequest,
     Voucher,
 )
 from .campaign import (
@@ -52,7 +53,7 @@ __all__ = [
     # Ad models
     "AdPackage", "AdPackageCreate", "AdPackageUpdate", "AdTargeting", "Ad", "AdApproval", "AdPaymentRequest",
     # Voucher models
-    "VoucherPurpose", "VoucherRedemptionStatus", "VoucherBase", "Voucher",
+    "VoucherPurpose", "VoucherRedemptionStatus", "VoucherBase", "VoucherRevocationRequest", "Voucher",
     # Campaign models
     "CampaignBase", "CampaignCreate", "Campaign", "StreamBase", "StreamCreate", "Stream",
     "SubsidizedUptimeBase", "SubsidizedUptimeCreate", "SubsidizedUptime",

@@ -44,6 +44,8 @@ from backend.models.voucher import (
     Voucher,
     VoucherBase,
     VoucherPurpose,
+    VoucherRedemptionStatus,
+    VoucherRevocationRequest,
 )
 import os
 import logging
@@ -6279,17 +6281,107 @@ async def get_vouchers(
 ):
     """Get vouchers"""
     query = {}
-    
+
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         query["owner_id"] = user["id"]
-    elif hotspot_id:
+
+    if hotspot_id:
         query["hotspot_id"] = hotspot_id
-    
+
     if unused_only:
         query["is_used"] = False
     
     vouchers = await db.vouchers.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return vouchers
+
+@vouchers_router.post("/{voucher_id}/revoke")
+async def revoke_voucher(
+    voucher_id: str,
+    revocation: VoucherRevocationRequest,
+    user: dict = Depends(
+        require_role(
+            [
+                UserRole.SUPER_ADMIN,
+                UserRole.HOTSPOT_OWNER,
+            ]
+        )
+    ),
+):
+    """Revoke an unused voucher with an auditable reason."""
+
+    query = {"id": voucher_id}
+
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        query["owner_id"] = user["id"]
+
+    voucher = await db.vouchers.find_one(
+        query,
+        {"_id": 0},
+    )
+
+    if not voucher:
+        raise HTTPException(
+            status_code=404,
+            detail="Voucher not found",
+        )
+
+    redemption_status = voucher.get(
+        "redemption_status",
+        VoucherRedemptionStatus.UNUSED.value,
+    )
+
+    if (
+        voucher.get("is_used")
+        or redemption_status
+        != VoucherRedemptionStatus.UNUSED.value
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Only unused vouchers can be revoked",
+        )
+
+    now = datetime.now(timezone.utc)
+    reason = revocation.reason.strip()
+
+    update_query = {
+        **query,
+        "is_used": False,
+        "redemption_status": {
+            "$in": [
+                VoucherRedemptionStatus.UNUSED.value,
+                None,
+            ]
+        },
+    }
+
+    revoked = await db.vouchers.find_one_and_update(
+        update_query,
+        {
+            "$set": {
+                "redemption_status": (
+                    VoucherRedemptionStatus.REVOKED.value
+                ),
+                "revoked_at": now.isoformat(),
+                "revoked_by": user["id"],
+                "revocation_reason": reason,
+            }
+        },
+        projection={"_id": 0},
+        return_document=True,
+    )
+
+    if not revoked:
+        raise HTTPException(
+            status_code=409,
+            detail="Only unused vouchers can be revoked",
+        )
+
+    return {
+        "success": True,
+        "voucher": revoked,
+        "message": "Voucher revoked successfully.",
+    }
+
 
 @vouchers_router.post("/redeem/{code}")
 async def redeem_voucher(
@@ -6325,6 +6417,12 @@ async def redeem_voucher(
             "code": normalized_code,
             "hotspot_id": hotspot_id,
             "is_used": False,
+            "redemption_status": {
+                "$in": [
+                    VoucherRedemptionStatus.UNUSED.value,
+                    None,
+                ]
+            },
             "expires_at": {"$gt": now.isoformat()},
         },
         {
@@ -6355,6 +6453,15 @@ async def redeem_voucher(
             raise HTTPException(
                 status_code=400,
                 detail="Voucher not valid for this hotspot",
+            )
+
+        if (
+            existing.get("redemption_status")
+            == VoucherRedemptionStatus.REVOKED.value
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Voucher has been revoked",
             )
 
         if existing.get("is_used"):
