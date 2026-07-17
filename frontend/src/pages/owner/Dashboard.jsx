@@ -29,6 +29,7 @@ import {
   Zap,
   Wallet,
   Copy,
+  Ticket,
 } from "lucide-react";
 import { CaiwaveLogo } from "../../components/CaiwaveLogo";
 import HotspotLocationFields from "../../components/HotspotLocationFields";
@@ -1650,6 +1651,30 @@ const BillingPage = () => {
   );
 };
 
+// Voucher Management Page
+const VoucherManagementPage = () => {
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold">Voucher Management</h1>
+        <p className="mt-1 text-neutral-400">
+          Generate, manage, and track prepaid WiFi vouchers for your hotspots.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-8 text-center">
+        <Ticket className="mx-auto mb-4 h-12 w-12 text-blue-400" />
+        <h2 className="mb-2 text-lg font-semibold">
+          Voucher Management
+        </h2>
+        <p className="text-sm text-neutral-400">
+          Voucher generation and batch management controls will appear here.
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // Main Dashboard Layout
 const OwnerDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -1660,6 +1685,7 @@ const OwnerDashboard = () => {
   const navigation = [
     { name: "Overview", href: "/owner", icon: LayoutDashboard },
     { name: "Hotspots", href: "/owner/hotspots", icon: Radio },
+    { name: "Vouchers", href: "/owner/vouchers", icon: Ticket },
     { name: "MikroTik Setup", href: "/owner/mikrotik", icon: Zap },
     { name: "Billing", href: "/owner/billing", icon: FileText },
     { name: "Payments", href: "/owner/payments", icon: CreditCard },
@@ -1771,6 +1797,7 @@ const OwnerDashboard = () => {
           <Routes>
             <Route index element={<DashboardOverview />} />
             <Route path="hotspots" element={<HotspotsPage />} />
+            <Route path="vouchers" element={<VoucherManagementPage />} />
             <Route path="mikrotik" element={<MikroTikSetupPage />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="payments" element={<PaymentsPage />} />
