@@ -6315,20 +6315,36 @@ async def generate_vouchers(
 
 @vouchers_router.get("/")
 async def get_vouchers(
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER])),
+    user: dict = Depends(
+        require_role(
+            [
+                UserRole.SUPER_ADMIN,
+                UserRole.HOTSPOT_OWNER,
+            ]
+        )
+    ),
     hotspot_id: Optional[str] = None,
-    unused_only: bool = False
+    batch_id: Optional[str] = None,
+    unused_only: bool = False,
 ):
-    """Get vouchers"""
+    """Return owner-scoped vouchers with optional hotspot and batch filters."""
+
     query = build_voucher_scope_query(
         user,
         hotspot_id=hotspot_id,
     )
 
+    if batch_id:
+        query["batch_id"] = batch_id
+
     if unused_only:
         query["is_used"] = False
-    
-    vouchers = await db.vouchers.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    vouchers = await db.vouchers.find(
+        query,
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(1000)
+
     return vouchers
 
 @vouchers_router.get("/summary")

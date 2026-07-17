@@ -533,6 +533,75 @@ def test_owner_listing_never_exposes_other_owner_vouchers(environment):
     ]
 
 
+def test_owner_can_filter_vouchers_by_batch(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-batch-one",
+            code="BATCH001",
+            owner_id="owner-1",
+            batch_id="batch-one",
+        ),
+        unused_voucher(
+            id="voucher-batch-two",
+            code="BATCH002",
+            owner_id="owner-1",
+            batch_id="batch-two",
+        ),
+    ]
+
+    response = client.get(
+        "/api/vouchers/",
+        params={"batch_id": "batch-one"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    vouchers = response.json()
+
+    assert [voucher["id"] for voucher in vouchers] == [
+        "voucher-batch-one"
+    ]
+    assert vouchers[0]["code"] == "BATCH001"
+    assert vouchers[0]["username"]
+    assert vouchers[0]["password"]
+
+
+def test_owner_batch_filter_never_exposes_other_owner_vouchers(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="voucher-own-batch",
+            code="OWNER001",
+            owner_id="owner-1",
+            batch_id="shared-batch-id",
+        ),
+        unused_voucher(
+            id="voucher-other-batch",
+            code="OTHER001",
+            owner_id="owner-2",
+            batch_id="shared-batch-id",
+        ),
+    ]
+
+    response = client.get(
+        "/api/vouchers/",
+        params={"batch_id": "shared-batch-id"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+
+    vouchers = response.json()
+
+    assert [voucher["id"] for voucher in vouchers] == [
+        "voucher-own-batch"
+    ]
+
+
 def test_owner_can_revoke_own_unused_voucher(environment):
     client, fake_db = environment
 
