@@ -141,6 +141,32 @@ class FakeCollection:
             modified_count=0,
         )
 
+    async def update_many(self, query, operation):
+        matched_count = 0
+        modified_count = 0
+
+        for document in self.documents:
+            if not matches(document, query):
+                continue
+
+            matched_count += 1
+            before = deepcopy(document)
+
+            if "$set" in operation:
+                document.update(deepcopy(operation["$set"]))
+
+            if "$inc" in operation:
+                for key, amount in operation["$inc"].items():
+                    document[key] = document.get(key, 0) + amount
+
+            if document != before:
+                modified_count += 1
+
+        return FakeUpdateResult(
+            matched_count=matched_count,
+            modified_count=modified_count,
+        )
+
     async def delete_one(self, query):
         for index, document in enumerate(self.documents):
             if matches(document, query):
@@ -755,3 +781,164 @@ def test_owner_batch_listing_groups_vouchers(environment):
     assert batch_one["redeemed"] == 1
     assert batch_one["revoked"] == 0
     assert batch_one["hotspot_id"] == "hotspot-1"
+
+
+def test_owner_can_revoke_unused_vouchers_in_own_batch(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="batch-unused-one",
+            code="BREVOKE1",
+            owner_id="owner-1",
+            batch_id="batch-revoke",
+            redemption_status="unused",
+        ),
+        unused_voucher(
+            id="batch-unused-two",
+            code="BREVOKE2",
+            owner_id="owner-1",
+            batch_id="batch-revoke",
+            redemption_status="unused",
+        ),
+        unused_voucher(
+            id="batch-redeemed",
+            code="BREVOKE3",
+            owner_id="owner-1",
+            batch_id="batch-revoke",
+            is_used=True,
+            redemption_status="redeemed",
+            redeemed_session_id="session-1",
+        ),
+    ]
+
+    response = client.post(
+        "/api/vouchers/batches/batch-revoke/revoke",
+        json={"reason": "Batch issued in error"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "batch_id": "batch-revoke",
+        "total": 3,
+        "revoked": 2,
+        "skipped": 1,
+        "message": "Unused vouchers in batch revoked successfully.",
+    }
+
+    unused = [
+        voucher
+        for voucher in fake_db.vouchers.documents
+        if voucher["id"] in {
+            "batch-unused-one",
+            "batch-unused-two",
+        }
+    ]
+
+    assert all(
+        voucher["redemption_status"] == "revoked"
+        for voucher in unused
+    )
+    assert all(
+        voucher["revoked_by"] == "owner-1"
+        for voucher in unused
+    )
+    assert all(
+        voucher["revocation_reason"] == "Batch issued in error"
+        for voucher in unused
+    )
+
+    redeemed = next(
+        voucher
+        for voucher in fake_db.vouchers.documents
+        if voucher["id"] == "batch-redeemed"
+    )
+
+    assert redeemed["redemption_status"] == "redeemed"
+    assert redeemed["is_used"] is True
+
+
+def test_owner_cannot_revoke_another_owners_batch(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="other-owner-batch",
+            code="OTHERBAT",
+            owner_id="owner-2",
+            batch_id="batch-other",
+        )
+    ]
+
+    response = client.post(
+        "/api/vouchers/batches/batch-other/revoke",
+        json={"reason": "Not my batch"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Voucher batch not found"
+    assert (
+        fake_db.vouchers.documents[0]["redemption_status"]
+        == "unused"
+    )
+
+
+def test_batch_revocation_rejects_batch_with_no_unused_vouchers(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="already-redeemed",
+            code="DONEBAT1",
+            owner_id="owner-1",
+            batch_id="batch-complete",
+            is_used=True,
+            redemption_status="redeemed",
+        ),
+        unused_voucher(
+            id="already-revoked",
+            code="DONEBAT2",
+            owner_id="owner-1",
+            batch_id="batch-complete",
+            redemption_status="revoked",
+        ),
+    ]
+
+    response = client.post(
+        "/api/vouchers/batches/batch-complete/revoke",
+        json={"reason": "Nothing left"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "Batch has no unused vouchers to revoke"
+    )
+
+
+def test_batch_revocation_requires_valid_reason(environment):
+    client, fake_db = environment
+
+    fake_db.vouchers.documents = [
+        unused_voucher(
+            id="reason-test",
+            code="REASON01",
+            owner_id="owner-1",
+            batch_id="batch-reason",
+        )
+    ]
+
+    response = client.post(
+        "/api/vouchers/batches/batch-reason/revoke",
+        json={"reason": "x"},
+        headers={"Authorization": "Bearer test-token"},
+    )
+
+    assert response.status_code == 422
+    assert (
+        fake_db.vouchers.documents[0]["redemption_status"]
+        == "unused"
+    )

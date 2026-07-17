@@ -6457,6 +6457,92 @@ async def get_voucher_batches(
     )
 
 
+@vouchers_router.post("/batches/{batch_id}/revoke")
+async def revoke_voucher_batch(
+    batch_id: str,
+    revocation: VoucherRevocationRequest,
+    user: dict = Depends(
+        require_role(
+            [
+                UserRole.SUPER_ADMIN,
+                UserRole.HOTSPOT_OWNER,
+            ]
+        )
+    ),
+):
+    """Revoke every still-unused voucher in an owned batch."""
+
+    batch_query = build_voucher_scope_query(user)
+    batch_query["batch_id"] = batch_id
+
+    vouchers = await db.vouchers.find(
+        batch_query,
+        {"_id": 0},
+    ).to_list(5000)
+
+    if not vouchers:
+        raise HTTPException(
+            status_code=404,
+            detail="Voucher batch not found",
+        )
+
+    unused_count = sum(
+        1
+        for voucher in vouchers
+        if (
+            not voucher.get("is_used")
+            and voucher.get(
+                "redemption_status",
+                VoucherRedemptionStatus.UNUSED.value,
+            )
+            == VoucherRedemptionStatus.UNUSED.value
+        )
+    )
+
+    if unused_count == 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Batch has no unused vouchers to revoke",
+        )
+
+    now = datetime.now(timezone.utc)
+    reason = revocation.reason.strip()
+
+    result = await db.vouchers.update_many(
+        {
+            **batch_query,
+            "is_used": False,
+            "redemption_status": {
+                "$in": [
+                    VoucherRedemptionStatus.UNUSED.value,
+                    None,
+                ]
+            },
+        },
+        {
+            "$set": {
+                "redemption_status": (
+                    VoucherRedemptionStatus.REVOKED.value
+                ),
+                "revoked_at": now.isoformat(),
+                "revoked_by": user["id"],
+                "revocation_reason": reason,
+            }
+        },
+    )
+
+    return {
+        "success": True,
+        "batch_id": batch_id,
+        "total": len(vouchers),
+        "revoked": result.modified_count,
+        "skipped": len(vouchers) - result.modified_count,
+        "message": (
+            "Unused vouchers in batch revoked successfully."
+        ),
+    }
+
+
 @vouchers_router.post("/{voucher_id}/revoke")
 async def revoke_voucher(
     voucher_id: str,
