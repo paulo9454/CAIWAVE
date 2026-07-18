@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Iterable, Mapping, Sequence
 
 from .contracts import CampaignCoverageScope
@@ -16,6 +17,9 @@ class CampaignTargetingValidationError(ValueError):
 
 
 def _clean(value: object) -> str:
+    if isinstance(value, Enum):
+        value = value.value
+
     return str(value or "").strip()
 
 

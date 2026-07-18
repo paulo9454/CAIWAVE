@@ -36,6 +36,14 @@ def validate(**overrides):
     return validate_campaign_targeting(**payload)
 
 
+def test_normalization_accepts_campaign_coverage_scope_enum():
+    result = normalize_campaign_targeting(
+        coverage_scope=CampaignCoverageScope.NATIONAL,
+    )
+
+    assert result["coverage_scope"] == "national"
+
+
 def test_coverage_scope_values_are_stable():
     assert [scope.value for scope in CampaignCoverageScope] == [
         "national",
