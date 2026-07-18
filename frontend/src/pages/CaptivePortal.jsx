@@ -437,6 +437,7 @@ const CaptivePortal = () => {
 
   const sponsorCards =
     secondaryAds.length > 0 ? secondaryAds : sponsorPlaceholders;
+  const featuredCampaign = campaigns[0] || null;
   const baseUrl = API_URL.replace('/api', '');
 
   if (loading) {
@@ -471,6 +472,57 @@ const CaptivePortal = () => {
 
       <main className="max-w-4xl mx-auto p-4 space-y-6">
         
+        {/* Featured Campaign */}
+        {featuredCampaign && (
+          <section
+            aria-labelledby="featured-campaign-title"
+            className="overflow-hidden rounded-xl border border-blue-700/40 bg-gradient-to-br from-blue-950/90 via-neutral-900 to-purple-950/80"
+          >
+            {featuredCampaign.image_url && (
+              <div className="relative aspect-video w-full overflow-hidden bg-neutral-900">
+                <img
+                  src={`${baseUrl}${featuredCampaign.image_url}`}
+                  alt={featuredCampaign.name || "CAIWAVE featured campaign"}
+                  className="h-full w-full object-cover"
+                />
+
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+
+                <div className="absolute left-4 top-4">
+                  <span className="rounded-full border border-white/20 bg-black/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur">
+                    {featuredCampaign.coverage_scope === "national"
+                      ? "National Campaign"
+                      : "Featured Campaign"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="p-5">
+              {!featuredCampaign.image_url && (
+                <span className="mb-3 inline-flex rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
+                  {featuredCampaign.coverage_scope === "national"
+                    ? "National Campaign"
+                    : "Featured Campaign"}
+                </span>
+              )}
+
+              <h2
+                id="featured-campaign-title"
+                className="text-xl font-bold text-white sm:text-2xl"
+              >
+                {featuredCampaign.name}
+              </h2>
+
+              {featuredCampaign.description && (
+                <p className="mt-2 leading-relaxed text-neutral-300">
+                  {featuredCampaign.description}
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Featured Ad - Full Width */}
         {currentAd && (
           <div className="relative rounded-xl overflow-hidden bg-neutral-900 border border-neutral-800">
