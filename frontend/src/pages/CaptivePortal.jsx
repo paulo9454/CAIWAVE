@@ -27,6 +27,7 @@ const CaptivePortal = () => {
   const [hotspot, setHotspot] = useState(null);
   const [packages, setPackages] = useState([]);
   const [ads, setAds] = useState([]);
+  const [campaigns, setCampaigns] = useState([]);
   const [streams, setStreams] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [phone, setPhone] = useState("");
@@ -107,6 +108,7 @@ const CaptivePortal = () => {
           setHotspot(portalRes.data.hotspot);
           setPackages((portalRes.data.packages || []).filter((p) => p.is_active));
           setAds(portalRes.data.ads || []);
+          setCampaigns(portalRes.data.campaigns || []);
         } catch (e) {
           console.log("Portal hotspot data not found, falling back to public packages/ads");
 
