@@ -30,6 +30,7 @@ from backend.services.campaign_targeting import (
     CampaignValidationError,
     build_campaign_write_payload,
     is_ad_eligible_for_campaign,
+    is_campaign_eligible_for_hotspot,
 )
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -7265,11 +7266,29 @@ async def get_portal_data(hotspot_id: str):
         ]
     }
     ads = await db.ads.find(ads_query, {"_id": 0}).to_list(10)
+
+    candidate_campaigns = await db.campaigns.find(
+        {"status": "active"},
+        {"_id": 0},
+    ).to_list(100)
+
+    now = datetime.now(timezone.utc)
+
+    campaigns = [
+        campaign
+        for campaign in candidate_campaigns
+        if is_campaign_eligible_for_hotspot(
+            campaign,
+            hotspot,
+            now=now,
+        )
+    ]
     
     return {
         "hotspot": hotspot,
         "packages": packages,
         "ads": ads,
+        "campaigns": campaigns,
         "mpesa_enabled": mpesa_service.is_configured()
     }
 
