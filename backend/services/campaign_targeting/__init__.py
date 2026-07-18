@@ -4,6 +4,7 @@ from .validator import (
     normalize_campaign_targeting,
     validate_campaign_targeting,
 )
+from .delivery import is_campaign_eligible_for_hotspot
 from .service import (
     CampaignValidationError,
     build_campaign_write_payload,
@@ -17,6 +18,7 @@ __all__ = [
     "CampaignTargetingValidationError",
     "normalize_campaign_targeting",
     "validate_campaign_targeting",
+    "is_campaign_eligible_for_hotspot",
     "CampaignValidationError",
     "build_campaign_write_payload",
     "is_ad_eligible_for_campaign",
