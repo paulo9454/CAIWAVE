@@ -9,6 +9,7 @@ import PortalHeader from "../components/portal/PortalHeader";
 import QuickActions from "../components/portal/QuickActions";
 import CampaignHero from "../components/portal/CampaignHero";
 import FeaturedAdvertisement from "../components/portal/FeaturedAdvertisement";
+import PackagePurchasePanel from "../components/portal/PackagePurchasePanel";
 import { toast, Toaster } from "sonner";
 
 
@@ -38,6 +39,7 @@ const CaptivePortal = () => {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
   const [voucherCode, setVoucherCode] = useState("");
   const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
@@ -484,93 +486,20 @@ const CaptivePortal = () => {
           formatWhatsApp={formatWhatsApp}
         />
 
-        {/* WiFi Packages */}
-        <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
-          <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-yellow-400" />
-            {freeSession ? "Need More Time? Upgrade!" : "Choose Your Package"}
-          </h2>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {packages.map((pkg) => (
-              <button
-                key={pkg.id}
-                onClick={() => setSelectedPackage(pkg)}
-                className={`p-4 rounded-lg border-2 transition-all text-left ${
-                  selectedPackage?.id === pkg.id
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-neutral-700 bg-neutral-800 hover:border-neutral-600'
-                }`}
-              >
-                <div className="font-bold text-xl text-green-400">
-                  KES {pkg.price}
-                </div>
-                <div className="text-white font-medium">{pkg.name}</div>
-                <div className="text-neutral-400 text-sm flex items-center gap-1 mt-1">
-                  <Clock className="w-3 h-3" />
-                  {pkg.duration_minutes >= 60
-                    ? `${Math.floor(pkg.duration_minutes / 60)}h ${pkg.duration_minutes % 60}m`
-                    : `${pkg.duration_minutes} min`
-                  }
-                </div>
-                {pkg.speed_mbps && (
-                  <div className="text-neutral-500 text-xs mt-1">
-                    Up to {pkg.speed_mbps} Mbps
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Phone Input */}
-          {selectedPackage && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-sm text-neutral-400 mb-1">M-Pesa Phone Number</label>
-                <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg">
-                  <span className="px-3 text-neutral-500">+254</span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                    className="flex-1 bg-transparent px-2 py-3 focus:outline-none"
-                    placeholder="7XXXXXXXX"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-neutral-400 mb-1">Email (optional)</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="your@email.com"
-                />
-              </div>
-
-              <Button
-                onClick={handlePurchase}
-                disabled={paying || !phone}
-                className="w-full py-6 text-lg bg-green-600 hover:bg-green-700"
-              >
-                {paying ? (
-                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Phone className="w-5 h-5 mr-2" />
-                    Pay KES {selectedPackage.price} via M-Pesa
-                  </>
-                )}
-              </Button>
-
-              <p className="text-center text-neutral-500 text-sm">
-                You'll receive a payment prompt on your phone
-              </p>
-            </div>
-          )}
-        </div>
+        <PackagePurchasePanel
+          packages={packages}
+          selectedPackage={selectedPackage}
+          setSelectedPackage={setSelectedPackage}
+          phone={phone}
+          setPhone={setPhone}
+          email={email}
+          setEmail={setEmail}
+          paying={paying}
+          handlePurchase={handlePurchase}
+          freeSession={freeSession}
+          paymentOpen={paymentOpen}
+          setPaymentOpen={setPaymentOpen}
+        />
 
         {/* Free WiFi Section - After watching ad */}
         {!freeSession && (
