@@ -332,7 +332,7 @@ const CaptivePortal = () => {
           params: {
             hotspot_id: hotspotId || "demo",
             user_mac: clientMac ,
-            user_ip: clientIp 
+            user_ip: clientIp
           }
         });
         setFreeSessionStatus(response.data);
@@ -361,10 +361,10 @@ const CaptivePortal = () => {
           hotspot_id: hotspotId || "demo",
           ad_id: currentAd.id,
           user_mac: clientMac ,
-          user_ip: clientIp 
+          user_ip: clientIp
         }
       });
-      
+
       if (response.data.session_id) {
         setFreeSession(response.data);
         setFreeSessionStatus({
@@ -373,7 +373,7 @@ const CaptivePortal = () => {
           can_get_free: response.data.free_sessions_remaining > 0
         });
         toast.success(`🎉 You got ${response.data.duration_minutes} minutes free WiFi!`);
-        
+
         // Track ad click before handing the browser back to MikroTik.
         await axios.post(`${API_URL}/ads/${currentAd.id}/click`).catch(() => {});
 
@@ -454,7 +454,7 @@ const CaptivePortal = () => {
   return (
     <div className="min-h-screen bg-neutral-950 text-white">
       <Toaster theme="dark" richColors />
-      
+
       {/* Header */}
       <header className="bg-gradient-to-r from-blue-600 to-blue-800 py-4 px-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
@@ -471,7 +471,7 @@ const CaptivePortal = () => {
       </header>
 
       <main className="max-w-4xl mx-auto p-4 space-y-6">
-        
+
         {/* Featured Campaign */}
         {featuredCampaign && (
           <section
@@ -581,7 +581,7 @@ const CaptivePortal = () => {
                   <span className="text-2xl font-bold">{currentAd.title}</span>
                 </div>
               )}
-              
+
               {/* Featured campaign slideshow controls */}
               {ads.length > 1 && (
                 <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3">
@@ -627,7 +627,7 @@ const CaptivePortal = () => {
                 </div>
               )}
             </div>
-            
+
             {/* Ad Info & CTA */}
             <div className="p-4">
               <div className="flex items-center justify-between gap-3">
@@ -646,7 +646,7 @@ const CaptivePortal = () => {
                   </span>
                 )}
               </div>
-              
+
               {/* Contact Buttons */}
               <div className="flex flex-wrap gap-3 mt-3">
                 {currentAd.whatsapp_number && (
@@ -676,10 +676,98 @@ const CaptivePortal = () => {
           </div>
         )}
 
+        {/* WiFi Packages */}
+        <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
+          <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-yellow-400" />
+            {freeSession ? "Need More Time? Upgrade!" : "Choose Your Package"}
+          </h2>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {packages.map((pkg) => (
+              <button
+                key={pkg.id}
+                onClick={() => setSelectedPackage(pkg)}
+                className={`p-4 rounded-lg border-2 transition-all text-left ${
+                  selectedPackage?.id === pkg.id
+                    ? 'border-blue-500 bg-blue-500/10'
+                    : 'border-neutral-700 bg-neutral-800 hover:border-neutral-600'
+                }`}
+              >
+                <div className="font-bold text-xl text-green-400">
+                  KES {pkg.price}
+                </div>
+                <div className="text-white font-medium">{pkg.name}</div>
+                <div className="text-neutral-400 text-sm flex items-center gap-1 mt-1">
+                  <Clock className="w-3 h-3" />
+                  {pkg.duration_minutes >= 60
+                    ? `${Math.floor(pkg.duration_minutes / 60)}h ${pkg.duration_minutes % 60}m`
+                    : `${pkg.duration_minutes} min`
+                  }
+                </div>
+                {pkg.speed_mbps && (
+                  <div className="text-neutral-500 text-xs mt-1">
+                    Up to {pkg.speed_mbps} Mbps
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {/* Phone Input */}
+          {selectedPackage && (
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">M-Pesa Phone Number</label>
+                <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg">
+                  <span className="px-3 text-neutral-500">+254</span>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                    className="flex-1 bg-transparent px-2 py-3 focus:outline-none"
+                    placeholder="7XXXXXXXX"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-neutral-400 mb-1">Email (optional)</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="your@email.com"
+                />
+              </div>
+
+              <Button
+                onClick={handlePurchase}
+                disabled={paying || !phone}
+                className="w-full py-6 text-lg bg-green-600 hover:bg-green-700"
+              >
+                {paying ? (
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Phone className="w-5 h-5 mr-2" />
+                    Pay KES {selectedPackage.price} via M-Pesa
+                  </>
+                )}
+              </Button>
+
+              <p className="text-center text-neutral-500 text-sm">
+                You'll receive a payment prompt on your phone
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Free WiFi Section - After watching ad */}
         {!freeSession && (
           <div className={`rounded-xl border p-5 ${
-            freeSessionStatus.can_get_free 
+            freeSessionStatus.can_get_free
               ? "bg-gradient-to-br from-green-950/80 to-emerald-900/50 border-green-700/50"
               : "bg-gradient-to-br from-orange-950/80 to-red-900/50 border-orange-700/50"
           }`}>
@@ -692,7 +780,7 @@ const CaptivePortal = () => {
                       Get 15 Minutes FREE WiFi!
                     </h3>
                     <p className="text-green-300/70 text-sm mt-1">
-                      Watch the ad above and tap to get free internet • 
+                      Watch the ad above and tap to get free internet •
                       <span className="text-yellow-400 font-medium ml-1">
                         {freeSessionStatus.free_sessions_remaining} free {freeSessionStatus.free_sessions_remaining === 1 ? 'session' : 'sessions'} remaining
                       </span>
@@ -744,7 +832,7 @@ const CaptivePortal = () => {
               <h3 className="font-bold text-xl text-green-400">🎉 You're Connected!</h3>
               <p className="text-neutral-300 mt-1">Enjoy {freeSession.duration_minutes} minutes of free WiFi</p>
             </div>
-            
+
             <div className="bg-neutral-900/50 rounded-lg p-4 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-neutral-400">Username:</span>
@@ -852,94 +940,6 @@ const CaptivePortal = () => {
           </p>
         </div>
 
-        {/* WiFi Packages */}
-        <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
-          <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-            <Zap className="w-5 h-5 text-yellow-400" />
-            {freeSession ? "Need More Time? Upgrade!" : "Choose Your Package"}
-          </h2>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {packages.map((pkg) => (
-              <button
-                key={pkg.id}
-                onClick={() => setSelectedPackage(pkg)}
-                className={`p-4 rounded-lg border-2 transition-all text-left ${
-                  selectedPackage?.id === pkg.id
-                    ? 'border-blue-500 bg-blue-500/10'
-                    : 'border-neutral-700 bg-neutral-800 hover:border-neutral-600'
-                }`}
-              >
-                <div className="font-bold text-xl text-green-400">
-                  KES {pkg.price}
-                </div>
-                <div className="text-white font-medium">{pkg.name}</div>
-                <div className="text-neutral-400 text-sm flex items-center gap-1 mt-1">
-                  <Clock className="w-3 h-3" />
-                  {pkg.duration_minutes >= 60 
-                    ? `${Math.floor(pkg.duration_minutes / 60)}h ${pkg.duration_minutes % 60}m`
-                    : `${pkg.duration_minutes} min`
-                  }
-                </div>
-                {pkg.speed_mbps && (
-                  <div className="text-neutral-500 text-xs mt-1">
-                    Up to {pkg.speed_mbps} Mbps
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Phone Input */}
-          {selectedPackage && (
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="block text-sm text-neutral-400 mb-1">M-Pesa Phone Number</label>
-                <div className="flex items-center bg-neutral-800 border border-neutral-700 rounded-lg">
-                  <span className="px-3 text-neutral-500">+254</span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 9))}
-                    className="flex-1 bg-transparent px-2 py-3 focus:outline-none"
-                    placeholder="7XXXXXXXX"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm text-neutral-400 mb-1">Email (optional)</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="your@email.com"
-                />
-              </div>
-
-              <Button
-                onClick={handlePurchase}
-                disabled={paying || !phone}
-                className="w-full py-6 text-lg bg-green-600 hover:bg-green-700"
-              >
-                {paying ? (
-                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Phone className="w-5 h-5 mr-2" />
-                    Pay KES {selectedPackage.price} via M-Pesa
-                  </>
-                )}
-              </Button>
-              
-              <p className="text-center text-neutral-500 text-sm">
-                You'll receive a payment prompt on your phone
-              </p>
-            </div>
-          )}
-        </div>
-
         {/* Live Streams Preview */}
         {streams.length > 0 && (
           <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
@@ -947,7 +947,7 @@ const CaptivePortal = () => {
               <Play className="w-5 h-5 text-red-500" />
               CAIWAVE TV - Live Now
             </h2>
-            
+
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {streams.slice(0, 3).map((stream) => (
                 <div key={stream.id} className="relative rounded-lg overflow-hidden bg-neutral-800">
@@ -967,14 +967,35 @@ const CaptivePortal = () => {
                   </div>
                   <div className="p-2">
                     <div className="font-medium text-sm truncate">{stream.name}</div>
+                    <div
+                      className={`mt-1 text-xs font-semibold ${
+                        stream.access_type === "free"
+                          ? "text-green-400"
+                          : "text-yellow-400"
+                      }`}
+                    >
+                      {stream.access_type === "free"
+                        ? "Free to watch"
+                        : `KES ${stream.price || 0} access`}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-            
-            <p className="text-neutral-500 text-sm text-center mt-3">
-              Purchase a WiFi package to watch CAIWAVE TV
-            </p>
+
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm">
+              {streams.some((stream) => stream.access_type === "free") && (
+                <span className="rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 font-medium text-green-300">
+                  Free streams are free to watch
+                </span>
+              )}
+
+              {streams.some((stream) => stream.access_type === "paid") && (
+                <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 font-medium text-yellow-300">
+                  Paid streams show their access price
+                </span>
+              )}
+            </div>
           </div>
         )}
 
