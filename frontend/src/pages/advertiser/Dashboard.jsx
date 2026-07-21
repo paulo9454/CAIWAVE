@@ -855,8 +855,8 @@ const PaymentModal = ({ ad, onClose, onSuccess }) => {
           return;
         }
 
-        toast.success(
-          "Secure Paystack checkout opened. Choose M-Pesa, card or bank."
+        toast.info(
+          "Secure checkout opened. Complete payment to activate your advert."
         );
 
         onSuccess();

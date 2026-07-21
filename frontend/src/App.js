@@ -16,6 +16,7 @@ import OwnerDashboard from "./pages/owner/Dashboard";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdvertiserDashboard from "./pages/advertiser/Dashboard";
 
+import AdvertiserPaymentReturn from "./pages/advertiser/PaymentReturn";
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const user = getUser();
@@ -68,6 +69,10 @@ function App() {
           />
           
           {/* Advertiser Dashboard */}
+          <Route
+            path="/advertiser/payment-return"
+            element={<AdvertiserPaymentReturn />}
+          />
           <Route
             path="/advertiser/*"
             element={

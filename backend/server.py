@@ -2793,10 +2793,20 @@ async def initialize_advertiser_paystack_checkout(
 
     await db.paystack_transactions.insert_one(transaction_record)
 
+    public_web_url = os.environ.get(
+        "PUBLIC_WEB_URL",
+        "https://www.caiwave.com",
+    ).rstrip("/")
+    callback_url = (
+        f"{public_web_url}/advertiser/payment-return"
+        f"?reference={reference}"
+    )
+
     init_request = TransactionInitRequest(
         email=email,
         amount=amount,
         reference=reference,
+        callback_url=callback_url,
         metadata={
             "transaction_id": transaction_id,
             "payment_type": "advertising",
@@ -7260,7 +7270,7 @@ async def get_portal_data(hotspot_id: str):
         "status": AdStatus.ACTIVE.value,
         "is_active": True,
         "$or": [
-            {"targeting.is_global": True},
+            {"targeting.is_national": True},
             {"targeting.hotspot_ids": hotspot_id},
             {"targeting.counties": hotspot.get("county")}
         ]
