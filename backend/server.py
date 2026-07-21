@@ -4906,6 +4906,26 @@ async def radius_accounting(request: RADIUSAccountingRequest):
         )
 
     elif request.status_type.lower() in ["stop", "2"]:
+        # Accounting-Stop ends one router connection, not the customer's
+        # remaining paid entitlement. Keep the session reusable until expiry.
+        session_status = SessionStatus.ACTIVE.value
+        expires_at_value = session.get("expires_at")
+
+        if expires_at_value:
+            try:
+                expires_at = datetime.fromisoformat(
+                    str(expires_at_value).replace("Z", "+00:00")
+                )
+
+                if expires_at <= datetime.now(timezone.utc):
+                    session_status = SessionStatus.EXPIRED.value
+            except (TypeError, ValueError):
+                logging.warning(
+                    "Session %s has an invalid expiry during Accounting-Stop: %r",
+                    request.username,
+                    expires_at_value,
+                )
+
         await db.sessions.update_one(
             {"username": request.username},
             {"$set": {
@@ -4914,7 +4934,7 @@ async def radius_accounting(request: RADIUSAccountingRequest):
                 "total_upload_bytes": input_octets,
                 "total_download_bytes": output_octets,
                 "data_used_mb": total_mb,
-                "status": "completed"
+                "status": session_status
             }}
         )
 
@@ -7237,6 +7257,105 @@ async def update_revenue_config(
     return {"message": "Revenue configuration updated"}
 
 # ==================== Captive Portal Routes ====================
+
+@api_router.get("/portal/active-session")
+async def get_active_portal_session(
+    hotspot_id: str,
+    user_mac: str,
+):
+    """
+    Find an unexpired active WiFi session belonging to this hotspot and device.
+
+    This endpoint only discovers existing credentials. MikroTik and RADIUS
+    remain responsible for authenticating the session and enforcing MAC binding.
+    """
+    normalized_mac = normalize_mac(user_mac)
+
+    cleaned_mac = "".join(
+        character
+        for character in normalized_mac
+        if character in "0123456789ABCDEF"
+    )
+
+    if len(cleaned_mac) != 12:
+        raise HTTPException(
+            status_code=400,
+            detail="A valid device MAC address is required",
+        )
+
+    now = datetime.now(timezone.utc)
+
+    # Compare MAC addresses in Python because older sessions may contain
+    # different separators or formatting even though they identify the same MAC.
+    candidate_sessions = await db.sessions.find(
+        {
+            "hotspot_id": hotspot_id,
+            "status": SessionStatus.ACTIVE.value,
+            "expires_at": {"$gt": now.isoformat()},
+            "user_mac": {"$nin": [None, ""]},
+        },
+        {
+            "_id": 0,
+            "username": 1,
+            "password": 1,
+            "user_mac": 1,
+            "expires_at": 1,
+        },
+    ).sort("expires_at", -1).to_list(100)
+
+    for session in candidate_sessions:
+        if normalize_mac(session.get("user_mac")) != normalized_mac:
+            continue
+
+        username = session.get("username")
+        password = session.get("password")
+        expires_at_value = session.get("expires_at")
+
+        if not username or not password or not expires_at_value:
+            continue
+
+        try:
+            expires_at = datetime.fromisoformat(
+                str(expires_at_value).replace("Z", "+00:00")
+            )
+        except (TypeError, ValueError):
+            logging.warning(
+                "Skipping active portal session with invalid expiry: %s",
+                username,
+            )
+            continue
+
+        if expires_at <= now:
+            continue
+
+        remaining_seconds = max(
+            1,
+            int((expires_at - now).total_seconds()),
+        )
+
+        return {
+            "active_session": True,
+            "wifi_credentials": {
+                "username": username,
+                "password": password,
+            },
+            "expires_at": expires_at.isoformat(),
+            "remaining_seconds": remaining_seconds,
+            "remaining_minutes": max(
+                1,
+                (remaining_seconds + 59) // 60,
+            ),
+        }
+
+    return {
+        "active_session": False,
+        "wifi_credentials": None,
+        "expires_at": None,
+        "remaining_seconds": 0,
+        "remaining_minutes": 0,
+    }
+
+
 
 @api_router.get("/portal/{hotspot_id}")
 async def get_portal_data(hotspot_id: str):

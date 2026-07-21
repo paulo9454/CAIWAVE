@@ -1,5 +1,5 @@
 import { safeError } from "../utils/safeError";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { API_URL } from "../lib/utils";
@@ -44,6 +44,7 @@ const CaptivePortal = () => {
   const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
   const [videoReady, setVideoReady] = useState(false);
+  const activeSessionRestoreKeyRef = useRef("");
 
   useEffect(() => {
   // Get hotspot ID and client info from route params or MikroTik query params
@@ -141,7 +142,7 @@ const CaptivePortal = () => {
     }
   };
 
-  const submitCredentialsToMikrotik = (credentials) => {
+  const submitCredentialsToMikrotik = useCallback((credentials) => {
     const username = credentials?.username;
     const password = credentials?.password;
 
@@ -180,7 +181,85 @@ const CaptivePortal = () => {
     document.body.appendChild(form);
     form.submit();
     return true;
-  };
+  }, [mikrotikLoginUrl, originalDestination]);
+
+  // Restore an existing unexpired WiFi entitlement when a client reconnects.
+  // This deliberately reuses the same MikroTik login flow used by payments,
+  // vouchers and sponsored free sessions.
+  useEffect(() => {
+    if (!hotspotId || !clientMac || !mikrotikLoginUrl) {
+      return undefined;
+    }
+
+    const restoreKey = `${hotspotId}|${clientMac}|${mikrotikLoginUrl}`;
+
+    if (activeSessionRestoreKeyRef.current === restoreKey) {
+      return undefined;
+    }
+
+    activeSessionRestoreKeyRef.current = restoreKey;
+    let cancelled = false;
+
+    const restoreActiveSession = async () => {
+      try {
+        const response = await axios.get(
+          `${API_URL}/portal/active-session`,
+          {
+            params: {
+              hotspot_id: hotspotId,
+              user_mac: clientMac,
+            },
+          }
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const session = response.data || {};
+        const credentials =
+          session.wifi_credentials ||
+          (
+            session.username && session.password
+              ? {
+                  username: session.username,
+                  password: session.password,
+                }
+              : null
+          );
+
+        if (!credentials) {
+          return;
+        }
+
+        toast.success("Active WiFi session found. Reconnecting…");
+        submitCredentialsToMikrotik(credentials);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        const status = error?.response?.status;
+
+        // No active session is a normal portal state. Keep showing the
+        // purchase and voucher options without alarming the customer.
+        if (status !== 404) {
+          console.warn("Could not restore active WiFi session:", error);
+        }
+      }
+    };
+
+    restoreActiveSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    hotspotId,
+    clientMac,
+    mikrotikLoginUrl,
+    submitCredentialsToMikrotik,
+  ]);
 
   const verifyPaymentUntilComplete = async (reference) => {
     const maximumAttempts = 24;
