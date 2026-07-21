@@ -10,6 +10,9 @@ import QuickActions from "../components/portal/QuickActions";
 import CampaignHero from "../components/portal/CampaignHero";
 import FeaturedAdvertisement from "../components/portal/FeaturedAdvertisement";
 import PackagePurchasePanel from "../components/portal/PackagePurchasePanel";
+import VoucherPanel from "../components/portal/VoucherPanel";
+import TVPanel from "../components/portal/TVPanel";
+import MarketplacePanel from "../components/portal/MarketplacePanel";
 import PortalLoadingScreen from "../components/portal/PortalLoadingScreen";
 import { toast, Toaster } from "sonner";
 
@@ -700,257 +703,20 @@ const CaptivePortal = () => {
           </div>
         )}
 
-        {/* Voucher Access */}
-        <div className="rounded-xl border border-blue-700/50 bg-gradient-to-br from-blue-950/80 to-indigo-950/60 p-5">
-          <div className="mb-4">
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-blue-300">
-              <Wifi className="h-5 w-5" />
-              Have a Voucher?
-            </h2>
-            <p className="mt-1 text-sm text-neutral-400">
-              Enter your CAIWAVE voucher code to connect without making a payment.
-            </p>
-          </div>
+        <VoucherPanel
+          voucherCode={voucherCode}
+          setVoucherCode={setVoucherCode}
+          redeemingVoucher={redeemingVoucher}
+          handleVoucherRedemption={handleVoucherRedemption}
+        />
 
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              type="text"
-              value={voucherCode}
-              onChange={(event) =>
-                setVoucherCode(
-                  event.target.value
-                    .toUpperCase()
-                    .replace(/[^A-Z0-9-]/g, "")
-                    .slice(0, 32)
-                )
-              }
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  !redeemingVoucher
-                ) {
-                  handleVoucherRedemption();
-                }
-              }}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="Enter voucher code"
-              className="min-w-0 flex-1 rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 font-mono uppercase tracking-wider text-white outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-            />
+        <TVPanel streams={streams} />
 
-            <Button
-              type="button"
-              onClick={handleVoucherRedemption}
-              disabled={
-                redeemingVoucher ||
-                !voucherCode.trim()
-              }
-              className="bg-blue-600 px-6 py-3 text-white hover:bg-blue-700 sm:w-auto"
-            >
-              {redeemingVoucher ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <>
-                  <Wifi className="mr-2 h-5 w-5" />
-                  Redeem Voucher
-                </>
-              )}
-            </Button>
-          </div>
-
-          <p className="mt-3 text-xs text-neutral-500">
-            Each voucher can only be redeemed once and is valid for its assigned hotspot.
-          </p>
-        </div>
-
-        {/* Live Streams Preview */}
-        {streams.length > 0 && (
-          <div
-            id="tv"
-            className="scroll-mt-5 rounded-[1.75rem] border border-white/10 bg-neutral-900/90 p-4 shadow-xl shadow-black/20 sm:p-5"
-          >
-            <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <Play className="w-5 h-5 text-red-500" />
-              CAIWAVE TV - Live Now
-            </h2>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {streams.slice(0, 3).map((stream) => (
-                <div key={stream.id} className="relative rounded-lg overflow-hidden bg-neutral-800">
-                  {stream.thumbnail_url ? (
-                    <img
-                      src={stream.thumbnail_url}
-                      alt={stream.name}
-                      className="w-full aspect-video object-cover"
-                    />
-                  ) : (
-                    <div className="w-full aspect-video bg-gradient-to-br from-red-900 to-purple-900 flex items-center justify-center">
-                      <Play className="w-8 h-8" />
-                    </div>
-                  )}
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-red-600 text-white text-xs font-bold rounded">
-                    LIVE
-                  </div>
-                  <div className="p-2">
-                    <div className="font-medium text-sm truncate">{stream.name}</div>
-                    <div
-                      className={`mt-1 text-xs font-semibold ${
-                        stream.access_type === "free"
-                          ? "text-green-400"
-                          : "text-yellow-400"
-                      }`}
-                    >
-                      {stream.access_type === "free"
-                        ? "Free to watch"
-                        : `KES ${stream.price || 0} access`}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm">
-              {streams.some((stream) => stream.access_type === "free") && (
-                <span className="rounded-full border border-green-500/30 bg-green-500/10 px-3 py-1 font-medium text-green-300">
-                  Free streams are free to watch
-                </span>
-              )}
-
-              {streams.some((stream) => stream.access_type === "paid") && (
-                <span className="rounded-full border border-yellow-500/30 bg-yellow-500/10 px-3 py-1 font-medium text-yellow-300">
-                  Paid streams show their access price
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Sponsored Campaigns Carousel */}
-        <section
-          id="marketplace"
-          className="scroll-mt-5 rounded-[1.75rem] border border-white/10 bg-neutral-900/90 p-4 shadow-xl shadow-black/20 sm:p-5"
-        >
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-purple-400">
-                Advertising Marketplace
-              </p>
-
-              <h2 className="mt-1 text-lg font-semibold text-white">
-                Sponsored Campaigns
-              </h2>
-
-              <p className="mt-1 text-sm text-neutral-400">
-                Discover offers, services and promotions from local businesses.
-              </p>
-            </div>
-
-            <span className="shrink-0 rounded-full border border-purple-500/30 bg-purple-500/10 px-3 py-1 text-xs font-medium text-purple-300">
-              Swipe
-            </span>
-          </div>
-
-          <div
-            className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            style={{ msOverflowStyle: "none" }}
-          >
-            {sponsorCards.map((ad, index) => {
-              const isPlaceholder =
-                ad.id?.startsWith("sponsor-placeholder");
-
-              return (
-                <article
-                  key={ad.id || index}
-                  className="min-w-[78%] snap-start overflow-hidden rounded-xl border border-neutral-700 bg-neutral-800 sm:min-w-[46%] md:min-w-[31%]"
-                >
-                  <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-purple-950 via-indigo-900 to-blue-900">
-                    {!isPlaceholder && ad.media_url ? (
-                      <img
-                        src={`${baseUrl}${ad.media_url}`}
-                        alt={ad.title}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center p-6 text-center">
-                        <div>
-                          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
-                            <span className="text-2xl" aria-hidden="true">
-                              {ad.symbol || "⭐"}
-                            </span>
-                          </div>
-
-                          <p className="text-sm font-semibold text-white">
-                            Sponsored Placement
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                      Sponsor
-                    </span>
-                  </div>
-
-                  <div className="p-3">
-                    <h3 className="truncate font-semibold text-white">
-                      {ad.title}
-                    </h3>
-
-                    <p className="mt-1 text-sm text-neutral-400">
-                      {ad.description ||
-                        "View this sponsored campaign on CAIWAVE WiFi."}
-                    </p>
-
-                    {!isPlaceholder && (
-                      <div className="mt-3 flex flex-wrap gap-3">
-                        {ad.whatsapp_number && (
-                          <a
-                            href={`https://wa.me/${formatWhatsApp(ad.whatsapp_number)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm font-medium text-green-400"
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                            WhatsApp
-                          </a>
-                        )}
-
-                        {ad.click_url && (
-                          <a
-                            href={ad.click_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-sm font-medium text-blue-400"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                            View offer
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-center gap-2 pt-2">
-            {sponsorCards.map((ad, index) => (
-              <span
-                key={`sponsor-indicator-${ad.id || index}`}
-                className={`h-1.5 rounded-full transition-all ${
-                  index === 0
-                    ? "w-6 bg-purple-400"
-                    : "w-1.5 bg-neutral-600"
-                }`}
-              />
-            ))}
-          </div>
-
-          <p className="pt-2 text-center text-xs text-neutral-500">
-            Swipe horizontally to explore sponsored campaigns.
-          </p>
-        </section>
+        <MarketplacePanel
+          sponsorCards={sponsorCards}
+          baseUrl={baseUrl}
+          formatWhatsApp={formatWhatsApp}
+        />
       </main>
 
       {/* Footer & Support */}
