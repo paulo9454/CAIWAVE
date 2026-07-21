@@ -83,7 +83,10 @@ const PackagePurchasePanel = ({
 
   return (
     <>
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-neutral-900 via-neutral-900 to-blue-950/40 shadow-2xl shadow-black/20">
+      <section
+        id="packages"
+        className="scroll-mt-5 overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-neutral-900 via-neutral-900 to-blue-950/40 shadow-2xl shadow-black/20"
+      >
         <div className="border-b border-white/10 px-4 py-5 sm:px-6">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-yellow-400/10 ring-1 ring-yellow-300/20">

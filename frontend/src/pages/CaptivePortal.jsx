@@ -10,6 +10,7 @@ import QuickActions from "../components/portal/QuickActions";
 import CampaignHero from "../components/portal/CampaignHero";
 import FeaturedAdvertisement from "../components/portal/FeaturedAdvertisement";
 import PackagePurchasePanel from "../components/portal/PackagePurchasePanel";
+import PortalLoadingScreen from "../components/portal/PortalLoadingScreen";
 import { toast, Toaster } from "sonner";
 
 
@@ -526,25 +527,31 @@ const CaptivePortal = () => {
   const baseUrl = API_URL.replace('/api', '');
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-neutral-950 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-neutral-400">Loading...</p>
-        </div>
-      </div>
-    );
+    return <PortalLoadingScreen />;
   }
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white">
-      <Toaster theme="dark" richColors />
+    <div className="relative min-h-screen overflow-x-hidden bg-[#050914] text-white">
+      <div className="pointer-events-none fixed inset-0">
+        <div className="absolute left-1/2 top-[-16rem] h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-blue-600/15 blur-[120px]" />
+        <div className="absolute bottom-[-14rem] right-[-12rem] h-[30rem] w-[30rem] rounded-full bg-cyan-500/10 blur-[110px]" />
+      </div>
 
-      <PortalHeader hotspot={hotspot} />
+      <div className="relative">
+        <Toaster
+          theme="dark"
+          richColors
+          position="top-center"
+          toastOptions={{
+            className: "border-white/10 bg-neutral-950/95 text-white",
+          }}
+        />
 
-      <QuickActions />
+        <PortalHeader hotspot={hotspot} />
 
-      <main className="max-w-4xl mx-auto p-4 space-y-6">
+        <QuickActions />
+
+        <main className="mx-auto max-w-4xl space-y-5 px-4 pb-8 pt-5 sm:space-y-6 sm:px-6 sm:pb-10">
 
         <CampaignHero
           campaign={featuredCampaign}
@@ -758,7 +765,10 @@ const CaptivePortal = () => {
 
         {/* Live Streams Preview */}
         {streams.length > 0 && (
-          <div className="bg-neutral-900 rounded-xl border border-neutral-800 p-4">
+          <div
+            id="tv"
+            className="scroll-mt-5 rounded-[1.75rem] border border-white/10 bg-neutral-900/90 p-4 shadow-xl shadow-black/20 sm:p-5"
+          >
             <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
               <Play className="w-5 h-5 text-red-500" />
               CAIWAVE TV - Live Now
@@ -816,7 +826,10 @@ const CaptivePortal = () => {
         )}
 
         {/* Sponsored Campaigns Carousel */}
-        <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+        <section
+          id="marketplace"
+          className="scroll-mt-5 rounded-[1.75rem] border border-white/10 bg-neutral-900/90 p-4 shadow-xl shadow-black/20 sm:p-5"
+        >
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-purple-400">
@@ -981,6 +994,7 @@ const CaptivePortal = () => {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   );
 };
