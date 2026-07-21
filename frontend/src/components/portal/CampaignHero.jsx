@@ -1,3 +1,5 @@
+import SmartCampaignMedia from "./SmartCampaignMedia";
+
 export default function CampaignHero({ campaign, baseUrl }) {
   if (!campaign) {
     return null;
@@ -14,13 +16,12 @@ export default function CampaignHero({ campaign, baseUrl }) {
       className="overflow-hidden rounded-xl border border-blue-700/40 bg-gradient-to-br from-blue-950/90 via-neutral-900 to-purple-950/80"
     >
       {campaign.image_url && (
-        <div className="relative aspect-video w-full overflow-hidden bg-neutral-900">
-          <img
-            src={`${baseUrl}${campaign.image_url}`}
-            alt={campaign.name || "CAIWAVE featured campaign"}
-            className="h-full w-full object-cover"
-          />
-
+        <SmartCampaignMedia
+          src={`${baseUrl}${campaign.image_url}`}
+          alt={campaign.name || "CAIWAVE featured campaign"}
+          mediaType="image"
+          mediaKey={campaign.id || campaign.image_url}
+        >
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
 
           <div className="absolute left-4 top-4">
@@ -28,7 +29,7 @@ export default function CampaignHero({ campaign, baseUrl }) {
               {campaignLabel}
             </span>
           </div>
-        </div>
+        </SmartCampaignMedia>
       )}
 
       <div className="p-5">

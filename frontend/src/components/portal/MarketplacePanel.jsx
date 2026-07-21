@@ -3,6 +3,8 @@ import {
   MessageCircle,
 } from "lucide-react";
 
+import SmartCampaignMedia from "./SmartCampaignMedia";
+
 const MarketplacePanel = ({
   sponsorCards,
   baseUrl,
@@ -44,14 +46,25 @@ const MarketplacePanel = ({
             key={ad.id || index}
             className="min-w-[78%] snap-start overflow-hidden rounded-xl border border-neutral-700 bg-neutral-800 sm:min-w-[46%] md:min-w-[31%]"
           >
-            <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-purple-950 via-indigo-900 to-blue-900">
-              {!isPlaceholder && ad.media_url ? (
-                <img
-                  src={`${baseUrl}${ad.media_url}`}
-                  alt={ad.title}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
+            {!isPlaceholder && ad.media_url ? (
+              <SmartCampaignMedia
+                src={`${baseUrl}${ad.media_url}`}
+                alt={ad.title}
+                mediaType={
+                  ad.ad_type === "video" ? "video" : "image"
+                }
+                mediaKey={ad.id || ad.media_url}
+                controls={ad.ad_type === "video"}
+                muted
+                playsInline
+                preload="metadata"
+              >
+                <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Sponsor
+                </span>
+              </SmartCampaignMedia>
+            ) : (
+              <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-purple-950 via-indigo-900 to-blue-900">
                 <div className="flex h-full w-full items-center justify-center p-6 text-center">
                   <div>
                     <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
@@ -65,12 +78,12 @@ const MarketplacePanel = ({
                     </p>
                   </div>
                 </div>
-              )}
 
-              <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-                Sponsor
-              </span>
-            </div>
+                <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                  Sponsor
+                </span>
+              </div>
+            )}
 
             <div className="p-3">
               <h3 className="truncate font-semibold text-white">{ad.title}</h3>
