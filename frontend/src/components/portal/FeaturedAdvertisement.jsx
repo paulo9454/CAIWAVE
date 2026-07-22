@@ -6,8 +6,6 @@ export default function FeaturedAdvertisement({
   currentAd,
   ads,
   baseUrl,
-  videoReady,
-  setVideoReady,
   currentAdIndex,
   setCurrentAdIndex,
   showPreviousAd,
@@ -31,30 +29,8 @@ export default function FeaturedAdvertisement({
             : null
         }
         alt={currentAd.title}
-        mediaType={
-          currentAd.ad_type === "video" ? "video" : "image"
-        }
+        mediaType="image"
         mediaKey={currentAd.id}
-        autoPlay
-        muted
-        playsInline
-        preload="auto"
-        videoReady={videoReady}
-        onVideoLoadStart={() => setVideoReady(false)}
-        onVideoLoadedData={() => setVideoReady(true)}
-        onVideoCanPlay={() => setVideoReady(true)}
-        onVideoPlaying={() => setVideoReady(true)}
-        onVideoWaiting={() => setVideoReady(false)}
-        onVideoEnded={(event) => {
-          if (ads.length > 1) {
-            setCurrentAdIndex(
-              (current) => (current + 1) % ads.length
-            );
-          } else {
-            event.currentTarget.currentTime = 0;
-            event.currentTarget.play().catch(() => {});
-          }
-        }}
         fallback={
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-900 to-purple-900">
             <span className="text-2xl font-bold">
@@ -68,7 +44,7 @@ export default function FeaturedAdvertisement({
             <button
               type="button"
               onClick={showPreviousAd}
-              aria-label="Previous featured campaign"
+              aria-label="Previous featured offer"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
             >
               <ChevronRight className="h-5 w-5 rotate-180" />
@@ -85,7 +61,7 @@ export default function FeaturedAdvertisement({
                     key={ad.id || index}
                     type="button"
                     onClick={() => setCurrentAdIndex(index)}
-                    aria-label={`Show featured campaign ${index + 1}`}
+                    aria-label={`Show featured offer ${index + 1}`}
                     className={`h-2 rounded-full transition-all ${
                       index === currentAdIndex
                         ? "w-6 bg-white"
@@ -99,7 +75,7 @@ export default function FeaturedAdvertisement({
             <button
               type="button"
               onClick={showNextAd}
-              aria-label="Next featured campaign"
+              aria-label="Next featured offer"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white backdrop-blur transition hover:bg-black/70"
             >
               <ChevronRight className="h-5 w-5" />
@@ -112,7 +88,7 @@ export default function FeaturedAdvertisement({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-              Sponsored Campaign
+              Featured Offer
             </p>
             <h2 id="featured-ad-title" className="mt-1 text-lg font-semibold">
               {hasRealAd

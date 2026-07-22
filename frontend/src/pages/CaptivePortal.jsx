@@ -1,5 +1,5 @@
 import { safeError } from "../utils/safeError";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { API_URL } from "../lib/utils";
@@ -47,8 +47,12 @@ const CaptivePortal = () => {
   const [voucherCode, setVoucherCode] = useState("");
   const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
-  const [videoReady, setVideoReady] = useState(false);
   const activeSessionRestoreKeyRef = useRef("");
+
+  const imageAds = useMemo(
+    () => ads.filter((ad) => ad.ad_type !== "video"),
+    [ads]
+  );
 
   useEffect(() => {
   // Get hotspot ID and client info from route params or MikroTik query params
@@ -75,40 +79,37 @@ const CaptivePortal = () => {
     fetchData(hid);
 }, [routeHotspotId]);
 
-  // Rotate image campaigns automatically.
-  // Video campaigns advance only after the complete video has played.
+  // Keep the featured advert position valid when eligible images change.
   useEffect(() => {
-    if (ads.length <= 1) return undefined;
+    setCurrentAdIndex((current) => {
+      if (imageAds.length === 0) return 0;
+      return Math.min(current, imageAds.length - 1);
+    });
+  }, [imageAds.length]);
 
-    const activeAd = ads[currentAdIndex];
-
-    if (!activeAd || activeAd.ad_type === "video") {
-      return undefined;
-    }
+  // Featured adverts are image-only and rotate automatically.
+  useEffect(() => {
+    if (imageAds.length <= 1) return undefined;
 
     const timeout = window.setTimeout(() => {
-      setCurrentAdIndex((current) => (current + 1) % ads.length);
+      setCurrentAdIndex((current) => (current + 1) % imageAds.length);
     }, 6000);
 
     return () => window.clearTimeout(timeout);
-  }, [ads, currentAdIndex]);
-
-  useEffect(() => {
-    setVideoReady(false);
-  }, [currentAdIndex]);
+  }, [imageAds.length, currentAdIndex]);
 
   const showPreviousAd = () => {
-    if (ads.length <= 1) return;
+    if (imageAds.length <= 1) return;
 
     setCurrentAdIndex((current) =>
-      current === 0 ? ads.length - 1 : current - 1
+      current === 0 ? imageAds.length - 1 : current - 1
     );
   };
 
   const showNextAd = () => {
-    if (ads.length <= 1) return;
+    if (imageAds.length <= 1) return;
 
-    setCurrentAdIndex((current) => (current + 1) % ads.length);
+    setCurrentAdIndex((current) => (current + 1) % imageAds.length);
   };
 
   const fetchData = async (hid) => {
@@ -490,8 +491,8 @@ const CaptivePortal = () => {
     click_url: ""
   };
 
-  const currentAd = ads[currentAdIndex] || fallbackAd;
-  const hasRealAd = ads.length > 0;
+  const currentAd = imageAds[currentAdIndex] || fallbackAd;
+  const hasRealAd = imageAds.length > 0;
 
   const sponsorPlaceholders = [
     {
@@ -521,7 +522,7 @@ const CaptivePortal = () => {
   ];
 
   const secondaryAds = ads
-    .filter((_, index) => index !== currentAdIndex)
+    .filter((ad) => ad.id !== currentAd.id)
     .slice(0, 4);
 
   const sponsorCards =
@@ -563,10 +564,8 @@ const CaptivePortal = () => {
 
         <FeaturedAdvertisement
           currentAd={currentAd}
-          ads={ads}
+          ads={imageAds}
           baseUrl={baseUrl}
-          videoReady={videoReady}
-          setVideoReady={setVideoReady}
           currentAdIndex={currentAdIndex}
           setCurrentAdIndex={setCurrentAdIndex}
           showPreviousAd={showPreviousAd}
