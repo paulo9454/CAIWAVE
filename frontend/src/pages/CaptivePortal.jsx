@@ -521,7 +521,7 @@ const CaptivePortal = () => {
     }
   ];
 
-  const secondaryAds = ads
+  const secondaryAds = imageAds
     .filter((ad) => ad.id !== currentAd.id)
     .slice(0, 4);
 

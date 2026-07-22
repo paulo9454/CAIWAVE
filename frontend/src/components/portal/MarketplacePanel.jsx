@@ -50,14 +50,8 @@ const MarketplacePanel = ({
               <SmartCampaignMedia
                 src={`${baseUrl}${ad.media_url}`}
                 alt={ad.title}
-                mediaType={
-                  ad.ad_type === "video" ? "video" : "image"
-                }
+                mediaType="image"
                 mediaKey={ad.id || ad.media_url}
-                controls={ad.ad_type === "video"}
-                muted
-                playsInline
-                preload="metadata"
               >
                 <span className="absolute left-2 top-2 rounded-full border border-white/10 bg-black/50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
                   Sponsor
