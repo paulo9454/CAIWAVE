@@ -12,6 +12,7 @@ Refactored to use modular architecture:
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 
 from backend.services.owner_payment import (
     OwnerPaymentProfileRepository,
@@ -31,6 +32,12 @@ from backend.services.campaign_targeting import (
     build_campaign_write_payload,
     is_ad_eligible_for_campaign,
     is_campaign_eligible_for_hotspot,
+)
+from backend.services.affiliate_market import (
+    AffiliateMarketValidationError,
+    build_affiliate_product_payload,
+    normalize_affiliate_category,
+    normalize_affiliate_url,
 )
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -199,6 +206,30 @@ async def startup():
         logger.info("Voucher indexes ensured")
     except Exception:
         logger.exception("Failed to create voucher indexes")
+
+    # Ensure CAIMART affiliate-market indexes exist
+    try:
+        await db.marketplace.create_index(
+            [
+                ("is_active", 1),
+                ("is_featured", -1),
+                ("created_at", -1),
+            ],
+            name="affiliate_public_listing",
+        )
+        await db.marketplace.create_index(
+            "category",
+            name="affiliate_category",
+        )
+        await db.marketplace.create_index(
+            "click_count",
+            name="affiliate_click_analytics",
+        )
+        logger.info("Affiliate marketplace indexes ensured")
+    except Exception:
+        logger.exception(
+            "Failed to create affiliate marketplace indexes"
+        )
 
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
@@ -724,14 +755,23 @@ class SystemSettings(BaseModel):
 # Marketplace Models
 class MarketplaceItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: str
-    category: str  # router, access_point, accessory, tutorial
+    merchant_name: str = "CAIWAVE Partner"
+    category: str
     price: float
+    original_price: Optional[float] = None
+    currency: str = "KES"
     image_url: Optional[str] = None
     purchase_url: Optional[str] = None
+    is_featured: bool = False
     is_active: bool = True
+    click_count: int = 0
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    last_clicked_at: Optional[str] = None
 
 # Campaign Models - ADMIN ONLY
 class CampaignBase(BaseModel):
@@ -7707,27 +7747,141 @@ async def get_free_session_status(
         "can_get_free": free_session_count < MAX_FREE_ADS
     }
 
-# ==================== Marketplace Routes ====================
+# ==================== CAIMART Affiliate Market Routes ====================
+
+@marketplace_router.get("/admin")
+async def get_admin_marketplace_items(
+    user: dict = Depends(require_admin),
+):
+    """Admin listing including protected affiliate URLs."""
+    return await db.marketplace.find(
+        {},
+        {"_id": 0},
+    ).sort(
+        [
+            ("is_featured", -1),
+            ("created_at", -1),
+        ]
+    ).to_list(500)
+
 
 @marketplace_router.get("/")
 async def get_marketplace_items(category: Optional[str] = None):
     """Get marketplace items"""
     query = {"is_active": True}
     if category:
-        query["category"] = category
+        try:
+            query["category"] = normalize_affiliate_category(
+                category
+            )
+        except AffiliateMarketValidationError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "field": exc.field,
+                    "message": exc.message,
+                },
+            ) from exc
     
-    items = await db.marketplace.find(query, {"_id": 0}).to_list(100)
-    return items
+    items = await db.marketplace.find(
+        query,
+        {"_id": 0},
+    ).to_list(100)
 
-@marketplace_router.post("/")
+    public_items = []
+
+    for item in items:
+        public_item = dict(item)
+        public_item.pop("purchase_url", None)
+        public_item["visit_url"] = (
+            f"/api/marketplace/{item['id']}/visit"
+        )
+        public_items.append(public_item)
+
+    return public_items
+
+@marketplace_router.post("/", status_code=201)
 async def add_marketplace_item(
     item: MarketplaceItem,
-    user: dict = Depends(require_admin)
+    user: dict = Depends(require_admin),
 ):
-    """Admin only - add marketplace item"""
-    item_dict = item.model_dump()
-    await db.marketplace.insert_one(item_dict)
-    return item
+    """Admin-only creation of a validated affiliate product."""
+    try:
+        payload = build_affiliate_product_payload(
+            name=item.name,
+            description=item.description,
+            merchant_name=item.merchant_name,
+            category=item.category,
+            price=item.price,
+            original_price=item.original_price,
+            currency=item.currency,
+            image_url=item.image_url,
+            purchase_url=item.purchase_url,
+            is_featured=item.is_featured,
+            is_active=item.is_active,
+            product_id=item.id,
+        )
+    except AffiliateMarketValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    await db.marketplace.insert_one(dict(payload))
+    return payload
+
+@marketplace_router.get("/{item_id}/visit")
+async def visit_marketplace_item(item_id: str):
+    """Track an affiliate click, then redirect to the merchant."""
+    item = await db.marketplace.find_one(
+        {
+            "id": item_id,
+            "is_active": True,
+        },
+        {"_id": 0},
+    )
+
+    if not item:
+        raise HTTPException(
+            status_code=404,
+            detail="Affiliate product not found.",
+        )
+
+    try:
+        destination = normalize_affiliate_url(
+            item.get("purchase_url")
+        )
+    except AffiliateMarketValidationError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="Affiliate destination is unavailable.",
+        ) from exc
+
+    clicked_at = datetime.now(timezone.utc).isoformat()
+
+    await db.marketplace.update_one(
+        {"id": item_id},
+        {
+            "$inc": {"click_count": 1},
+            "$set": {
+                "last_clicked_at": clicked_at,
+                "updated_at": clicked_at,
+            },
+        },
+    )
+
+    return RedirectResponse(
+        url=destination,
+        status_code=307,
+        headers={
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+        },
+    )
+
 
 # ==================== Invoice & Subscription Routes ====================
 

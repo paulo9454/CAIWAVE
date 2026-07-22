@@ -120,6 +120,29 @@ def _money(value: object, *, field: str, label: str) -> float:
     return float(amount)
 
 
+def normalize_affiliate_category(value: object) -> str:
+    """Normalize a public or administrative category value."""
+    raw_category = _required_text(
+        value,
+        field="category",
+        label="Category",
+        maximum_length=80,
+    )
+    normalized = re.sub(
+        r"[^a-z0-9]+",
+        "_",
+        raw_category.lower(),
+    ).strip("_")
+
+    if not normalized:
+        raise AffiliateMarketValidationError(
+            "category",
+            "Category must contain letters or numbers.",
+        )
+
+    return normalized
+
+
 def build_affiliate_product_payload(
     *,
     name: object,
@@ -157,23 +180,9 @@ def build_affiliate_product_payload(
         maximum_length=120,
     )
 
-    raw_category = _required_text(
-        category,
-        field="category",
-        label="Category",
-        maximum_length=80,
+    normalized_category = normalize_affiliate_category(
+        category
     )
-    normalized_category = re.sub(
-        r"[^a-z0-9]+",
-        "_",
-        raw_category.lower(),
-    ).strip("_")
-
-    if not normalized_category:
-        raise AffiliateMarketValidationError(
-            "category",
-            "Category must contain letters or numbers.",
-        )
 
     normalized_price = _money(
         price,

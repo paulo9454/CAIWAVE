@@ -5,6 +5,7 @@ import pytest
 from backend.services.affiliate_market import (
     AffiliateMarketValidationError,
     build_affiliate_product_payload,
+    normalize_affiliate_category,
     normalize_affiliate_url,
 )
 
@@ -118,3 +119,15 @@ def test_client_cannot_supply_click_count():
     result = valid_product()
 
     assert result["click_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("raw_category", "expected"),
+    [
+        ("Network Equipment", "network_equipment"),
+        ("Phones & Tablets", "phones_tablets"),
+        ("  Home--Appliances  ", "home_appliances"),
+    ],
+)
+def test_normalizes_affiliate_categories(raw_category, expected):
+    assert normalize_affiliate_category(raw_category) == expected

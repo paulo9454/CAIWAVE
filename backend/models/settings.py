@@ -46,11 +46,20 @@ class SystemSettings(BaseModel):
 
 class MarketplaceItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     description: str
-    category: str  # router, access_point, accessory, tutorial
+    merchant_name: str = "CAIWAVE Partner"
+    category: str
     price: float
+    original_price: Optional[float] = None
+    currency: str = "KES"
     image_url: Optional[str] = None
     purchase_url: Optional[str] = None
+    is_featured: bool = False
     is_active: bool = True
+    click_count: int = 0
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    last_clicked_at: Optional[str] = None
