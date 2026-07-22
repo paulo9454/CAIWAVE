@@ -20,18 +20,31 @@ export default function CampaignHero({ campaign, baseUrl }) {
   const assignedCreative = campaign.assigned_ads?.[0] || null;
 
   const mediaUrl =
-    assignedCreative?.media_url || campaign.image_url || "";
+    assignedCreative?.media_url ||
+    campaign.media_url ||
+    campaign.image_url ||
+    "";
 
-  const mediaType =
-    assignedCreative?.ad_type === "video" ? "video" : "image";
+  const directMediaType =
+    campaign.media_type === "video" ||
+    /\.(mp4|webm)(\?.*)?$/i.test(campaign.media_url || "")
+      ? "video"
+      : "image";
+
+  const mediaType = assignedCreative
+    ? assignedCreative.ad_type === "video"
+      ? "video"
+      : "image"
+    : directMediaType;
 
   const resolvedMediaUrl = resolveMediaUrl(baseUrl, mediaUrl);
 
   const mediaKey =
     assignedCreative?.id ||
     assignedCreative?.media_url ||
-    campaign.id ||
-    campaign.image_url;
+    campaign.media_url ||
+    campaign.image_url ||
+    campaign.id;
 
   const campaignLabel =
     campaign.coverage_scope === "national"
@@ -49,6 +62,7 @@ export default function CampaignHero({ campaign, baseUrl }) {
           alt={campaign.name || "CAIWAVE featured campaign"}
           mediaType={mediaType}
           mediaKey={mediaKey}
+          className="max-h-[220px] sm:max-h-[280px]"
           autoPlay={mediaType === "video"}
           muted
           playsInline
