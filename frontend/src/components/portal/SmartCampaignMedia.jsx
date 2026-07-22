@@ -35,6 +35,7 @@ export default function SmartCampaignMedia({
   mediaKey,
   className = "",
   fitMode = "auto",
+  frameAspect = "auto",
   autoPlay = false,
   muted = true,
   playsInline = true,
@@ -61,7 +62,12 @@ export default function SmartCampaignMedia({
   }, [src, mediaType]);
 
   const aspectClass =
-    aspectClasses[orientation] || aspectClasses.landscape;
+    frameAspect === "square"
+      ? "aspect-square"
+      : aspectClasses[orientation] || aspectClasses.landscape;
+
+  const fallbackAspectClass =
+    frameAspect === "square" ? "aspect-square" : "aspect-video";
 
   const fitClass =
     fitMode === "contain"
@@ -76,7 +82,7 @@ export default function SmartCampaignMedia({
   if (!src || failed) {
     return (
       <div
-        className={`relative aspect-video w-full overflow-hidden bg-neutral-900 ${className}`}
+        className={`relative ${fallbackAspectClass} w-full overflow-hidden bg-neutral-900 ${className}`}
       >
         {fallback}
         {children}

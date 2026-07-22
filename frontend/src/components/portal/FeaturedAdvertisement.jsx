@@ -46,7 +46,8 @@ export default function FeaturedAdvertisement({
         mediaType="image"
         mediaKey={currentAd.id}
         fitMode="contain"
-        className="h-[220px] max-h-[220px] sm:h-[280px] sm:max-h-[280px]"
+        frameAspect="square"
+        className="mx-auto w-full max-w-[680px]"
         fallback={
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-900 to-purple-900">
             <span className="text-2xl font-bold">

@@ -74,7 +74,12 @@ export default function CampaignHero({ campaign, baseUrl }) {
           mediaType={mediaType}
           mediaKey={mediaKey}
           fitMode="contain"
-          className="h-[220px] max-h-[220px] sm:h-[280px] sm:max-h-[280px]"
+          frameAspect={mediaType === "image" ? "square" : "auto"}
+          className={
+            mediaType === "image"
+              ? "mx-auto w-full max-w-[680px]"
+              : "h-[220px] max-h-[220px] sm:h-[280px] sm:max-h-[280px]"
+          }
           autoPlay={mediaType === "video"}
           muted
           playsInline
