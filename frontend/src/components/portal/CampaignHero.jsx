@@ -22,7 +22,7 @@ export default function CampaignHero({ campaign, baseUrl }) {
           mediaType="image"
           mediaKey={campaign.id || campaign.image_url}
         >
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/45 to-transparent" />
 
           <div className="absolute left-4 top-4">
             <span className="rounded-full border border-white/20 bg-black/60 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur">

@@ -81,7 +81,7 @@ export default function SmartCampaignMedia({
 
   return (
     <div
-      className={`relative w-full overflow-hidden bg-neutral-950 transition-[aspect-ratio] duration-300 ${aspectClass} ${className}`}
+      className={`relative w-full overflow-hidden bg-neutral-800 transition-[aspect-ratio] duration-300 ${aspectClass} ${className}`}
       data-media-orientation={orientation}
     >
       {mediaType === "video" ? (
@@ -143,7 +143,7 @@ export default function SmartCampaignMedia({
               src={src}
               alt=""
               aria-hidden="true"
-              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl"
+              className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-2xl"
             />
           )}
 
