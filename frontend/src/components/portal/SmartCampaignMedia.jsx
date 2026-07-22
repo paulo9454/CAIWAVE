@@ -34,6 +34,7 @@ export default function SmartCampaignMedia({
   mediaType = "image",
   mediaKey,
   className = "",
+  fitMode = "auto",
   autoPlay = false,
   muted = true,
   playsInline = true,
@@ -63,10 +64,14 @@ export default function SmartCampaignMedia({
     aspectClasses[orientation] || aspectClasses.landscape;
 
   const fitClass =
-    fitClasses[orientation] || fitClasses.landscape;
+    fitMode === "contain"
+      ? "object-contain"
+      : fitClasses[orientation] || fitClasses.landscape;
 
   const shouldContain =
-    orientation === "portrait" || orientation === "tall";
+    fitMode === "contain" ||
+    orientation === "portrait" ||
+    orientation === "tall";
 
   if (!src || failed) {
     return (

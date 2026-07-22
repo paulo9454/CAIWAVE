@@ -1,5 +1,16 @@
-import { ChevronRight, ExternalLink, MessageCircle } from "lucide-react";
+import { useState } from "react";
+import {
+  ChevronRight,
+  ExternalLink,
+  Maximize2,
+  MessageCircle,
+} from "lucide-react";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "../ui/dialog";
 import SmartCampaignMedia from "./SmartCampaignMedia";
 
 export default function FeaturedAdvertisement({
@@ -13,25 +24,29 @@ export default function FeaturedAdvertisement({
   hasRealAd,
   formatWhatsApp,
 }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+
   if (!currentAd) {
     return null;
   }
 
+  const resolvedMediaUrl = currentAd.media_url
+    ? `${baseUrl}${currentAd.media_url}`
+    : "";
+
   return (
-    <section
+    <>
+      <section
       aria-labelledby="featured-ad-title"
       className="relative overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900"
     >
       <SmartCampaignMedia
-        src={
-          currentAd.media_url
-            ? `${baseUrl}${currentAd.media_url}`
-            : null
-        }
+        src={resolvedMediaUrl}
         alt={currentAd.title}
         mediaType="image"
         mediaKey={currentAd.id}
-        className="mx-auto max-h-[220px] max-w-[220px] sm:max-h-[280px] sm:max-w-[280px]"
+        fitMode="contain"
+        className="h-[220px] max-h-[220px] sm:h-[280px] sm:max-h-[280px]"
         fallback={
           <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-900 to-purple-900">
             <span className="text-2xl font-bold">
@@ -40,8 +55,27 @@ export default function FeaturedAdvertisement({
           </div>
         }
       >
+        {hasRealAd && resolvedMediaUrl && (
+          <>
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="absolute inset-0 z-10 cursor-zoom-in"
+              aria-label={`Expand ${currentAd.title}`}
+            >
+              <span className="sr-only">
+                Open full-size advertisement
+              </span>
+            </button>
+
+            <div className="pointer-events-none absolute right-3 top-3 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/60 text-white backdrop-blur">
+              <Maximize2 className="h-4 w-4" />
+            </div>
+          </>
+        )}
+
         {ads.length > 1 && (
-          <div className="absolute inset-x-3 bottom-3 flex items-center justify-between gap-3">
+          <div className="absolute inset-x-3 bottom-3 z-30 flex items-center justify-between gap-3">
             <button
               type="button"
               onClick={showPreviousAd}
@@ -133,6 +167,23 @@ export default function FeaturedAdvertisement({
           )}
         </div>
       </div>
-    </section>
+      </section>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-4xl border-white/10 bg-black/95 p-3 text-white">
+          <DialogTitle className="sr-only">
+            {currentAd.title}
+          </DialogTitle>
+
+          {resolvedMediaUrl && (
+            <img
+              src={resolvedMediaUrl}
+              alt={currentAd.title}
+              className="max-h-[85vh] w-full object-contain"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
