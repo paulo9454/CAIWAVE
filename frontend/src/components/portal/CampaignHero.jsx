@@ -1,9 +1,37 @@
 import SmartCampaignMedia from "./SmartCampaignMedia";
 
+const resolveMediaUrl = (baseUrl, mediaUrl) => {
+  if (!mediaUrl) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(mediaUrl)) {
+    return mediaUrl;
+  }
+
+  return `${baseUrl}${mediaUrl}`;
+};
+
 export default function CampaignHero({ campaign, baseUrl }) {
   if (!campaign) {
     return null;
   }
+
+  const assignedCreative = campaign.assigned_ads?.[0] || null;
+
+  const mediaUrl =
+    assignedCreative?.media_url || campaign.image_url || "";
+
+  const mediaType =
+    assignedCreative?.ad_type === "video" ? "video" : "image";
+
+  const resolvedMediaUrl = resolveMediaUrl(baseUrl, mediaUrl);
+
+  const mediaKey =
+    assignedCreative?.id ||
+    assignedCreative?.media_url ||
+    campaign.id ||
+    campaign.image_url;
 
   const campaignLabel =
     campaign.coverage_scope === "national"
@@ -15,12 +43,17 @@ export default function CampaignHero({ campaign, baseUrl }) {
       aria-labelledby="featured-campaign-title"
       className="overflow-hidden rounded-xl border border-blue-700/40 bg-gradient-to-br from-blue-950/90 via-neutral-900 to-purple-950/80"
     >
-      {campaign.image_url && (
+      {resolvedMediaUrl && (
         <SmartCampaignMedia
-          src={`${baseUrl}${campaign.image_url}`}
+          src={resolvedMediaUrl}
           alt={campaign.name || "CAIWAVE featured campaign"}
-          mediaType="image"
-          mediaKey={campaign.id || campaign.image_url}
+          mediaType={mediaType}
+          mediaKey={mediaKey}
+          autoPlay={mediaType === "video"}
+          muted
+          playsInline
+          preload="metadata"
+          controls={false}
         >
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/45 to-transparent" />
 
@@ -33,7 +66,7 @@ export default function CampaignHero({ campaign, baseUrl }) {
       )}
 
       <div className="p-5">
-        {!campaign.image_url && (
+        {!resolvedMediaUrl && (
           <span className="mb-3 inline-flex rounded-full border border-blue-400/30 bg-blue-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
             {campaignLabel}
           </span>
