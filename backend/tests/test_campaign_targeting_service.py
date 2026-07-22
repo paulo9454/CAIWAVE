@@ -230,3 +230,67 @@ def test_build_campaign_requires_name():
         )
 
     assert exc.value.field == "name"
+
+
+def test_build_campaign_preserves_direct_video_media():
+    result = build_campaign_write_payload(
+        name="Direct Video Campaign",
+        description="Administrative campaign video",
+        start_date=NOW,
+        end_date=NOW + timedelta(days=3),
+        coverage_scope="national",
+        assigned_ad_ids=[],
+        locations_by_county=LOCATIONS,
+        known_hotspot_ids=HOTSPOTS,
+        ads_by_id={},
+        media_url="/api/uploads/campaigns/campaign-video.mp4",
+        media_type="video",
+    )
+
+    assert result["media_url"] == (
+        "/api/uploads/campaigns/campaign-video.mp4"
+    )
+    assert result["media_type"] == "video"
+    assert result["image_url"] is None
+
+
+def test_legacy_campaign_image_is_promoted_to_direct_media():
+    result = build_campaign_write_payload(
+        name="Legacy Image Campaign",
+        description=None,
+        start_date=NOW,
+        end_date=NOW + timedelta(days=3),
+        coverage_scope="national",
+        assigned_ad_ids=[],
+        locations_by_county=LOCATIONS,
+        known_hotspot_ids=HOTSPOTS,
+        ads_by_id={},
+        image_url="/api/uploads/campaigns/legacy-image.jpg",
+    )
+
+    assert result["image_url"] == (
+        "/api/uploads/campaigns/legacy-image.jpg"
+    )
+    assert result["media_url"] == (
+        "/api/uploads/campaigns/legacy-image.jpg"
+    )
+    assert result["media_type"] == "image"
+
+
+def test_campaign_media_type_is_validated():
+    with pytest.raises(CampaignValidationError) as exc:
+        build_campaign_write_payload(
+            name="Invalid Media Campaign",
+            description=None,
+            start_date=NOW,
+            end_date=NOW + timedelta(days=3),
+            coverage_scope="national",
+            assigned_ad_ids=[],
+            locations_by_county=LOCATIONS,
+            known_hotspot_ids=HOTSPOTS,
+            ads_by_id={},
+            media_url="/api/uploads/campaigns/file.bin",
+            media_type="document",
+        )
+
+    assert exc.value.field == "media_type"

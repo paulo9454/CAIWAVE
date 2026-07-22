@@ -181,6 +181,8 @@ def build_campaign_write_payload(
     now: datetime | None = None,
     stream_id: object = None,
     subsidized_uptime_id: object = None,
+    media_url: object = None,
+    media_type: object = None,
     image_url: object = None,
 ) -> dict[str, object]:
     campaign_name = str(name or "").strip()
@@ -220,6 +222,31 @@ def build_campaign_write_payload(
         now=now,
     )
 
+    normalized_image_url = str(image_url or "").strip() or None
+    normalized_media_url = str(media_url or "").strip() or None
+
+    raw_media_type = getattr(media_type, "value", media_type)
+    normalized_media_type = (
+        str(raw_media_type or "").strip().lower() or None
+    )
+
+    if normalized_media_type not in {None, "image", "video"}:
+        raise CampaignValidationError(
+            "media_type",
+            "Campaign media type must be image or video.",
+        )
+
+    # Upgrade existing image-only campaign data during normal edits.
+    if not normalized_media_url and normalized_image_url:
+        normalized_media_url = normalized_image_url
+        normalized_media_type = "image"
+
+    if normalized_media_url and not normalized_media_type:
+        raise CampaignValidationError(
+            "media_type",
+            "Campaign media type is required when media is provided.",
+        )
+
     return {
         "name": campaign_name,
         "description": str(description or "").strip() or None,
@@ -237,5 +264,7 @@ def build_campaign_write_payload(
         "stream_id": str(stream_id or "").strip() or None,
         "subsidized_uptime_id":
             str(subsidized_uptime_id or "").strip() or None,
-        "image_url": str(image_url or "").strip() or None,
+        "media_url": normalized_media_url,
+        "media_type": normalized_media_type,
+        "image_url": normalized_image_url,
     }

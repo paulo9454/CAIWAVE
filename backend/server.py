@@ -753,6 +753,12 @@ class CampaignBase(BaseModel):
 
     stream_id: Optional[str] = None
     subsidized_uptime_id: Optional[str] = None
+
+    # Direct campaign creative. Assigned adverts remain preferred.
+    media_url: Optional[str] = None
+    media_type: Optional[AdType] = None
+
+    # Temporary compatibility field for existing campaign images.
     image_url: Optional[str] = None
 
 class CampaignCreate(CampaignBase):
@@ -4301,6 +4307,8 @@ async def build_validated_campaign_payload(
             ads_by_id=ads_by_id,
             stream_id=campaign_data.stream_id,
             subsidized_uptime_id=campaign_data.subsidized_uptime_id,
+            media_url=campaign_data.media_url,
+            media_type=campaign_data.media_type,
             image_url=campaign_data.image_url,
         )
     except CampaignValidationError as exc:
@@ -4431,16 +4439,123 @@ async def upload_campaign_image(
     # Generate URL
     image_url = f"/api/uploads/campaigns/{unique_filename}"
     
-    # Update campaign with image URL
+    # Maintain both the new media contract and legacy image field.
     await db.campaigns.update_one(
         {"id": campaign_id},
-        {"$set": {"image_url": image_url, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {
+            "$set": {
+                "media_url": image_url,
+                "media_type": AdType.IMAGE.value,
+                "image_url": image_url,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
     )
     
     return {
         "success": True,
         "image_url": image_url,
         "message": "Campaign image uploaded successfully"
+    }
+
+
+@campaigns_router.post("/{campaign_id}/upload-media")
+async def upload_campaign_media(
+    campaign_id: str,
+    media: UploadFile = File(...),
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN])),
+):
+    """Upload a direct campaign image or video creative."""
+    campaign = await db.campaigns.find_one(
+        {"id": campaign_id},
+        {"_id": 0},
+    )
+
+    if not campaign:
+        raise HTTPException(
+            status_code=404,
+            detail="Campaign not found",
+        )
+
+    content_type = str(media.content_type or "").lower()
+
+    extension_by_content_type = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "video/mp4": ".mp4",
+        "video/webm": ".webm",
+    }
+
+    if content_type in ALLOWED_IMAGE_TYPES:
+        media_type = AdType.IMAGE
+        maximum_size = MAX_IMAGE_SIZE
+    elif content_type in ALLOWED_VIDEO_TYPES:
+        media_type = AdType.VIDEO
+        maximum_size = MAX_VIDEO_SIZE
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Invalid campaign media type. "
+                "Allowed: JPEG, PNG, WEBP, MP4 and WEBM."
+            ),
+        )
+
+    content = await media.read()
+
+    if len(content) > maximum_size:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{media_type.value.title()} too large. "
+                f"Maximum size: {maximum_size // (1024 * 1024)}MB."
+            ),
+        )
+
+    file_extension = extension_by_content_type.get(content_type)
+
+    if not file_extension:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported campaign media format.",
+        )
+
+    unique_filename = (
+        f"{campaign_id}_{uuid.uuid4()}{file_extension}"
+    )
+    upload_path = UPLOAD_DIR_CAMPAIGNS / unique_filename
+
+    with open(upload_path, "wb") as destination:
+        destination.write(content)
+
+    media_url = f"/api/uploads/campaigns/{unique_filename}"
+
+    update_fields = {
+        "media_url": media_url,
+        "media_type": media_type.value,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Continue populating image_url while legacy clients exist.
+    if media_type == AdType.IMAGE:
+        update_fields["image_url"] = media_url
+    else:
+        update_fields["image_url"] = None
+
+    await db.campaigns.update_one(
+        {"id": campaign_id},
+        {"$set": update_fields},
+    )
+
+    return {
+        "success": True,
+        "media_url": media_url,
+        "media_type": media_type.value,
+        "image_url": update_fields["image_url"],
+        "message": (
+            f"Campaign {media_type.value} uploaded successfully"
+        ),
     }
 
 
