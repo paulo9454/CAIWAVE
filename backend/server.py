@@ -7403,7 +7403,7 @@ async def get_portal_data(hotspot_id: str):
 
     now = datetime.now(timezone.utc)
 
-    campaigns = [
+    eligible_campaigns = [
         campaign
         for campaign in candidate_campaigns
         if is_campaign_eligible_for_hotspot(
@@ -7411,6 +7411,62 @@ async def get_portal_data(hotspot_id: str):
             hotspot,
             now=now,
         )
+    ]
+
+    assigned_ad_ids = list(
+        dict.fromkeys(
+            ad_id
+            for campaign in eligible_campaigns
+            for ad_id in campaign.get("assigned_ad_ids", [])
+            if ad_id
+        )
+    )
+
+    campaign_ads = []
+
+    if assigned_ad_ids:
+        campaign_ads = await db.ads.find(
+            {
+                "id": {"$in": assigned_ad_ids},
+                "status": AdStatus.ACTIVE.value,
+                "is_active": True,
+            },
+            {
+                "_id": 0,
+                "id": 1,
+                "title": 1,
+                "description": 1,
+                "ad_type": 1,
+                "media_url": 1,
+                "status": 1,
+                "is_active": 1,
+                "approved_at": 1,
+                "paid_at": 1,
+                "starts_at": 1,
+                "expires_at": 1,
+            },
+        ).to_list(None)
+
+    campaign_ads_by_id = {
+        ad["id"]: ad
+        for ad in campaign_ads
+        if ad.get("id")
+        and is_ad_eligible_for_campaign(
+            ad,
+            now=now,
+        )
+    }
+
+    campaigns = [
+        {
+            **campaign,
+            "assigned_ads": [
+                campaign_ads_by_id[ad_id]
+                for ad_id in campaign.get("assigned_ad_ids", [])
+                if ad_id in campaign_ads_by_id
+            ],
+        }
+        for campaign in eligible_campaigns
     ]
     
     return {
