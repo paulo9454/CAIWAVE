@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from io import BytesIO
 
+from PIL import Image as PILImage
 import pytest
 
 from backend.services.affiliate_market import (
@@ -7,6 +9,7 @@ from backend.services.affiliate_market import (
     build_affiliate_product_payload,
     normalize_affiliate_category,
     normalize_affiliate_url,
+    validate_affiliate_image,
 )
 
 
@@ -131,3 +134,44 @@ def test_client_cannot_supply_click_count():
 )
 def test_normalizes_affiliate_categories(raw_category, expected):
     assert normalize_affiliate_category(raw_category) == expected
+
+
+def image_bytes(width, height):
+    buffer = BytesIO()
+    PILImage.new("RGB", (width, height), "white").save(
+        buffer,
+        format="PNG",
+    )
+    return buffer.getvalue()
+
+
+def test_accepts_exact_affiliate_image_dimensions():
+    assert validate_affiliate_image(
+        image_bytes(680, 680)
+    ) == (680, 680)
+
+
+@pytest.mark.parametrize(
+    ("width", "height"),
+    [
+        (679, 680),
+        (680, 679),
+        (681, 680),
+        (680, 681),
+        (1200, 1200),
+    ],
+)
+def test_rejects_wrong_affiliate_image_dimensions(width, height):
+    with pytest.raises(AffiliateMarketValidationError) as exc:
+        validate_affiliate_image(image_bytes(width, height))
+
+    assert exc.value.field == "image"
+    assert "680 × 680" in exc.value.message
+
+
+@pytest.mark.parametrize("content", [b"", b"not-an-image"])
+def test_rejects_invalid_affiliate_image_files(content):
+    with pytest.raises(AffiliateMarketValidationError) as exc:
+        validate_affiliate_image(content)
+
+    assert exc.value.field == "image"

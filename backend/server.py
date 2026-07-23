@@ -38,6 +38,7 @@ from backend.services.affiliate_market import (
     build_affiliate_product_payload,
     normalize_affiliate_category,
     normalize_affiliate_url,
+    validate_affiliate_image,
 )
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -85,9 +86,11 @@ UPLOAD_DIR = ROOT_DIR / "uploads" / "ads"
 UPLOAD_DIR_IMAGES = UPLOAD_DIR / "images"
 UPLOAD_DIR_VIDEOS = UPLOAD_DIR / "videos"
 UPLOAD_DIR_CAMPAIGNS = ROOT_DIR / "uploads" / "campaigns"
+UPLOAD_DIR_MARKETPLACE = ROOT_DIR / "uploads" / "marketplace"
 UPLOAD_DIR_IMAGES.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR_VIDEOS.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR_CAMPAIGNS.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR_MARKETPLACE.mkdir(parents=True, exist_ok=True)
 
 # Media validation constants
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB for campaigns
@@ -7832,6 +7835,257 @@ async def add_marketplace_item(
 
     await db.marketplace.insert_one(dict(payload))
     return payload
+
+@marketplace_router.put("/{item_id}")
+async def update_marketplace_item(
+    item_id: str,
+    item: MarketplaceItem,
+    user: dict = Depends(require_admin),
+):
+    """Update product details without resetting image or analytics."""
+    existing = await db.marketplace.find_one(
+        {"id": item_id},
+        {"_id": 0},
+    )
+
+    if not existing:
+        raise HTTPException(
+            status_code=404,
+            detail="Affiliate product not found.",
+        )
+
+    try:
+        payload = dict(
+            build_affiliate_product_payload(
+                name=item.name,
+                description=item.description,
+                merchant_name=item.merchant_name,
+                category=item.category,
+                price=item.price,
+                original_price=item.original_price,
+                currency=item.currency,
+                image_url=existing.get("image_url"),
+                purchase_url=item.purchase_url,
+                is_featured=item.is_featured,
+                is_active=bool(
+                    existing.get("is_active", True)
+                ),
+                product_id=item_id,
+            )
+        )
+    except AffiliateMarketValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    payload["id"] = item_id
+    payload["created_at"] = existing.get(
+        "created_at",
+        payload.get("created_at"),
+    )
+    payload["updated_at"] = (
+        datetime.now(timezone.utc).isoformat()
+    )
+    payload["click_count"] = existing.get(
+        "click_count",
+        0,
+    )
+    payload["last_clicked_at"] = existing.get(
+        "last_clicked_at"
+    )
+
+    await db.marketplace.update_one(
+        {"id": item_id},
+        {"$set": payload},
+    )
+
+    return payload
+
+
+@marketplace_router.put("/{item_id}/status")
+async def update_marketplace_item_status(
+    item_id: str,
+    is_active: bool,
+    user: dict = Depends(require_admin),
+):
+    """Activate or deactivate an affiliate product."""
+    existing = await db.marketplace.find_one(
+        {"id": item_id},
+        {"_id": 0},
+    )
+
+    if not existing:
+        raise HTTPException(
+            status_code=404,
+            detail="Affiliate product not found.",
+        )
+
+    updated_at = datetime.now(timezone.utc).isoformat()
+
+    await db.marketplace.update_one(
+        {"id": item_id},
+        {
+            "$set": {
+                "is_active": is_active,
+                "updated_at": updated_at,
+            }
+        },
+    )
+
+    return {
+        "success": True,
+        "id": item_id,
+        "is_active": is_active,
+        "updated_at": updated_at,
+    }
+
+
+@marketplace_router.delete("/{item_id}")
+async def delete_marketplace_item(
+    item_id: str,
+    user: dict = Depends(require_admin),
+):
+    """Delete an affiliate product and its local image."""
+    existing = await db.marketplace.find_one(
+        {"id": item_id},
+        {"_id": 0},
+    )
+
+    if not existing:
+        raise HTTPException(
+            status_code=404,
+            detail="Affiliate product not found.",
+        )
+
+    result = await db.marketplace.delete_one(
+        {"id": item_id}
+    )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Affiliate product not found.",
+        )
+
+    image_url = str(existing.get("image_url") or "")
+
+    if image_url.startswith(
+        "/api/uploads/marketplace/"
+    ):
+        image_name = Path(image_url).name
+        image_path = UPLOAD_DIR_MARKETPLACE / image_name
+
+        if image_path.is_file():
+            image_path.unlink()
+
+    return {
+        "success": True,
+        "id": item_id,
+        "message": "Affiliate product deleted.",
+    }
+
+
+@marketplace_router.post("/{item_id}/upload-image")
+async def upload_marketplace_image(
+    item_id: str,
+    image: UploadFile = File(...),
+    user: dict = Depends(require_admin),
+):
+    """Upload an exact 680 by 680 CAIMART product image."""
+    item = await db.marketplace.find_one(
+        {"id": item_id},
+        {"_id": 0},
+    )
+
+    if not item:
+        raise HTTPException(
+            status_code=404,
+            detail="Affiliate product not found.",
+        )
+
+    content_type = str(image.content_type or "").lower()
+
+    extension_by_content_type = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }
+
+    if content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Product image must be JPG, PNG or WEBP.",
+        )
+
+    content = await image.read()
+
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Product image is too large. "
+                f"Maximum size: "
+                f"{MAX_IMAGE_SIZE // (1024 * 1024)}MB."
+            ),
+        )
+
+    try:
+        validate_affiliate_image(content)
+    except AffiliateMarketValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    extension = extension_by_content_type[content_type]
+    filename = f"{item_id}_{uuid.uuid4()}{extension}"
+    upload_path = UPLOAD_DIR_MARKETPLACE / filename
+    image_url = f"/api/uploads/marketplace/{filename}"
+
+    with open(upload_path, "wb") as destination:
+        destination.write(content)
+
+    updated_at = datetime.now(timezone.utc).isoformat()
+
+    await db.marketplace.update_one(
+        {"id": item_id},
+        {
+            "$set": {
+                "image_url": image_url,
+                "updated_at": updated_at,
+            }
+        },
+    )
+
+    previous_image_url = str(
+        item.get("image_url") or ""
+    )
+
+    if previous_image_url.startswith(
+        "/api/uploads/marketplace/"
+    ):
+        previous_name = Path(previous_image_url).name
+        previous_path = (
+            UPLOAD_DIR_MARKETPLACE / previous_name
+        )
+
+        if previous_path.is_file():
+            previous_path.unlink()
+
+    return {
+        "success": True,
+        "image_url": image_url,
+        "width": 680,
+        "height": 680,
+    }
+
 
 @marketplace_router.get("/{item_id}/visit")
 async def visit_marketplace_item(item_id: str):

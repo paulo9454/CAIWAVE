@@ -55,3 +55,38 @@ def test_marketplace_models_include_affiliate_fields():
     for field in required_fields:
         assert field in SERVER
         assert field in SETTINGS
+
+
+def test_affiliate_product_image_upload_is_square_and_admin_only():
+    assert '@marketplace_router.post("/{item_id}/upload-image")' in SERVER
+    assert "upload_marketplace_image" in SERVER
+    assert "validate_affiliate_image(content)" in SERVER
+    assert "UPLOAD_DIR_MARKETPLACE" in SERVER
+    assert '"width": 680' in SERVER
+    assert '"height": 680' in SERVER
+    assert "Depends(require_admin)" in SERVER
+
+def test_affiliate_product_update_preserves_managed_fields():
+    assert '@marketplace_router.put("/{item_id}")' in SERVER
+    assert "update_marketplace_item" in SERVER
+    assert 'image_url=existing.get("image_url")' in SERVER
+    assert 'existing.get("is_active", True)' in SERVER
+    assert 'payload["created_at"]' in SERVER
+    assert 'payload["click_count"]' in SERVER
+    assert 'payload["last_clicked_at"]' in SERVER
+
+def test_affiliate_product_status_management_is_admin_only():
+    assert '@marketplace_router.put("/{item_id}/status")' in SERVER
+    assert "update_marketplace_item_status" in SERVER
+    assert '"is_active": is_active' in SERVER
+    assert "Depends(require_admin)" in SERVER
+
+
+def test_affiliate_product_delete_removes_only_local_image():
+    assert '@marketplace_router.delete("/{item_id}")' in SERVER
+    assert "delete_marketplace_item" in SERVER
+    assert 'db.marketplace.delete_one(' in SERVER
+    assert '"/api/uploads/marketplace/"' in SERVER
+    assert "Path(image_url).name" in SERVER
+    assert "image_path.unlink()" in SERVER
+

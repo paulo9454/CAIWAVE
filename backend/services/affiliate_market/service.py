@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from io import BytesIO
 from ipaddress import ip_address
 import re
 from urllib.parse import urlparse
 import uuid
+
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
+
+
+AFFILIATE_IMAGE_WIDTH = 680
+AFFILIATE_IMAGE_HEIGHT = 680
 
 
 class AffiliateMarketValidationError(ValueError):
@@ -17,6 +25,46 @@ class AffiliateMarketValidationError(ValueError):
         self.field = field
         self.message = message
         super().__init__(message)
+
+
+def validate_affiliate_image(
+    content: bytes,
+) -> tuple[int, int]:
+    """Require a valid 680 by 680 pixel affiliate product image."""
+    if not content:
+        raise AffiliateMarketValidationError(
+            "image",
+            "Product image cannot be empty.",
+        )
+
+    try:
+        with PILImage.open(BytesIO(content)) as image:
+            width, height = image.size
+            image.verify()
+    except (
+        UnidentifiedImageError,
+        OSError,
+        PILImage.DecompressionBombError,
+    ) as exc:
+        raise AffiliateMarketValidationError(
+            "image",
+            "Product image is invalid or corrupted.",
+        ) from exc
+
+    if (
+        width != AFFILIATE_IMAGE_WIDTH
+        or height != AFFILIATE_IMAGE_HEIGHT
+    ):
+        raise AffiliateMarketValidationError(
+            "image",
+            (
+                "Product image must be exactly "
+                f"{AFFILIATE_IMAGE_WIDTH} × "
+                f"{AFFILIATE_IMAGE_HEIGHT} pixels."
+            ),
+        )
+
+    return width, height
 
 
 def normalize_affiliate_url(value: object) -> str:
