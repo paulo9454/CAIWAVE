@@ -46,6 +46,12 @@ from backend.services.portal_notifications import (
     build_public_notification,
     select_portal_notification,
 )
+from backend.services.web_push import (
+    WebPushValidationError,
+    build_web_push_subscription_payload,
+    hash_push_endpoint,
+    normalize_push_preferences,
+)
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -264,6 +270,27 @@ async def startup():
             "Failed to create portal notification indexes"
         )
 
+    # Ensure Web Push subscription indexes exist
+    try:
+        await db.web_push_subscriptions.create_index(
+            "endpoint_hash",
+            unique=True,
+            name="web_push_endpoint",
+        )
+        await db.web_push_subscriptions.create_index(
+            [
+                ("hotspot_id", 1),
+                ("is_active", 1),
+                ("last_seen_at", -1),
+            ],
+            name="web_push_hotspot_delivery",
+        )
+        logger.info("Web Push subscription indexes ensured")
+    except Exception:
+        logger.exception(
+            "Failed to create Web Push subscription indexes"
+        )
+
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
     app.state.tasks.append(task)
@@ -370,6 +397,33 @@ class PortalNotificationRequest(BaseModel):
     expires_at: datetime
     is_active: bool = True
     priority: int = Field(default=0, ge=0, le=100)
+
+
+class WebPushKeysRequest(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class WebPushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: WebPushKeysRequest
+    hotspot_id: str
+    session_id: Optional[str] = None
+    preferences: Dict[str, bool] = Field(
+        default_factory=dict
+    )
+
+
+class WebPushPreferencesRequest(BaseModel):
+    endpoint: str
+    preferences: Dict[str, bool] = Field(
+        default_factory=dict
+    )
+    mute_days: int = Field(default=0, ge=0, le=30)
+
+
+class WebPushUnsubscribeRequest(BaseModel):
+    endpoint: str
 
 
 class CampaignStatus(str, Enum):
@@ -7713,6 +7767,239 @@ async def get_latest_portal_notification(
             else None
         ),
         "poll_after_seconds": 60,
+    }
+
+
+@notifications_router.get("/push/config")
+async def get_web_push_config():
+    """Return public Web Push capability and policy."""
+    public_key = os.getenv(
+        "WEB_PUSH_VAPID_PUBLIC_KEY",
+        "",
+    ).strip()
+
+    return {
+        "enabled": bool(public_key),
+        "public_key": public_key or None,
+        "max_notifications_per_day": 2,
+        "quiet_hours": {
+            "timezone": "Africa/Nairobi",
+            "starts_at": "21:00",
+            "ends_at": "08:00",
+        },
+    }
+
+
+@notifications_router.post(
+    "/push/subscribe",
+    status_code=201,
+)
+async def subscribe_to_web_push(
+    request: WebPushSubscriptionRequest,
+    http_request: Request,
+):
+    """Register or refresh a browser push subscription."""
+    hotspot = await db.hotspots.find_one(
+        {"id": request.hotspot_id},
+        {"_id": 0, "id": 1},
+    )
+
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found.",
+        )
+
+    if request.session_id:
+        session = await db.sessions.find_one(
+            {
+                "id": request.session_id,
+                "hotspot_id": request.hotspot_id,
+            },
+            {"_id": 0},
+        )
+
+        if not session:
+            raise HTTPException(
+                status_code=400,
+                detail="Session does not match this hotspot.",
+            )
+
+        expires_at = session.get("expires_at")
+
+        if expires_at:
+            try:
+                session_expiry = datetime.fromisoformat(
+                    str(expires_at).replace("Z", "+00:00")
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Session expiry is invalid.",
+                ) from exc
+
+            if session_expiry <= datetime.now(timezone.utc):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Session has expired.",
+                )
+
+    try:
+        payload = build_web_push_subscription_payload(
+            endpoint=request.endpoint,
+            p256dh=request.keys.p256dh,
+            auth=request.keys.auth,
+            hotspot_id=request.hotspot_id,
+            session_id=request.session_id,
+            preferences=request.preferences,
+            user_agent=http_request.headers.get(
+                "user-agent"
+            ),
+        )
+    except WebPushValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    mutable_payload = dict(payload)
+    subscription_id = mutable_payload.pop("id")
+    created_at = mutable_payload.pop("created_at")
+
+    await db.web_push_subscriptions.update_one(
+        {"endpoint_hash": payload["endpoint_hash"]},
+        {
+            "$set": mutable_payload,
+            "$setOnInsert": {
+                "id": subscription_id,
+                "created_at": created_at,
+            },
+        },
+        upsert=True,
+    )
+
+    stored = await db.web_push_subscriptions.find_one(
+        {"endpoint_hash": payload["endpoint_hash"]},
+        {
+            "_id": 0,
+            "id": 1,
+            "hotspot_id": 1,
+            "preferences": 1,
+            "is_active": 1,
+            "last_seen_at": 1,
+        },
+    )
+
+    return {
+        "success": True,
+        "subscription": stored,
+    }
+
+
+@notifications_router.put("/push/preferences")
+async def update_web_push_preferences(
+    request: WebPushPreferencesRequest,
+):
+    """Update push categories or temporarily mute delivery."""
+    try:
+        endpoint_hash = hash_push_endpoint(
+            request.endpoint
+        )
+        preferences = normalize_push_preferences(
+            request.preferences
+        )
+    except WebPushValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    now = datetime.now(timezone.utc)
+    muted_until = (
+        now + timedelta(days=request.mute_days)
+        if request.mute_days
+        else None
+    )
+
+    result = await db.web_push_subscriptions.update_one(
+        {
+            "endpoint_hash": endpoint_hash,
+            "is_active": True,
+        },
+        {
+            "$set": {
+                "preferences": preferences,
+                "muted_until": (
+                    muted_until.isoformat()
+                    if muted_until
+                    else None
+                ),
+                "updated_at": now.isoformat(),
+            }
+        },
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Push subscription not found.",
+        )
+
+    return {
+        "success": True,
+        "preferences": preferences,
+        "muted_until": (
+            muted_until.isoformat()
+            if muted_until
+            else None
+        ),
+    }
+
+
+@notifications_router.delete("/push/unsubscribe")
+async def unsubscribe_from_web_push(
+    request: WebPushUnsubscribeRequest,
+):
+    """Disable a browser subscription without deleting history."""
+    try:
+        endpoint_hash = hash_push_endpoint(
+            request.endpoint
+        )
+    except WebPushValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.web_push_subscriptions.update_one(
+        {"endpoint_hash": endpoint_hash},
+        {
+            "$set": {
+                "is_active": False,
+                "updated_at": now,
+            }
+        },
+    )
+
+    if result.matched_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Push subscription not found.",
+        )
+
+    return {
+        "success": True,
+        "message": "Push notifications disabled.",
     }
 
 

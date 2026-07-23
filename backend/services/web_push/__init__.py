@@ -7,6 +7,7 @@ from .service import (
     build_web_push_click_url,
     build_web_push_subscription_payload,
     evaluate_web_push_delivery,
+    hash_push_endpoint,
     normalize_push_endpoint,
     normalize_push_preferences,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "build_web_push_click_url",
     "build_web_push_subscription_payload",
     "evaluate_web_push_delivery",
+    "hash_push_endpoint",
     "normalize_push_endpoint",
     "normalize_push_preferences",
 ]

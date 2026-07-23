@@ -103,6 +103,13 @@ def normalize_push_endpoint(value: object) -> str:
     return endpoint
 
 
+def hash_push_endpoint(value: object) -> str:
+    endpoint = normalize_push_endpoint(value)
+    return hashlib.sha256(
+        endpoint.encode("utf-8")
+    ).hexdigest()
+
+
 def normalize_push_preferences(
     preferences: Mapping[str, object] | None,
 ) -> dict[str, bool]:
@@ -175,9 +182,9 @@ def build_web_push_subscription_payload(
     return {
         "id": str(subscription_id or uuid4()),
         "endpoint": normalized_endpoint,
-        "endpoint_hash": hashlib.sha256(
-            normalized_endpoint.encode("utf-8")
-        ).hexdigest(),
+        "endpoint_hash": hash_push_endpoint(
+            normalized_endpoint
+        ),
         "keys": {
             "p256dh": normalized_p256dh,
             "auth": normalized_auth,

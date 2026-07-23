@@ -8,6 +8,7 @@ from backend.services.web_push import (
     build_web_push_click_url,
     build_web_push_subscription_payload,
     evaluate_web_push_delivery,
+    hash_push_endpoint,
     normalize_push_endpoint,
     normalize_push_preferences,
 )
@@ -187,3 +188,13 @@ def test_external_action_falls_back_to_portal():
     assert url == (
         "https://www.caiwave.com/portal/hotspot-1"
     )
+
+
+
+def test_endpoint_hash_is_stable():
+    endpoint = "https://push.example.com/subscription/one"
+
+    assert hash_push_endpoint(endpoint) == (
+        hash_push_endpoint(endpoint)
+    )
+    assert len(hash_push_endpoint(endpoint)) == 64
