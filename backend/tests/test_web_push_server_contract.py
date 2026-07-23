@@ -14,7 +14,9 @@ def test_web_push_request_models_are_registered():
 
 def test_public_push_config_is_registered():
     assert '@notifications_router.get("/push/config")' in SERVER
-    assert '"WEB_PUSH_VAPID_PUBLIC_KEY"' in SERVER
+    assert "load_web_push_configuration()" in SERVER
+    assert '"enabled": configuration.enabled' in SERVER
+    assert '"public_key": configuration.public_key' in SERVER
     assert '"max_notifications_per_day": 2' in SERVER
     assert '"Africa/Nairobi"' in SERVER
 

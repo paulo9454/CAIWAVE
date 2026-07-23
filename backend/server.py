@@ -50,6 +50,7 @@ from backend.services.web_push import (
     WebPushValidationError,
     build_web_push_subscription_payload,
     hash_push_endpoint,
+    load_web_push_configuration,
     normalize_push_preferences,
 )
 from dotenv import load_dotenv
@@ -7773,14 +7774,11 @@ async def get_latest_portal_notification(
 @notifications_router.get("/push/config")
 async def get_web_push_config():
     """Return public Web Push capability and policy."""
-    public_key = os.getenv(
-        "WEB_PUSH_VAPID_PUBLIC_KEY",
-        "",
-    ).strip()
+    configuration = load_web_push_configuration()
 
     return {
-        "enabled": bool(public_key),
-        "public_key": public_key or None,
+        "enabled": configuration.enabled,
+        "public_key": configuration.public_key,
         "max_notifications_per_day": 2,
         "quiet_hours": {
             "timezone": "Africa/Nairobi",
