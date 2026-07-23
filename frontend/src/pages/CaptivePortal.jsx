@@ -38,6 +38,7 @@ const CaptivePortal = () => {
   const [ads, setAds] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [streams, setStreams] = useState([]);
+  const [marketplaceProducts, setMarketplaceProducts] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -140,6 +141,23 @@ const CaptivePortal = () => {
 
       const streamsRes = await axios.get(`${API_URL}/streams/live`);
       setStreams(streamsRes.data || []);
+
+      try {
+        const marketplaceRes = await axios.get(
+          `${API_URL}/marketplace/`
+        );
+        setMarketplaceProducts(
+          Array.isArray(marketplaceRes.data)
+            ? marketplaceRes.data
+            : []
+        );
+      } catch (marketplaceError) {
+        console.error(
+          "Failed to load CAIMART products:",
+          marketplaceError
+        );
+        setMarketplaceProducts([]);
+      }
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
@@ -494,39 +512,6 @@ const CaptivePortal = () => {
   const currentAd = imageAds[currentAdIndex] || fallbackAd;
   const hasRealAd = imageAds.length > 0;
 
-  const sponsorPlaceholders = [
-    {
-      id: "sponsor-placeholder-1",
-      title: "Local Business Promotion",
-      description: "Promote offers to nearby CAIWAVE WiFi customers.",
-      symbol: "🏪"
-    },
-    {
-      id: "sponsor-placeholder-2",
-      title: "Shop & Service Offers",
-      description: "Show products, services and special discounts.",
-      symbol: "🛍️"
-    },
-    {
-      id: "sponsor-placeholder-3",
-      title: "Events & Announcements",
-      description: "Reach your local audience directly.",
-      symbol: "📣"
-    },
-    {
-      id: "sponsor-placeholder-4",
-      title: "Your Business Here",
-      description: "Reserve a sponsored campaign placement.",
-      symbol: "⭐"
-    }
-  ];
-
-  const secondaryAds = imageAds
-    .filter((ad) => ad.id !== currentAd.id)
-    .slice(0, 4);
-
-  const sponsorCards =
-    secondaryAds.length > 0 ? secondaryAds : sponsorPlaceholders;
   const featuredCampaign = campaigns[0] || null;
   const baseUrl = API_URL.replace('/api', '');
 
@@ -712,9 +697,8 @@ const CaptivePortal = () => {
         <TVPanel streams={streams} />
 
         <MarketplacePanel
-          sponsorCards={sponsorCards}
+          products={marketplaceProducts}
           baseUrl={baseUrl}
-          formatWhatsApp={formatWhatsApp}
         />
       </main>
 
