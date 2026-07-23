@@ -58,6 +58,7 @@ import HotspotLocationSummary from "../../components/HotspotLocationSummary";
 import CampaignTargetSelector from "../../components/CampaignTargetSelector";
 import CampaignAdSelector from "../../components/CampaignAdSelector";
 import AdminAdvertisingPackages from "../../components/AdminAdvertisingPackages";
+import CaimartPage from "./CaimartPage";
 import {
   AreaChart,
   Area,
@@ -3460,13 +3461,7 @@ const AdminDashboard = () => {
             <Route path="integrations" element={<IntegrationSettingsPage />} />
             <Route
               path="marketplace"
-              element={
-                <div className="text-center py-12">
-                  <ShoppingBag className="w-12 h-12 text-neutral-600 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Equipment Marketplace</h2>
-                  <p className="text-neutral-400">Manage marketplace items coming soon</p>
-                </div>
-              }
+              element={<CaimartPage />}
             />
           </Routes>
         </main>
