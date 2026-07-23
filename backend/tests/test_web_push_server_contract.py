@@ -48,3 +48,11 @@ def test_web_push_indexes_are_created():
     assert '"web_push_endpoint"' in SERVER
     assert '"web_push_hotspot_delivery"' in SERVER
     assert "unique=True" in SERVER
+
+
+
+def test_dynamic_hotspot_manifest_is_registered():
+    assert '@notifications_router.get("/push/manifest")' in SERVER
+    assert '"application/manifest+json"' in SERVER
+    assert 'f"/portal/{hotspot_id}?source=pwa"' in SERVER
+    assert '"Cache-Control": "no-store"' in SERVER

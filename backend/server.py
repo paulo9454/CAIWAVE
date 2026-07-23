@@ -9,7 +9,7 @@ Refactored to use modular architecture:
 - /config.py: Configuration management
 - /database.py: MongoDB connection
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -7786,6 +7786,57 @@ async def get_web_push_config():
             "ends_at": "08:00",
         },
     }
+
+
+@notifications_router.get("/push/manifest")
+async def get_web_push_manifest(
+    hotspot_id: str = Query(...),
+):
+    """Return install metadata for a specific CAIWAVE hotspot."""
+    hotspot = await db.hotspots.find_one(
+        {"id": hotspot_id},
+        {"_id": 0, "id": 1, "name": 1},
+    )
+
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found.",
+        )
+
+    start_url = (
+        f"/portal/{hotspot_id}?source=pwa"
+    )
+    manifest = {
+        "id": f"/portal/{hotspot_id}",
+        "name": (
+            f"CAIWAVE WiFi - "
+            f"{hotspot.get('name') or 'Hotspot'}"
+        ),
+        "short_name": "CAIWAVE",
+        "description": (
+            "CAIWAVE WiFi access, campaigns and live updates"
+        ),
+        "start_url": start_url,
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#050914",
+        "theme_color": "#0032FA",
+        "icons": [
+            {
+                "src": "/logo-192.svg",
+                "sizes": "any",
+                "type": "image/svg+xml",
+                "purpose": "any maskable",
+            }
+        ],
+    }
+
+    return Response(
+        content=json.dumps(manifest),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @notifications_router.post(

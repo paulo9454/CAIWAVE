@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "CAIWAVE WiFi",
+  "short_name": "CAIWAVE",
+  "description": "CAIWAVE WiFi access, campaigns and live updates",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050914",
+  "theme_color": "#0032FA",
+  "icons": [
+    {
+      "src": "/logo-192.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

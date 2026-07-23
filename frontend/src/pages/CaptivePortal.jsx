@@ -15,6 +15,7 @@ import TVPanel from "../components/portal/TVPanel";
 import MarketplacePanel from "../components/portal/MarketplacePanel";
 import PortalLoadingScreen from "../components/portal/PortalLoadingScreen";
 import PortalNotificationPopup from "../components/portal/PortalNotificationPopup";
+import WebPushEnrollment from "../components/portal/WebPushEnrollment";
 import { toast, Toaster } from "sonner";
 
 
@@ -546,6 +547,8 @@ const CaptivePortal = () => {
         <QuickActions />
 
         <main className="mx-auto max-w-4xl space-y-5 px-4 pb-8 pt-5 sm:space-y-6 sm:px-6 sm:pb-10">
+
+        <WebPushEnrollment hotspotId={hotspotId} />
 
         <CampaignHero
           campaign={featuredCampaign}
