@@ -51,6 +51,7 @@ from backend.services.web_push import (
     build_web_push_subscription_payload,
     hash_push_endpoint,
     load_web_push_configuration,
+    monitor_web_push_delivery,
     normalize_push_preferences,
 )
 from dotenv import load_dotenv
@@ -286,7 +287,27 @@ async def startup():
             ],
             name="web_push_hotspot_delivery",
         )
-        logger.info("Web Push subscription indexes ensured")
+        await db.web_push_deliveries.create_index(
+            "id",
+            unique=True,
+            name="web_push_delivery_claim",
+        )
+        await db.web_push_deliveries.create_index(
+            [
+                ("subscription_id", 1),
+                ("status", 1),
+                ("delivered_at", -1),
+            ],
+            name="web_push_delivery_daily_limit",
+        )
+        await db.web_push_deliveries.create_index(
+            [
+                ("status", 1),
+                ("updated_at", 1),
+            ],
+            name="web_push_delivery_retry",
+        )
+        logger.info("Web Push subscription and delivery indexes ensured")
     except Exception:
         logger.exception(
             "Failed to create Web Push subscription indexes"
@@ -295,6 +316,12 @@ async def startup():
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
     app.state.tasks.append(task)
+
+    # Deliver active targeted notifications independently.
+    push_task = asyncio.create_task(
+        monitor_web_push_delivery(db)
+    )
+    app.state.tasks.append(push_task)
 
 # Mount static files for ad media UNDER /api prefix for proper routing
 # Files will be accessible at /api/uploads/ads/images/filename.png

@@ -56,3 +56,18 @@ def test_dynamic_hotspot_manifest_is_registered():
     assert '"application/manifest+json"' in SERVER
     assert 'f"/portal/{hotspot_id}?source=pwa"' in SERVER
     assert '"Cache-Control": "no-store"' in SERVER
+
+
+
+def test_web_push_delivery_indexes_are_created():
+    assert '"web_push_delivery_claim"' in SERVER
+    assert '"web_push_delivery_daily_limit"' in SERVER
+    assert '"web_push_delivery_retry"' in SERVER
+    assert "db.web_push_deliveries.create_index" in SERVER
+
+
+def test_web_push_dispatch_monitor_is_started():
+    assert "monitor_web_push_delivery" in SERVER
+    assert "monitor_web_push_delivery(db)" in SERVER
+    assert "asyncio.create_task(" in SERVER
+    assert "app.state.tasks.append(push_task)" in SERVER

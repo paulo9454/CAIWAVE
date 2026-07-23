@@ -36,7 +36,11 @@ class WebPushDeliveryResult:
 def load_web_push_configuration(
     environ: Mapping[str, str] | None = None,
 ) -> WebPushConfiguration:
-    values = environ or os.environ
+    values = (
+        os.environ
+        if environ is None
+        else environ
+    )
     public_key = str(
         values.get("WEB_PUSH_VAPID_PUBLIC_KEY") or ""
     ).strip()
