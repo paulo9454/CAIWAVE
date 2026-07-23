@@ -80,3 +80,43 @@ def test_notification_status_and_delete_are_persisted():
     assert "db.portal_notifications.update_one" in SERVER
     assert "db.portal_notifications.delete_one" in SERVER
 
+def test_generated_notifications_are_idempotent_by_source():
+    assert "_upsert_generated_portal_notification" in SERVER
+    assert '"source_type": source_type' in SERVER
+    assert '"source_id": source_id' in SERVER
+    assert 'existing.get("id") if existing else None' in SERVER
+    assert 'payload["created_at"]' in SERVER
+
+
+def test_active_campaign_synchronizes_notification():
+    assert "_sync_campaign_portal_notification" in SERVER
+    assert 'source_type="campaign"' in SERVER
+    assert 'action_path="#campaign"' in SERVER
+    assert "CampaignStatus.ACTIVE" in SERVER
+
+
+def test_inactive_campaign_deactivates_notification():
+    assert "_deactivate_generated_portal_notification" in SERVER
+    assert '"is_active": False' in SERVER
+    assert '"campaign",' in SERVER
+
+def test_live_stream_notification_is_scheduled_from_stream():
+    assert "_sync_stream_portal_notification" in SERVER
+    assert 'source_type="live_stream"' in SERVER
+    assert 'action_path="#tv"' in SERVER
+    assert 'starts_at=stream["start_time"]' in SERVER
+    assert 'expires_at=stream["end_time"]' in SERVER
+
+
+def test_live_stream_notification_inherits_targeting():
+    assert 'coverage_scope = "specific_hotspots"' in SERVER
+    assert 'coverage_scope = "county"' in SERVER
+    assert 'target_hotspot_ids=target_hotspot_ids' in SERVER
+    assert 'target_counties=target_counties' in SERVER
+
+
+def test_stream_toggle_deactivates_generated_notification():
+    assert '"live_stream",' in SERVER
+    assert "_deactivate_generated_portal_notification" in SERVER
+    assert "if new_status:" in SERVER
+

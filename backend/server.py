@@ -4471,22 +4471,65 @@ async def update_campaign(
         {"id": campaign_id},
         {"_id": 0},
     )
+
+    if updated.get("status") == CampaignStatus.ACTIVE.value:
+        await _sync_campaign_portal_notification(
+            updated,
+            user.get("id"),
+        )
+
     return updated
 
 @campaigns_router.post("/{campaign_id}/status")
 async def update_campaign_status(
     campaign_id: str,
     status: CampaignStatus,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN]))
+    user: dict = Depends(
+        require_role([UserRole.SUPER_ADMIN])
+    ),
 ):
-    """Update campaign status - Admin only"""
-    result = await db.campaigns.update_one(
+    """Update campaign status and synchronize its notification."""
+    campaign = await db.campaigns.find_one(
         {"id": campaign_id},
-        {"$set": {"status": status.value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        {"_id": 0},
     )
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Campaign not found")
-    return {"status": "updated", "new_status": status.value}
+
+    if not campaign:
+        raise HTTPException(
+            status_code=404,
+            detail="Campaign not found",
+        )
+
+    updated_at = datetime.now(timezone.utc).isoformat()
+
+    await db.campaigns.update_one(
+        {"id": campaign_id},
+        {
+            "$set": {
+                "status": status.value,
+                "updated_at": updated_at,
+            }
+        },
+    )
+
+    campaign["status"] = status.value
+    campaign["updated_at"] = updated_at
+
+    if status == CampaignStatus.ACTIVE:
+        await _sync_campaign_portal_notification(
+            campaign,
+            user.get("id"),
+        )
+    else:
+        await _deactivate_generated_portal_notification(
+            "campaign",
+            campaign_id,
+        )
+
+    return {
+        "status": "updated",
+        "new_status": status.value,
+    }
 
 @campaigns_router.delete("/{campaign_id}")
 async def delete_campaign(
@@ -7395,6 +7438,182 @@ async def get_hotspot_rankings(user: dict = Depends(get_current_user)):
     }
 
 # ==================== Portal Notification Routes ====================
+
+async def _upsert_generated_portal_notification(
+    *,
+    source_type: str,
+    source_id: str,
+    title: str,
+    message: str,
+    action_label: str,
+    action_path: str,
+    starts_at,
+    expires_at,
+    created_by: Optional[str],
+    image_url: Optional[str] = None,
+    coverage_scope: str = "national",
+    country_code: str = "KE",
+    target_counties: Optional[List[str]] = None,
+    target_constituencies: Optional[List[str]] = None,
+    target_hotspot_ids: Optional[List[str]] = None,
+    priority: int = 50,
+) -> dict:
+    existing = await db.portal_notifications.find_one(
+        {
+            "source_type": source_type,
+            "source_id": source_id,
+        },
+        {"_id": 0},
+    )
+
+    payload = build_portal_notification_payload(
+        title=title,
+        message=message,
+        source_type=source_type,
+        source_id=source_id,
+        action_label=action_label,
+        action_path=action_path,
+        image_url=image_url,
+        coverage_scope=coverage_scope,
+        country_code=country_code,
+        target_counties=target_counties or [],
+        target_constituencies=(
+            target_constituencies or []
+        ),
+        target_hotspot_ids=target_hotspot_ids or [],
+        starts_at=starts_at,
+        expires_at=expires_at,
+        is_active=True,
+        priority=priority,
+        notification_id=(
+            existing.get("id") if existing else None
+        ),
+        created_by=(
+            existing.get("created_by")
+            if existing
+            else created_by
+        ),
+    )
+
+    if existing:
+        payload["created_at"] = existing.get(
+            "created_at",
+            payload.get("created_at"),
+        )
+        await db.portal_notifications.update_one(
+            {"id": existing["id"]},
+            {"$set": payload},
+        )
+    else:
+        await db.portal_notifications.insert_one(
+            dict(payload)
+        )
+
+    return payload
+
+
+async def _deactivate_generated_portal_notification(
+    source_type: str,
+    source_id: str,
+) -> None:
+    await db.portal_notifications.update_many(
+        {
+            "source_type": source_type,
+            "source_id": source_id,
+        },
+        {
+            "$set": {
+                "is_active": False,
+                "updated_at": (
+                    datetime.now(timezone.utc).isoformat()
+                ),
+            }
+        },
+    )
+
+
+async def _sync_campaign_portal_notification(
+    campaign: dict,
+    created_by: Optional[str],
+) -> None:
+    await _upsert_generated_portal_notification(
+        source_type="campaign",
+        source_id=campaign["id"],
+        title=f"Campaign update: {campaign['name']}",
+        message=(
+            campaign.get("description")
+            or "View this featured CAIWAVE campaign."
+        ),
+        action_label="View Campaign",
+        action_path="#campaign",
+        image_url=(
+            campaign.get("media_url")
+            or campaign.get("image_url")
+        ),
+        coverage_scope=campaign.get(
+            "coverage_scope",
+            "national",
+        ),
+        country_code=campaign.get("country_code", "KE"),
+        target_counties=campaign.get(
+            "target_counties",
+            [],
+        ),
+        target_constituencies=campaign.get(
+            "target_constituencies",
+            [],
+        ),
+        target_hotspot_ids=campaign.get(
+            "target_hotspot_ids",
+            [],
+        ),
+        starts_at=campaign["start_date"],
+        expires_at=campaign["end_date"],
+        created_by=created_by,
+        priority=60,
+    )
+
+
+async def _sync_stream_portal_notification(
+    stream: dict,
+    created_by: Optional[str],
+) -> None:
+    hotspot_ids = stream.get("allowed_hotspot_ids", [])
+    allowed_regions = stream.get("allowed_regions", [])
+
+    if hotspot_ids:
+        coverage_scope = "specific_hotspots"
+        target_hotspot_ids = hotspot_ids
+        target_counties = []
+    elif allowed_regions:
+        coverage_scope = "county"
+        target_hotspot_ids = []
+        target_counties = allowed_regions
+    else:
+        coverage_scope = "national"
+        target_hotspot_ids = []
+        target_counties = []
+
+    await _upsert_generated_portal_notification(
+        source_type="live_stream",
+        source_id=stream["id"],
+        title=f"Live on CAIWAVE TV: {stream['name']}",
+        message=(
+            stream.get("description")
+            or "A CAIWAVE TV live stream is available."
+        ),
+        action_label="Watch Live",
+        action_path="#tv",
+        image_url=stream.get("thumbnail_url"),
+        coverage_scope=coverage_scope,
+        target_counties=target_counties,
+        target_hotspot_ids=target_hotspot_ids,
+        starts_at=stream["start_time"],
+        expires_at=stream["end_time"],
+        created_by=created_by,
+        priority=90,
+    )
+
 
 def _build_notification_request_payload(
     notification: PortalNotificationRequest,
