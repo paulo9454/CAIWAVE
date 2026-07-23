@@ -14,6 +14,7 @@ import VoucherPanel from "../components/portal/VoucherPanel";
 import TVPanel from "../components/portal/TVPanel";
 import MarketplacePanel from "../components/portal/MarketplacePanel";
 import PortalLoadingScreen from "../components/portal/PortalLoadingScreen";
+import PortalNotificationPopup from "../components/portal/PortalNotificationPopup";
 import { toast, Toaster } from "sonner";
 
 
@@ -534,6 +535,10 @@ const CaptivePortal = () => {
           toastOptions={{
             className: "border-white/10 bg-neutral-950/95 text-white",
           }}
+        />
+
+        <PortalNotificationPopup
+          hotspotId={hotspotId}
         />
 
         <PortalHeader hotspot={hotspot} />

@@ -64,6 +64,7 @@ export default function CampaignHero({ campaign, baseUrl }) {
   return (
     <>
       <section
+      id="campaign"
       aria-labelledby="featured-campaign-title"
       className="overflow-hidden rounded-xl border border-blue-700/40 bg-gradient-to-br from-blue-950/90 via-neutral-900 to-purple-950/80"
     >
