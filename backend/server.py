@@ -40,6 +40,12 @@ from backend.services.affiliate_market import (
     normalize_affiliate_url,
     validate_affiliate_image,
 )
+from backend.services.portal_notifications import (
+    PortalNotificationValidationError,
+    build_portal_notification_payload,
+    build_public_notification,
+    select_portal_notification,
+)
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -234,6 +240,30 @@ async def startup():
             "Failed to create affiliate marketplace indexes"
         )
 
+    # Ensure portal notification indexes exist
+    try:
+        await db.portal_notifications.create_index(
+            [
+                ("is_active", 1),
+                ("starts_at", 1),
+                ("expires_at", 1),
+                ("priority", -1),
+            ],
+            name="portal_notification_delivery",
+        )
+        await db.portal_notifications.create_index(
+            [
+                ("source_type", 1),
+                ("source_id", 1),
+            ],
+            name="portal_notification_source",
+        )
+        logger.info("Portal notification indexes ensured")
+    except Exception:
+        logger.exception(
+            "Failed to create portal notification indexes"
+        )
+
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
     app.state.tasks.append(task)
@@ -320,6 +350,27 @@ class NotificationType(str, Enum):
     SMS = "sms"
     WHATSAPP = "whatsapp"
     EMAIL = "email"
+
+class PortalNotificationRequest(BaseModel):
+    title: str
+    message: str
+    source_type: str
+    source_id: Optional[str] = None
+    action_label: str
+    action_path: str
+    image_url: Optional[str] = None
+    coverage_scope: str = "national"
+    country_code: str = "KE"
+    target_counties: List[str] = Field(default_factory=list)
+    target_constituencies: List[str] = Field(
+        default_factory=list
+    )
+    target_hotspot_ids: List[str] = Field(default_factory=list)
+    starts_at: datetime
+    expires_at: datetime
+    is_active: bool = True
+    priority: int = Field(default=0, ge=0, le=100)
+
 
 class CampaignStatus(str, Enum):
     DRAFT = "draft"
@@ -7342,6 +7393,241 @@ async def get_hotspot_rankings(user: dict = Depends(get_current_user)):
         ],
         "total_hotspots": len(hotspots)
     }
+
+# ==================== Portal Notification Routes ====================
+
+def _build_notification_request_payload(
+    notification: PortalNotificationRequest,
+    *,
+    notification_id: Optional[str] = None,
+    created_by: Optional[str] = None,
+    is_active: Optional[bool] = None,
+) -> dict:
+    return build_portal_notification_payload(
+        title=notification.title,
+        message=notification.message,
+        source_type=notification.source_type,
+        source_id=notification.source_id,
+        action_label=notification.action_label,
+        action_path=notification.action_path,
+        image_url=notification.image_url,
+        coverage_scope=notification.coverage_scope,
+        country_code=notification.country_code,
+        target_counties=notification.target_counties,
+        target_constituencies=(
+            notification.target_constituencies
+        ),
+        target_hotspot_ids=notification.target_hotspot_ids,
+        starts_at=notification.starts_at,
+        expires_at=notification.expires_at,
+        is_active=(
+            notification.is_active
+            if is_active is None
+            else is_active
+        ),
+        priority=notification.priority,
+        notification_id=notification_id,
+        created_by=created_by,
+    )
+
+
+@notifications_router.get("/admin")
+async def get_admin_portal_notifications(
+    user: dict = Depends(require_admin),
+):
+    """List all portal notifications for administrators."""
+    return await db.portal_notifications.find(
+        {},
+        {"_id": 0},
+    ).sort(
+        [
+            ("is_active", -1),
+            ("priority", -1),
+            ("starts_at", -1),
+        ]
+    ).to_list(500)
+
+
+@notifications_router.get("/latest")
+async def get_latest_portal_notification(
+    hotspot_id: str = Query(...),
+):
+    """Return the highest-priority active notification for a hotspot."""
+    hotspot = await db.hotspots.find_one(
+        {"id": hotspot_id},
+        {"_id": 0},
+    )
+
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found.",
+        )
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    candidates = await db.portal_notifications.find(
+        {
+            "is_active": True,
+            "starts_at": {"$lte": now_iso},
+            "expires_at": {"$gt": now_iso},
+        },
+        {"_id": 0},
+    ).sort(
+        [
+            ("priority", -1),
+            ("starts_at", -1),
+        ]
+    ).to_list(200)
+
+    selected = select_portal_notification(
+        candidates,
+        hotspot,
+        now=now,
+    )
+
+    return {
+        "notification": (
+            build_public_notification(selected)
+            if selected
+            else None
+        ),
+        "poll_after_seconds": 60,
+    }
+
+
+@notifications_router.post("/", status_code=201)
+async def create_portal_notification(
+    notification: PortalNotificationRequest,
+    user: dict = Depends(require_admin),
+):
+    """Create a validated portal notification."""
+    try:
+        payload = _build_notification_request_payload(
+            notification,
+            created_by=user.get("id"),
+        )
+    except PortalNotificationValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    await db.portal_notifications.insert_one(dict(payload))
+    return payload
+
+
+@notifications_router.put("/{notification_id}")
+async def update_portal_notification(
+    notification_id: str,
+    notification: PortalNotificationRequest,
+    user: dict = Depends(require_admin),
+):
+    """Update content while preserving identity and audit fields."""
+    existing = await db.portal_notifications.find_one(
+        {"id": notification_id},
+        {"_id": 0},
+    )
+
+    if not existing:
+        raise HTTPException(
+            status_code=404,
+            detail="Portal notification not found.",
+        )
+
+    try:
+        payload = _build_notification_request_payload(
+            notification,
+            notification_id=notification_id,
+            created_by=existing.get("created_by"),
+            is_active=bool(existing.get("is_active", True)),
+        )
+    except PortalNotificationValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    payload["created_at"] = existing.get(
+        "created_at",
+        payload.get("created_at"),
+    )
+
+    await db.portal_notifications.update_one(
+        {"id": notification_id},
+        {"$set": payload},
+    )
+
+    return payload
+
+
+@notifications_router.put("/{notification_id}/status")
+async def update_portal_notification_status(
+    notification_id: str,
+    is_active: bool,
+    user: dict = Depends(require_admin),
+):
+    """Activate or deactivate a portal notification."""
+    existing = await db.portal_notifications.find_one(
+        {"id": notification_id},
+        {"_id": 0},
+    )
+
+    if not existing:
+        raise HTTPException(
+            status_code=404,
+            detail="Portal notification not found.",
+        )
+
+    updated_at = datetime.now(timezone.utc).isoformat()
+
+    await db.portal_notifications.update_one(
+        {"id": notification_id},
+        {
+            "$set": {
+                "is_active": is_active,
+                "updated_at": updated_at,
+            }
+        },
+    )
+
+    return {
+        "success": True,
+        "id": notification_id,
+        "is_active": is_active,
+        "updated_at": updated_at,
+    }
+
+
+@notifications_router.delete("/{notification_id}")
+async def delete_portal_notification(
+    notification_id: str,
+    user: dict = Depends(require_admin),
+):
+    """Delete a portal notification."""
+    result = await db.portal_notifications.delete_one(
+        {"id": notification_id}
+    )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Portal notification not found.",
+        )
+
+    return {
+        "success": True,
+        "id": notification_id,
+        "message": "Portal notification deleted.",
+    }
+
 
 # ==================== Settings Routes ====================
 
