@@ -57,6 +57,7 @@ from backend.services.web_push import (
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
@@ -307,6 +308,18 @@ async def startup():
             ],
             name="web_push_delivery_retry",
         )
+        await db.notification_reward_claims.create_index(
+            [
+                ("hotspot_id", 1),
+                ("device_identifier", 1),
+            ],
+            unique=True,
+            name="notification_reward_device_claim",
+        )
+        await db.notification_reward_claims.create_index(
+            "next_eligible_at",
+            name="notification_reward_eligibility",
+        )
         logger.info("Web Push subscription and delivery indexes ensured")
     except Exception:
         logger.exception(
@@ -452,6 +465,13 @@ class WebPushPreferencesRequest(BaseModel):
 
 class WebPushUnsubscribeRequest(BaseModel):
     endpoint: str
+
+
+class NotificationRewardRequest(BaseModel):
+    endpoint: str = Field(min_length=1)
+    hotspot_id: str = Field(min_length=1)
+    user_mac: Optional[str] = None
+    user_ip: Optional[str] = None
 
 
 class CampaignStatus(str, Enum):
@@ -8516,6 +8536,361 @@ async def get_portal_data(hotspot_id: str):
         "campaigns": campaigns,
         "mpesa_enabled": mpesa_service.is_configured()
     }
+
+NOTIFICATION_REWARD_DURATION_MINUTES = 15
+NOTIFICATION_REWARD_COOLDOWN_HOURS = 24
+NOTIFICATION_REWARD_RATE_LIMIT = "512K/512K"
+
+
+def get_notification_reward_device_identifier(
+    user_mac: Optional[str],
+    user_ip: Optional[str],
+) -> str:
+    """Return a stable device identity for notification rewards."""
+    normalized_mac = (user_mac or "").strip().lower()
+    normalized_ip = (user_ip or "").strip()
+
+    if normalized_mac:
+        return f"mac:{normalized_mac}"
+
+    if normalized_ip:
+        return f"ip:{normalized_ip}"
+
+    raise HTTPException(
+        status_code=400,
+        detail="A client MAC address or IP address is required.",
+    )
+
+
+@api_router.get("/portal/notification-reward-status")
+async def get_notification_reward_status(
+    hotspot_id: str,
+    endpoint: str,
+    user_mac: Optional[str] = None,
+    user_ip: Optional[str] = None,
+):
+    """Return notification reward eligibility for this browser and device."""
+    device_identifier = get_notification_reward_device_identifier(
+        user_mac,
+        user_ip,
+    )
+
+    hotspot = await db.hotspots.find_one(
+        {"id": hotspot_id},
+        {"_id": 0, "id": 1},
+    )
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found.",
+        )
+
+    try:
+        endpoint_hash = hash_push_endpoint(endpoint)
+    except WebPushValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    subscription = await db.web_push_subscriptions.find_one(
+        {
+            "endpoint_hash": endpoint_hash,
+            "hotspot_id": hotspot_id,
+            "is_active": True,
+        },
+        {
+            "_id": 0,
+            "id": 1,
+        },
+    )
+
+    if not subscription:
+        return {
+            "subscribed": False,
+            "can_claim": False,
+            "next_eligible_at": None,
+            "remaining_seconds": None,
+            "reward_duration_minutes": (
+                NOTIFICATION_REWARD_DURATION_MINUTES
+            ),
+        }
+
+    now = datetime.now(timezone.utc)
+    claim = await db.notification_reward_claims.find_one(
+        {
+            "hotspot_id": hotspot_id,
+            "device_identifier": device_identifier,
+        },
+        {
+            "_id": 0,
+            "next_eligible_at": 1,
+        },
+    )
+
+    next_eligible_at = claim.get("next_eligible_at") if claim else None
+
+    if isinstance(next_eligible_at, str):
+        try:
+            next_eligible_at = datetime.fromisoformat(
+                next_eligible_at.replace("Z", "+00:00")
+            )
+        except ValueError:
+            next_eligible_at = None
+
+    can_claim = (
+        next_eligible_at is None or
+        next_eligible_at <= now
+    )
+
+    remaining_seconds = (
+        max(0, int((next_eligible_at - now).total_seconds()))
+        if next_eligible_at and not can_claim
+        else 0
+    )
+
+    return {
+        "subscribed": True,
+        "can_claim": can_claim,
+        "next_eligible_at": (
+            next_eligible_at.isoformat()
+            if next_eligible_at
+            else None
+        ),
+        "remaining_seconds": remaining_seconds,
+        "reward_duration_minutes": (
+            NOTIFICATION_REWARD_DURATION_MINUTES
+        ),
+    }
+
+
+@api_router.post("/portal/notification-reward")
+async def create_notification_reward(
+    request: NotificationRewardRequest,
+):
+    """Grant one notification-based WiFi reward every rolling 24 hours."""
+    device_identifier = get_notification_reward_device_identifier(
+        request.user_mac,
+        request.user_ip,
+    )
+
+    hotspot = await db.hotspots.find_one(
+        {"id": request.hotspot_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "username_prefix": 1,
+        },
+    )
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found.",
+        )
+
+    try:
+        endpoint_hash = hash_push_endpoint(request.endpoint)
+    except WebPushValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "field": exc.field,
+                "message": exc.message,
+            },
+        ) from exc
+
+    subscription = await db.web_push_subscriptions.find_one(
+        {
+            "endpoint_hash": endpoint_hash,
+            "hotspot_id": request.hotspot_id,
+            "is_active": True,
+        },
+        {
+            "_id": 0,
+            "id": 1,
+        },
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Enable browser notifications before claiming "
+                "the free WiFi reward."
+            ),
+        )
+
+    now = datetime.now(timezone.utc)
+    next_eligible_at = now + timedelta(
+        hours=NOTIFICATION_REWARD_COOLDOWN_HOURS
+    )
+    claim_id = str(uuid.uuid4())
+
+    claim_identity = {
+        "hotspot_id": request.hotspot_id,
+        "device_identifier": device_identifier,
+    }
+
+    previous_claim = await db.notification_reward_claims.find_one(
+        claim_identity,
+        {"_id": 0},
+    )
+
+    claim_filter = {
+        **claim_identity,
+        "$or": [
+            {"next_eligible_at": {"$lte": now}},
+            {"next_eligible_at": {"$exists": False}},
+        ],
+    }
+
+    claim_update = {
+        "$set": {
+            "claim_id": claim_id,
+            "subscription_id": subscription["id"],
+            "endpoint_hash": endpoint_hash,
+            "granted_at": now,
+            "next_eligible_at": next_eligible_at,
+            "updated_at": now,
+        },
+        "$setOnInsert": {
+            "hotspot_id": request.hotspot_id,
+            "device_identifier": device_identifier,
+            "created_at": now,
+        },
+    }
+
+    try:
+        claim = await db.notification_reward_claims.find_one_and_update(
+            claim_filter,
+            claim_update,
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError as exc:
+        existing_claim = await db.notification_reward_claims.find_one(
+            {
+                "hotspot_id": request.hotspot_id,
+                "device_identifier": device_identifier,
+            },
+            {
+                "_id": 0,
+                "next_eligible_at": 1,
+            },
+        )
+
+        existing_next = (
+            existing_claim.get("next_eligible_at")
+            if existing_claim
+            else None
+        )
+
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    "This device has already received its "
+                    "notification reward."
+                ),
+                "next_eligible_at": (
+                    existing_next.isoformat()
+                    if hasattr(existing_next, "isoformat")
+                    else existing_next
+                ),
+            },
+        ) from exc
+
+    if not claim:
+        raise HTTPException(
+            status_code=409,
+            detail="Notification reward is not currently available.",
+        )
+
+    username, password = generate_radius_credentials(
+        hotspot.get("username_prefix", "")
+    )
+
+    session = Session(
+        package_id="notification-reward",
+        hotspot_id=request.hotspot_id,
+        user_mac=(request.user_mac or None),
+        user_ip=(request.user_ip or None),
+        username=username,
+        password=password,
+        rate_limit=NOTIFICATION_REWARD_RATE_LIMIT,
+        is_free=True,
+        expires_at=now + timedelta(
+            minutes=NOTIFICATION_REWARD_DURATION_MINUTES
+        ),
+    )
+
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session.started_at.isoformat()
+    session_dict["expires_at"] = session.expires_at.isoformat()
+    session_dict["reward_type"] = "notification"
+    session_dict["reward_claim_id"] = claim_id
+    session_dict["push_subscription_id"] = subscription["id"]
+    session_dict["notification_reward_granted_at"] = now.isoformat()
+    session_dict["next_eligible_at"] = next_eligible_at.isoformat()
+
+    try:
+        await db.sessions.insert_one(session_dict)
+    except Exception:
+        active_claim_filter = {
+            **claim_identity,
+            "claim_id": claim_id,
+        }
+
+        if previous_claim:
+            restored_claim = {
+                key: value
+                for key, value in previous_claim.items()
+                if key not in {"hotspot_id", "device_identifier"}
+            }
+
+            await db.notification_reward_claims.update_one(
+                active_claim_filter,
+                {
+                    "$set": restored_claim,
+                    "$unset": {
+                        key: ""
+                        for key in (
+                            "claim_id",
+                            "subscription_id",
+                            "endpoint_hash",
+                            "granted_at",
+                            "next_eligible_at",
+                            "updated_at",
+                        )
+                        if key not in restored_claim
+                    },
+                },
+            )
+        else:
+            await db.notification_reward_claims.delete_one(
+                active_claim_filter
+            )
+
+        raise
+
+    return {
+        "success": True,
+        "session_id": session.id,
+        "username": session.username,
+        "password": session.password,
+        "expires_at": session.expires_at.isoformat(),
+        "duration_minutes": NOTIFICATION_REWARD_DURATION_MINUTES,
+        "reward_type": "notification",
+        "granted_at": now.isoformat(),
+        "next_eligible_at": next_eligible_at.isoformat(),
+        "message": (
+            "Notifications enabled. Enjoy 15 minutes of free WiFi."
+        ),
+    }
+
 
 @api_router.post("/portal/free-session")
 async def create_free_session(
