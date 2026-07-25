@@ -1,6 +1,5 @@
 import {
   BellRing,
-  Gift,
   Headphones,
   ShoppingBag,
   Tv,
@@ -17,16 +16,6 @@ const actions = [
       "border-blue-400/20 bg-gradient-to-br from-blue-950/95 via-neutral-900 to-cyan-950/80 hover:border-blue-400/60 hover:shadow-blue-950/40",
     iconWrapClass:
       "bg-blue-400/15 text-blue-300 ring-blue-300/20",
-  },
-  {
-    id: "free-wifi",
-    icon: Gift,
-    title: "Free WiFi",
-    subtitle: "Watch an advert",
-    cardClass:
-      "border-emerald-400/20 bg-gradient-to-br from-emerald-950/95 via-neutral-900 to-green-950/80 hover:border-emerald-400/60 hover:shadow-emerald-950/40",
-    iconWrapClass:
-      "bg-emerald-400/15 text-emerald-300 ring-emerald-300/20",
   },
   {
     id: "notifications",

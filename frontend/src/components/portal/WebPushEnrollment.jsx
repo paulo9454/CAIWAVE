@@ -406,7 +406,7 @@ export default function WebPushEnrollment({
               <h2 className="text-base font-bold text-white">
                 {rewardStatus === "granted"
                   ? "Free WiFi Reward Activated"
-                  : "Notifications Enabled"}
+                  : "Daily Free WiFi Activated"}
               </h2>
 
               <p className="mt-0.5 text-xs leading-5 text-neutral-300 sm:text-sm">
@@ -496,7 +496,7 @@ export default function WebPushEnrollment({
           </div>
 
           <h2 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
-            Turn On Notifications
+            Enable Notifications & Get Daily Free WiFi
           </h2>
 
           <p className="mt-2 text-sm font-medium text-blue-100 sm:text-base">
@@ -525,7 +525,7 @@ export default function WebPushEnrollment({
           </div>
 
           <p className="mt-4 text-sm leading-5 text-blue-100">
-            Enable notifications and receive 15 minutes of free WiFi.
+            Enable notifications to receive 15 minutes of FREE WiFi once every 24 hours.
           </p>
 
           {status === "error" && (
@@ -544,7 +544,7 @@ export default function WebPushEnrollment({
             <BellRing className="h-5 w-5" />
             {busy
               ? "Enabling and Preparing Reward…"
-              : "Enable Notifications & Get Free WiFi"}
+              : "Enable Notifications & Get 15 Minutes Free"}
           </button>
 
           <button

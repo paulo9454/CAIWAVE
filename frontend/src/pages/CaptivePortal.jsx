@@ -8,7 +8,6 @@ import { Button } from "../components/ui/button";
 import PortalHeader from "../components/portal/PortalHeader";
 import QuickActions from "../components/portal/QuickActions";
 import CampaignHero from "../components/portal/CampaignHero";
-import FeaturedAdvertisement from "../components/portal/FeaturedAdvertisement";
 import PackagePurchasePanel from "../components/portal/PackagePurchasePanel";
 import VoucherPanel from "../components/portal/VoucherPanel";
 import TVPanel from "../components/portal/TVPanel";
@@ -605,68 +604,6 @@ const CaptivePortal = () => {
           onRewardGranted={submitCredentialsToMikrotik}
         />
 
-        {/* Free WiFi Section - After watching ad */}
-        {!freeSession && (
-          <div
-            id="free-wifi"
-            className={`scroll-mt-5 rounded-xl border p-5 ${
-            freeSessionStatus.can_get_free
-              ? "bg-gradient-to-br from-green-950/80 to-emerald-900/50 border-green-700/50"
-              : "bg-gradient-to-br from-orange-950/80 to-red-900/50 border-orange-700/50"
-          }`}>
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex-1">
-                {freeSessionStatus.can_get_free ? (
-                  <>
-                    <h3 className="font-semibold text-lg text-green-400 flex items-center gap-2">
-                      <Wifi className="w-5 h-5" />
-                      Get 15 Minutes FREE WiFi!
-                    </h3>
-                    <p className="text-green-300/70 text-sm mt-1">
-                      View the featured advert at the bottom, then return here for free internet •
-                      <span className="text-yellow-400 font-medium ml-1">
-                        {freeSessionStatus.free_sessions_remaining} free {freeSessionStatus.free_sessions_remaining === 1 ? 'session' : 'sessions'} remaining
-                      </span>
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="font-semibold text-lg text-orange-400 flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5" />
-                      Free Sessions Used Up
-                    </h3>
-                    <p className="text-orange-300/70 text-sm mt-1">
-                      You've watched 2 ads today. Choose one of the packages above to continue browsing!
-                    </p>
-                  </>
-                )}
-              </div>
-              {freeSessionStatus.can_get_free ? (
-                <Button
-                  onClick={scrollToFeaturedAd}
-                  disabled={gettingFreeWifi || !hasRealAd}
-                  className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3"
-                >
-                  {gettingFreeWifi ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Play className="w-5 h-5 mr-2" />
-                      {hasRealAd
-                        ? `View Advert & Continue (${freeSessionStatus.free_sessions_remaining} left)`
-                        : "Free WiFi Coming Soon"}
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <div className="text-center">
-                  <p className="text-orange-400 text-sm font-medium">👆 Choose a package above</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Free Session Credentials - Show after getting free WiFi */}
         {freeSession && (
           <div
@@ -701,26 +638,10 @@ const CaptivePortal = () => {
                 </span>
               </div>
             </div>
-
             <div className="mt-4 text-center">
-              {freeSessionStatus.can_get_free ? (
-                <>
-                  <p className="text-sm text-neutral-400">
-                    Want more time? View another advert below ({freeSessionStatus.free_sessions_remaining} left) or choose a package above!
-                  </p>
-                  <Button
-                    onClick={handleViewAnotherAdvert}
-                    variant="outline"
-                    className="mt-2"
-                  >
-                    View Another Advert
-                  </Button>
-                </>
-              ) : (
-                <p className="text-sm text-orange-400">
-                  You've used all free advert sessions. Choose a package above for more time!
-                </p>
-              )}
+              <p className="text-sm text-neutral-400">
+                Need more internet time? Choose a WiFi package above.
+              </p>
             </div>
           </div>
         )}
@@ -730,23 +651,6 @@ const CaptivePortal = () => {
         <MarketplacePanel
           products={marketplaceProducts}
           baseUrl={baseUrl}
-        />
-
-        <FeaturedAdvertisement
-          currentAd={currentAd}
-          ads={imageAds}
-          baseUrl={baseUrl}
-          currentAdIndex={currentAdIndex}
-          setCurrentAdIndex={setCurrentAdIndex}
-          showPreviousAd={showPreviousAd}
-          showNextAd={showNextAd}
-          hasRealAd={hasRealAd}
-          formatWhatsApp={formatWhatsApp}
-          onClaimFreeWifi={handleGetFreeWifi}
-          claimingFreeWifi={gettingFreeWifi}
-          canClaimFreeWifi={
-            !freeSession && freeSessionStatus.can_get_free
-          }
         />
 
 </main>
