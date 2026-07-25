@@ -18,7 +18,6 @@ import PortalNotificationPopup from "../components/portal/PortalNotificationPopu
 import WebPushEnrollment from "../components/portal/WebPushEnrollment";
 import { toast, Toaster } from "sonner";
 
-
 // Format phone number for WhatsApp
 const formatWhatsApp = (phone) => {
   if (!phone) return null;
@@ -548,23 +547,9 @@ const CaptivePortal = () => {
 
         <main className="mx-auto max-w-4xl space-y-5 px-4 pb-8 pt-5 sm:space-y-6 sm:px-6 sm:pb-10">
 
-        <WebPushEnrollment hotspotId={hotspotId} />
-
         <CampaignHero
           campaign={featuredCampaign}
           baseUrl={baseUrl}
-        />
-
-        <FeaturedAdvertisement
-          currentAd={currentAd}
-          ads={imageAds}
-          baseUrl={baseUrl}
-          currentAdIndex={currentAdIndex}
-          setCurrentAdIndex={setCurrentAdIndex}
-          showPreviousAd={showPreviousAd}
-          showNextAd={showNextAd}
-          hasRealAd={hasRealAd}
-          formatWhatsApp={formatWhatsApp}
         />
 
         <PackagePurchasePanel
@@ -580,6 +565,20 @@ const CaptivePortal = () => {
           freeSession={freeSession}
           paymentOpen={paymentOpen}
           setPaymentOpen={setPaymentOpen}
+        />
+
+        <VoucherPanel
+          voucherCode={voucherCode}
+          setVoucherCode={setVoucherCode}
+          redeemingVoucher={redeemingVoucher}
+          handleVoucherRedemption={handleVoucherRedemption}
+        />
+
+        <WebPushEnrollment
+          hotspotId={hotspotId}
+          clientMac={clientMac}
+          clientIp={clientIp}
+          onRewardGranted={submitCredentialsToMikrotik}
         />
 
         {/* Free WiFi Section - After watching ad */}
@@ -598,7 +597,7 @@ const CaptivePortal = () => {
                       Get 15 Minutes FREE WiFi!
                     </h3>
                     <p className="text-green-300/70 text-sm mt-1">
-                      Watch the ad above and tap to get free internet •
+                      View the featured advert at the bottom, then return here for free internet •
                       <span className="text-yellow-400 font-medium ml-1">
                         {freeSessionStatus.free_sessions_remaining} free {freeSessionStatus.free_sessions_remaining === 1 ? 'session' : 'sessions'} remaining
                       </span>
@@ -611,7 +610,7 @@ const CaptivePortal = () => {
                       Free Sessions Used Up
                     </h3>
                     <p className="text-orange-300/70 text-sm mt-1">
-                      You've watched 2 ads today. Purchase a package below to continue browsing!
+                      You've watched 2 ads today. Choose one of the packages above to continue browsing!
                     </p>
                   </>
                 )}
@@ -633,7 +632,7 @@ const CaptivePortal = () => {
                 </Button>
               ) : (
                 <div className="text-center">
-                  <p className="text-orange-400 text-sm font-medium">👇 Choose a package below</p>
+                  <p className="text-orange-400 text-sm font-medium">👆 Choose a package above</p>
                 </div>
               )}
             </div>
@@ -676,31 +675,24 @@ const CaptivePortal = () => {
               {freeSessionStatus.can_get_free ? (
                 <>
                   <p className="text-sm text-neutral-400">
-                    Want more time? Watch another ad ({freeSessionStatus.free_sessions_remaining} left) or purchase a package!
+                    Want more time? View another advert below ({freeSessionStatus.free_sessions_remaining} left) or choose a package above!
                   </p>
                   <Button
                     onClick={() => setFreeSession(null)}
                     variant="outline"
                     className="mt-2"
                   >
-                    Watch Another Ad
+                    View Another Advert
                   </Button>
                 </>
               ) : (
                 <p className="text-sm text-orange-400">
-                  You've used all free ad sessions. Purchase a package below for more time!
+                  You've used all free advert sessions. Choose a package above for more time!
                 </p>
               )}
             </div>
           </div>
         )}
-
-        <VoucherPanel
-          voucherCode={voucherCode}
-          setVoucherCode={setVoucherCode}
-          redeemingVoucher={redeemingVoucher}
-          handleVoucherRedemption={handleVoucherRedemption}
-        />
 
         <TVPanel streams={streams} />
 
@@ -708,7 +700,20 @@ const CaptivePortal = () => {
           products={marketplaceProducts}
           baseUrl={baseUrl}
         />
-      </main>
+
+        <FeaturedAdvertisement
+          currentAd={currentAd}
+          ads={imageAds}
+          baseUrl={baseUrl}
+          currentAdIndex={currentAdIndex}
+          setCurrentAdIndex={setCurrentAdIndex}
+          showPreviousAd={showPreviousAd}
+          showNextAd={showNextAd}
+          hasRealAd={hasRealAd}
+          formatWhatsApp={formatWhatsApp}
+        />
+
+</main>
 
       {/* Footer & Support */}
       <footer className="mt-8 py-8 border-t border-neutral-800 bg-neutral-950">
