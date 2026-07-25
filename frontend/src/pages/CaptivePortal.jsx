@@ -452,6 +452,30 @@ const CaptivePortal = () => {
     if (hotspotId || true) checkFreeStatus();
   }, [hotspotId, clientMac, clientIp]);
 
+  const scrollToFeaturedAd = () => {
+    const advertisement = document.getElementById(
+      "featured-advertisement"
+    );
+
+    if (!advertisement) {
+      toast.error("The featured advert could not be opened.");
+      return;
+    }
+
+    advertisement.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const handleViewAnotherAdvert = () => {
+    setFreeSession(null);
+
+    window.requestAnimationFrame(() => {
+      scrollToFeaturedAd();
+    });
+  };
+
   const handleGetFreeWifi = async () => {
     if (!hasRealAd) {
       toast.error("No sponsor advert is active yet. Free WiFi activation will be connected after ads are configured.");
@@ -617,7 +641,7 @@ const CaptivePortal = () => {
               </div>
               {freeSessionStatus.can_get_free ? (
                 <Button
-                  onClick={handleGetFreeWifi}
+                  onClick={scrollToFeaturedAd}
                   disabled={gettingFreeWifi || !hasRealAd}
                   className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-3"
                 >
@@ -626,7 +650,9 @@ const CaptivePortal = () => {
                   ) : (
                     <>
                       <Play className="w-5 h-5 mr-2" />
-                      {hasRealAd ? `Get Free WiFi (${freeSessionStatus.free_sessions_remaining} left)` : "Free WiFi Coming Soon"}
+                      {hasRealAd
+                        ? `View Advert & Continue (${freeSessionStatus.free_sessions_remaining} left)`
+                        : "Free WiFi Coming Soon"}
                     </>
                   )}
                 </Button>
@@ -678,7 +704,7 @@ const CaptivePortal = () => {
                     Want more time? View another advert below ({freeSessionStatus.free_sessions_remaining} left) or choose a package above!
                   </p>
                   <Button
-                    onClick={() => setFreeSession(null)}
+                    onClick={handleViewAnotherAdvert}
                     variant="outline"
                     className="mt-2"
                   >
@@ -711,6 +737,11 @@ const CaptivePortal = () => {
           showNextAd={showNextAd}
           hasRealAd={hasRealAd}
           formatWhatsApp={formatWhatsApp}
+          onClaimFreeWifi={handleGetFreeWifi}
+          claimingFreeWifi={gettingFreeWifi}
+          canClaimFreeWifi={
+            !freeSession && freeSessionStatus.can_get_free
+          }
         />
 
 </main>

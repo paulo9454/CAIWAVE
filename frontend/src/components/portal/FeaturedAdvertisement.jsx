@@ -4,6 +4,7 @@ import {
   ExternalLink,
   Maximize2,
   MessageCircle,
+  Wifi,
 } from "lucide-react";
 
 import {
@@ -23,6 +24,9 @@ export default function FeaturedAdvertisement({
   showNextAd,
   hasRealAd,
   formatWhatsApp,
+  onClaimFreeWifi,
+  claimingFreeWifi,
+  canClaimFreeWifi,
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -37,6 +41,7 @@ export default function FeaturedAdvertisement({
   return (
     <>
       <section
+      id="featured-advertisement"
       aria-labelledby="featured-ad-title"
       className="relative overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900"
     >
@@ -141,6 +146,29 @@ export default function FeaturedAdvertisement({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-3">
+          {hasRealAd && typeof onClaimFreeWifi === "function" && (
+            <button
+              type="button"
+              onClick={onClaimFreeWifi}
+              disabled={claimingFreeWifi || !canClaimFreeWifi}
+              className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 font-semibold text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {claimingFreeWifi ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Activating Free WiFi...
+                </>
+              ) : (
+                <>
+                  <Wifi className="h-5 w-5" />
+                  {canClaimFreeWifi
+                    ? "Claim 15 Minutes Free WiFi"
+                    : "Free WiFi Already Activated"}
+                </>
+              )}
+            </button>
+          )}
+
           {currentAd.whatsapp_number && (
             <a
               href={`https://wa.me/${formatWhatsApp(
