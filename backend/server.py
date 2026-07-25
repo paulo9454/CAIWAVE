@@ -320,6 +320,18 @@ async def startup():
             "next_eligible_at",
             name="notification_reward_eligibility",
         )
+        await db.notification_enrollment_claims.create_index(
+            [
+                ("hotspot_id", 1),
+                ("device_identifier", 1),
+            ],
+            unique=True,
+            name="notification_enrollment_device_claim",
+        )
+        await db.notification_enrollment_claims.create_index(
+            "next_eligible_at",
+            name="notification_enrollment_eligibility",
+        )
         logger.info("Web Push subscription and delivery indexes ensured")
     except Exception:
         logger.exception(
@@ -465,6 +477,12 @@ class WebPushPreferencesRequest(BaseModel):
 
 class WebPushUnsubscribeRequest(BaseModel):
     endpoint: str
+
+
+class NotificationEnrollmentRequest(BaseModel):
+    hotspot_id: str = Field(min_length=1)
+    user_mac: Optional[str] = None
+    user_ip: Optional[str] = None
 
 
 class NotificationRewardRequest(BaseModel):
@@ -7885,11 +7903,23 @@ async def get_web_push_manifest(
         "theme_color": "#0032FA",
         "icons": [
             {
-                "src": "/logo-192.svg",
-                "sizes": "any",
-                "type": "image/svg+xml",
-                "purpose": "any maskable",
-            }
+                "src": "/caiwave-icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": "/caiwave-icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": "/caiwave-icon-maskable-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "maskable",
+            },
         ],
     }
 
@@ -8360,6 +8390,8 @@ async def get_active_portal_session(
             "password": 1,
             "user_mac": 1,
             "expires_at": 1,
+            "package_id": 1,
+            "reward_type": 1,
         },
     ).sort("expires_at", -1).to_list(100)
 
@@ -8370,6 +8402,8 @@ async def get_active_portal_session(
         username = session.get("username")
         password = session.get("password")
         expires_at_value = session.get("expires_at")
+        package_id = session.get("package_id")
+        reward_type = session.get("reward_type")
 
         if not username or not password or not expires_at_value:
             continue
@@ -8400,6 +8434,8 @@ async def get_active_portal_session(
                 "password": password,
             },
             "expires_at": expires_at.isoformat(),
+            "package_id": package_id,
+            "reward_type": reward_type,
             "remaining_seconds": remaining_seconds,
             "remaining_minutes": max(
                 1,
@@ -8411,6 +8447,8 @@ async def get_active_portal_session(
         "active_session": False,
         "wifi_credentials": None,
         "expires_at": None,
+        "package_id": None,
+        "reward_type": None,
         "remaining_seconds": 0,
         "remaining_minutes": 0,
     }
@@ -8540,6 +8578,9 @@ async def get_portal_data(hotspot_id: str):
 NOTIFICATION_REWARD_DURATION_MINUTES = 15
 NOTIFICATION_REWARD_COOLDOWN_HOURS = 24
 NOTIFICATION_REWARD_RATE_LIMIT = "512K/512K"
+NOTIFICATION_ENROLLMENT_DURATION_SECONDS = 60
+NOTIFICATION_ENROLLMENT_COOLDOWN_HOURS = 24
+NOTIFICATION_ENROLLMENT_RATE_LIMIT = "256K/256K"
 
 
 def get_notification_reward_device_identifier(
@@ -8560,6 +8601,231 @@ def get_notification_reward_device_identifier(
         status_code=400,
         detail="A client MAC address or IP address is required.",
     )
+
+
+@api_router.post("/portal/notification-enrollment")
+async def create_notification_enrollment(
+    request: NotificationEnrollmentRequest,
+):
+    """
+    Create a short backend-controlled session so a captive-portal client
+    can reach the browser push service before claiming its full reward.
+    """
+    device_identifier = get_notification_reward_device_identifier(
+        request.user_mac,
+        request.user_ip,
+    )
+
+    hotspot = await db.hotspots.find_one(
+        {"id": request.hotspot_id},
+        {
+            "_id": 0,
+            "id": 1,
+            "username_prefix": 1,
+        },
+    )
+
+    if not hotspot:
+        raise HTTPException(
+            status_code=404,
+            detail="Hotspot not found.",
+        )
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(
+        seconds=NOTIFICATION_ENROLLMENT_DURATION_SECONDS
+    )
+    next_eligible_at = now + timedelta(
+        hours=NOTIFICATION_ENROLLMENT_COOLDOWN_HOURS
+    )
+    enrollment_id = str(uuid.uuid4())
+
+    claim_identity = {
+        "hotspot_id": request.hotspot_id,
+        "device_identifier": device_identifier,
+    }
+
+    existing_claim = await db.notification_enrollment_claims.find_one(
+        claim_identity,
+        {"_id": 0},
+    )
+
+    if existing_claim:
+        existing_expires_at = existing_claim.get("expires_at")
+
+        if isinstance(existing_expires_at, str):
+            try:
+                existing_expires_at = datetime.fromisoformat(
+                    existing_expires_at.replace("Z", "+00:00")
+                )
+            except ValueError:
+                existing_expires_at = None
+
+        if (
+            isinstance(existing_expires_at, datetime)
+            and existing_expires_at.tzinfo is None
+        ):
+            existing_expires_at = existing_expires_at.replace(
+                tzinfo=timezone.utc
+            )
+
+        if (
+            existing_expires_at
+            and existing_expires_at > now
+            and existing_claim.get("username")
+            and existing_claim.get("password")
+        ):
+            remaining_seconds = max(
+                1,
+                int((existing_expires_at - now).total_seconds()),
+            )
+
+            return {
+                "success": True,
+                "session_id": existing_claim.get("session_id"),
+                "username": existing_claim["username"],
+                "password": existing_claim["password"],
+                "expires_at": existing_expires_at.isoformat(),
+                "duration_seconds": remaining_seconds,
+                "enrollment_type": "notification",
+                "reused": True,
+                "message": (
+                    "Your notification setup connection is already active."
+                ),
+            }
+
+    claim_filter = {
+        **claim_identity,
+        "$or": [
+            {"next_eligible_at": {"$lte": now}},
+            {"next_eligible_at": {"$exists": False}},
+        ],
+    }
+
+    claim_update = {
+        "$set": {
+            "enrollment_id": enrollment_id,
+            "started_at": now,
+            "expires_at": expires_at,
+            "next_eligible_at": next_eligible_at,
+            "updated_at": now,
+            "status": "provisioning",
+        },
+        "$setOnInsert": {
+            "hotspot_id": request.hotspot_id,
+            "device_identifier": device_identifier,
+            "created_at": now,
+        },
+    }
+
+    try:
+        claim = await db.notification_enrollment_claims.find_one_and_update(
+            claim_filter,
+            claim_update,
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError as exc:
+        blocked_claim = await db.notification_enrollment_claims.find_one(
+            claim_identity,
+            {
+                "_id": 0,
+                "next_eligible_at": 1,
+            },
+        )
+        blocked_until = (
+            blocked_claim.get("next_eligible_at")
+            if blocked_claim
+            else None
+        )
+
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": (
+                    "This device has already used its notification "
+                    "setup connection."
+                ),
+                "next_eligible_at": (
+                    blocked_until.isoformat()
+                    if hasattr(blocked_until, "isoformat")
+                    else blocked_until
+                ),
+            },
+        ) from exc
+
+    if not claim:
+        raise HTTPException(
+            status_code=409,
+            detail="Notification setup access is not currently available.",
+        )
+
+    username, password = generate_radius_credentials(
+        hotspot.get("username_prefix", "")
+    )
+
+    session = Session(
+        package_id="notification-enrollment",
+        hotspot_id=request.hotspot_id,
+        user_mac=(request.user_mac or None),
+        user_ip=(request.user_ip or None),
+        username=username,
+        password=password,
+        rate_limit=NOTIFICATION_ENROLLMENT_RATE_LIMIT,
+        is_free=True,
+        expires_at=expires_at,
+    )
+
+    session_dict = session.model_dump()
+    session_dict["started_at"] = session.started_at.isoformat()
+    session_dict["expires_at"] = session.expires_at.isoformat()
+    session_dict["reward_type"] = "notification-enrollment"
+    session_dict["notification_enrollment_id"] = enrollment_id
+    session_dict["duration_seconds"] = (
+        NOTIFICATION_ENROLLMENT_DURATION_SECONDS
+    )
+
+    try:
+        await db.sessions.insert_one(session_dict)
+
+        await db.notification_enrollment_claims.update_one(
+            {
+                **claim_identity,
+                "enrollment_id": enrollment_id,
+            },
+            {
+                "$set": {
+                    "session_id": session.id,
+                    "username": username,
+                    "password": password,
+                    "status": "active",
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            },
+        )
+    except Exception:
+        await db.notification_enrollment_claims.delete_one(
+            {
+                **claim_identity,
+                "enrollment_id": enrollment_id,
+            }
+        )
+        raise
+
+    return {
+        "success": True,
+        "session_id": session.id,
+        "username": username,
+        "password": password,
+        "expires_at": expires_at.isoformat(),
+        "duration_seconds": NOTIFICATION_ENROLLMENT_DURATION_SECONDS,
+        "enrollment_type": "notification",
+        "reused": False,
+        "message": (
+            "One-minute notification setup connection activated. "
+            "Open CAIWAVE in Chrome and enable notifications."
+        ),
+    }
 
 
 @api_router.get("/portal/notification-reward-status")

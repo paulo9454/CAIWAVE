@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import {
   BadgeDollarSign,
@@ -81,6 +81,39 @@ const registerWorker = async () =>
     scope: "/",
   });
 
+const openInFullBrowser = () => {
+  const currentUrl = window.location.href;
+  const isAndroid = /android/i.test(window.navigator.userAgent);
+
+  if (isAndroid) {
+    try {
+      const url = new URL(currentUrl);
+      const intentTarget =
+        `${url.host}${url.pathname}${url.search}${url.hash}`;
+
+      window.location.href =
+        `intent://${intentTarget}` +
+        `#Intent;scheme=${url.protocol.replace(":", "")};` +
+        "package=com.android.chrome;" +
+        `S.browser_fallback_url=${encodeURIComponent(currentUrl)};end`;
+
+      return;
+    } catch {
+      // Fall through to the normal browser-opening methods.
+    }
+  }
+
+  const opened = window.open(
+    currentUrl,
+    "_blank",
+    "noopener,noreferrer"
+  );
+
+  if (!opened) {
+    window.location.assign(currentUrl);
+  }
+};
+
 const sendSubscription = async (subscription, hotspotId) => {
   const serialized = subscription.toJSON();
 
@@ -135,6 +168,7 @@ export default function WebPushEnrollment({
   hotspotId,
   clientMac,
   clientIp,
+  notificationEnrollmentActive = false,
   onRewardGranted,
 }) {
   const [configuration, setConfiguration] = useState(null);
@@ -143,6 +177,40 @@ export default function WebPushEnrollment({
   const [dismissed, setDismissed] = useState(false);
   const [rewardStatus, setRewardStatus] = useState("idle");
   const [rewardMessage, setRewardMessage] = useState("");
+  const installPromptRef = useRef(null);
+  const [installAvailable, setInstallAvailable] = useState(false);
+  const [appInstalled, setAppInstalled] = useState(() => isStandalone());
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      installPromptRef.current = event;
+      setInstallAvailable(true);
+    };
+
+    const handleAppInstalled = () => {
+      installPromptRef.current = null;
+      setInstallAvailable(false);
+      setAppInstalled(true);
+      setRewardMessage(
+        "CAIWAVE is installed. Open the app and enable notifications to activate your free session."
+      );
+    };
+
+    window.addEventListener(
+      "beforeinstallprompt",
+      handleBeforeInstallPrompt
+    );
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
 
   const claimNotificationReward = useCallback(
     async (subscription) => {
@@ -177,7 +245,7 @@ export default function WebPushEnrollment({
         setRewardStatus("granted");
         setRewardMessage(
           response.data?.message ||
-            "Your free WiFi reward is ready."
+            "Your free WiFi session is ready."
         );
 
         if (typeof onRewardGranted === "function") {
@@ -211,7 +279,7 @@ export default function WebPushEnrollment({
         setRewardMessage(
           error?.response?.data?.detail?.message ||
             error?.response?.data?.detail ||
-            "Notifications were enabled, but the free WiFi reward could not be issued."
+            "Notifications were enabled, but the free WiFi session could not be issued."
         );
 
         return null;
@@ -313,6 +381,125 @@ export default function WebPushEnrollment({
     };
   }, [hotspotId, claimNotificationReward]);
 
+  const startNotificationEnrollment = async () => {
+    if (!hotspotId || busy) return;
+
+    setBusy(true);
+    setRewardStatus("claiming");
+    setRewardMessage(
+      "Preparing CAIWAVE app setup…"
+    );
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/portal/notification-enrollment`,
+        {
+          hotspot_id: hotspotId,
+          user_mac: clientMac || null,
+          user_ip: clientIp || null,
+        }
+      );
+
+      const credentials = response.data;
+
+      if (!credentials?.username || !credentials?.password) {
+        throw new Error(
+          "Temporary WiFi credentials were not returned."
+        );
+      }
+
+      try {
+        window.localStorage.setItem(
+          `caiwave:notification-enrollment:${hotspotId}`,
+          JSON.stringify({
+            started_at: Date.now(),
+            expires_at: credentials.expires_at,
+            portal_url: window.location.href,
+          })
+        );
+      } catch {
+        // The backend remains authoritative when storage is unavailable.
+      }
+
+      setRewardMessage(
+        response.data?.message ||
+          "App setup access activated. Continue in Chrome to install CAIWAVE."
+      );
+
+      if (typeof onRewardGranted !== "function") {
+        throw new Error("The router login handler is unavailable.");
+      }
+
+      const submitted = onRewardGranted({
+        ...credentials,
+        destination: window.location.href,
+      });
+
+      if (submitted === false) {
+        throw new Error(
+          "The temporary WiFi login could not be submitted to the router."
+        );
+      }
+    } catch (error) {
+      console.error(
+        "Failed to start notification enrollment:",
+        error
+      );
+
+      const detail = error?.response?.data?.detail;
+
+      setRewardStatus("error");
+      setRewardMessage(
+        (typeof detail === "string" ? detail : detail?.message) ||
+          error?.message ||
+          "CAIWAVE app setup could not be started."
+      );
+      setBusy(false);
+    }
+  };
+
+  const installCaiwaveApp = async () => {
+    const installPrompt = installPromptRef.current;
+
+    if (!installPrompt) {
+      setRewardStatus("error");
+      setRewardMessage(
+        "Open your browser menu and choose Install app or Add to Home screen."
+      );
+      return;
+    }
+
+    setBusy(true);
+    setRewardMessage("Opening the CAIWAVE installation prompt…");
+
+    try {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+
+      installPromptRef.current = null;
+      setInstallAvailable(false);
+
+      if (choice?.outcome === "accepted") {
+        setAppInstalled(true);
+        setRewardMessage(
+          "CAIWAVE is installed. Open the app and enable notifications to activate your free session."
+        );
+      } else {
+        setRewardMessage(
+          "Install CAIWAVE when you are ready to activate your free session."
+        );
+      }
+    } catch (error) {
+      console.error("Failed to install CAIWAVE:", error);
+      setRewardStatus("error");
+      setRewardMessage(
+        "The installation prompt could not open. Use your browser menu and choose Install app."
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const enableNotifications = async () => {
     if (!configuration?.public_key || !hotspotId) return;
 
@@ -362,6 +549,27 @@ export default function WebPushEnrollment({
         "Failed to enable CAIWAVE notifications:",
         error
       );
+
+      const details = {
+        name: error?.name,
+        message: error?.message,
+        stack: error?.stack,
+        response: error?.response?.data,
+      };
+
+      console.error(
+        "CAIWAVE notification failure details:",
+        details
+      );
+
+      setRewardStatus("error");
+      setRewardMessage(
+        details.response?.detail?.message ||
+          details.response?.detail ||
+          details.message ||
+          "Notification setup failed."
+      );
+
       setStatus("error");
     } finally {
       setBusy(false);
@@ -405,13 +613,13 @@ export default function WebPushEnrollment({
             <div>
               <h2 className="text-base font-bold text-white">
                 {rewardStatus === "granted"
-                  ? "Free WiFi Reward Activated"
+                  ? "Free WiFi Session Activated"
                   : "Daily Free WiFi Activated"}
               </h2>
 
               <p className="mt-0.5 text-xs leading-5 text-neutral-300 sm:text-sm">
                 {rewardStatus === "claiming"
-                  ? "Notifications are enabled. Preparing your free WiFi reward…"
+                  ? "Notifications are enabled. Preparing your free WiFi session…"
                   : rewardMessage ||
                     "You will now receive free offers, announcements, live-event alerts and important CAIWAVE hotspot updates."}
               </p>
@@ -421,7 +629,7 @@ export default function WebPushEnrollment({
                 {rewardStatus === "granted"
                   ? "Connecting your free WiFi session"
                   : rewardStatus === "cooldown"
-                    ? "One reward is available every 24 hours"
+                    ? "Your next free session will be available when eligible"
                     : rewardStatus === "error"
                       ? "Notifications remain enabled"
                       : "Important updates only — no spam"}
@@ -446,7 +654,7 @@ export default function WebPushEnrollment({
       status === "install-required"
         ? "On iPhone or iPad, add this CAIWAVE portal to your Home Screen, open it from there, then enable notifications."
         : status === "unsupported"
-          ? "This browser cannot receive background notifications. You will still see updates whenever the CAIWAVE portal is open."
+          ? "This WiFi sign-in window cannot install the CAIWAVE app. Start app setup, then continue in Chrome to install CAIWAVE and enable notifications."
           : "Notifications are blocked in your browser settings. You can enable them later from your browser's site settings.";
 
     return (
@@ -459,7 +667,7 @@ export default function WebPushEnrollment({
             <BellRing className="h-6 w-6" />
           </div>
 
-          <div>
+          <div className="min-w-0 flex-1">
             <h2 className="font-semibold text-white">
               CAIWAVE Notifications
             </h2>
@@ -468,9 +676,38 @@ export default function WebPushEnrollment({
               {message}
             </p>
 
-            <p className="mt-2 text-xs text-neutral-500">
-              This does not affect WiFi access.
-            </p>
+            {status === "unsupported" && (
+              <>
+                <button
+                  type="button"
+                  onClick={
+                    notificationEnrollmentActive
+                      ? openInFullBrowser
+                      : startNotificationEnrollment
+                  }
+                  disabled={busy && !notificationEnrollmentActive}
+                  className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  {notificationEnrollmentActive
+                    ? "Continue in Chrome"
+                    : busy
+                      ? "Preparing App Setup…"
+                      : "Start CAIWAVE App Setup"}
+                </button>
+
+                <p className="mt-3 text-xs leading-5 text-neutral-500">
+                  {notificationEnrollmentActive
+                    ? "Your app setup connection is active. Continue in Chrome, install CAIWAVE, then enable notifications to activate your free session."
+                    : "Temporary app setup access will close automatically."}
+                </p>
+              </>
+            )}
+
+            {status !== "unsupported" && (
+              <p className="mt-2 text-xs text-neutral-500">
+                This does not affect WiFi access.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -496,7 +733,7 @@ export default function WebPushEnrollment({
           </div>
 
           <h2 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
-            Enable Notifications & Get Daily Free WiFi
+            Install CAIWAVE App & Get Free WiFi
           </h2>
 
           <p className="mt-2 text-sm font-medium text-blue-100 sm:text-base">
@@ -525,26 +762,34 @@ export default function WebPushEnrollment({
           </div>
 
           <p className="mt-4 text-sm leading-5 text-blue-100">
-            Enable notifications to receive 15 minutes of FREE WiFi once every 24 hours.
+            Install CAIWAVE and enable notifications to receive a free WiFi session when eligible.
           </p>
 
           {status === "error" && (
             <p className="mt-3 rounded-lg border border-red-300/20 bg-red-950/30 px-3 py-2 text-xs text-red-100">
-              We could not enable notifications. Please check your
-              connection and try again.
+              {rewardMessage ||
+                "We could not enable notifications. Please try again."}
             </p>
           )}
 
           <button
             type="button"
-            onClick={enableNotifications}
+            onClick={
+                !appInstalled && installAvailable
+                  ? installCaiwaveApp
+                  : enableNotifications
+              }
             disabled={busy}
             className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-950/30 transition duration-200 hover:-translate-y-0.5 hover:from-cyan-300 hover:to-blue-400 focus:outline-none focus:ring-2 focus:ring-cyan-200 focus:ring-offset-2 focus:ring-offset-indigo-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:min-w-64"
           >
             <BellRing className="h-5 w-5" />
             {busy
-              ? "Enabling and Preparing Reward…"
-              : "Enable Notifications & Get 15 Minutes Free"}
+                ? !appInstalled && installAvailable
+                  ? "Opening Installation…"
+                  : "Preparing Free Session…"
+                : !appInstalled && installAvailable
+                  ? "Install CAIWAVE App"
+                  : "Enable Notifications & Get Free Session"}
           </button>
 
           <button

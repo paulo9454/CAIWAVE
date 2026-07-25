@@ -32,6 +32,42 @@ def test_notification_reward_routes_are_registered():
     assert '@api_router.post("/portal/notification-reward")' in SERVER
 
 
+def test_notification_enrollment_contract_exists():
+    assert "class NotificationEnrollmentRequest(BaseModel):" in SERVER
+    assert (
+        '@api_router.post("/portal/notification-enrollment")'
+        in SERVER
+    )
+    assert "NOTIFICATION_ENROLLMENT_DURATION_SECONDS = 60" in SERVER
+    assert "NOTIFICATION_ENROLLMENT_COOLDOWN_HOURS = 24" in SERVER
+    assert 'package_id="notification-enrollment"' in SERVER
+
+
+def test_notification_enrollment_is_backend_controlled():
+    source = _function_source("create_notification_enrollment")
+
+    assert "db.notification_enrollment_claims" in source
+    assert "find_one_and_update" in source
+    assert "upsert=True" in source
+    assert "ReturnDocument.AFTER" in source
+    assert "except DuplicateKeyError" in source
+    assert "generate_radius_credentials" in source
+    assert "await db.sessions.insert_one" in source
+    assert "NOTIFICATION_ENROLLMENT_DURATION_SECONDS" in source
+
+
+def test_notification_enrollment_indexes_exist():
+    assert '"notification_enrollment_device_claim"' in SERVER
+    assert '"notification_enrollment_eligibility"' in SERVER
+
+
+def test_notification_enrollment_does_not_require_push_subscription():
+    source = _function_source("create_notification_enrollment")
+
+    assert "web_push_subscriptions" not in source
+    assert "hash_push_endpoint" not in source
+
+
 def test_notification_reward_requires_active_push_subscription():
     source = _function_source("create_notification_reward")
 

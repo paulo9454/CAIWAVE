@@ -48,6 +48,8 @@ const CaptivePortal = () => {
   const [voucherCode, setVoucherCode] = useState("");
   const [redeemingVoucher, setRedeemingVoucher] = useState(false);
   const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [notificationEnrollmentActive, setNotificationEnrollmentActive] =
+    useState(false);
   const activeSessionRestoreKeyRef = useRef("");
 
   const imageAds = useMemo(
@@ -189,7 +191,10 @@ const CaptivePortal = () => {
     const fields = {
       username,
       password,
-      dst: originalDestination || "http://neverssl.com/",
+      dst:
+        credentials?.destination ||
+        originalDestination ||
+        "http://neverssl.com/",
       popup: "true"
     };
 
@@ -240,6 +245,17 @@ const CaptivePortal = () => {
         }
 
         const session = response.data || {};
+        const isNotificationEnrollment =
+          session.package_id === "notification-enrollment" ||
+          session.reward_type === "notification-enrollment";
+
+        if (isNotificationEnrollment) {
+          setNotificationEnrollmentActive(true);
+          return;
+        }
+
+        setNotificationEnrollmentActive(false);
+
         const credentials =
           session.wifi_credentials ||
           (
@@ -601,6 +617,7 @@ const CaptivePortal = () => {
           hotspotId={hotspotId}
           clientMac={clientMac}
           clientIp={clientIp}
+          notificationEnrollmentActive={notificationEnrollmentActive}
           onRewardGranted={submitCredentialsToMikrotik}
         />
 
