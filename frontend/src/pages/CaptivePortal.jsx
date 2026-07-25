@@ -607,7 +607,9 @@ const CaptivePortal = () => {
 
         {/* Free WiFi Section - After watching ad */}
         {!freeSession && (
-          <div className={`rounded-xl border p-5 ${
+          <div
+            id="free-wifi"
+            className={`scroll-mt-5 rounded-xl border p-5 ${
             freeSessionStatus.can_get_free
               ? "bg-gradient-to-br from-green-950/80 to-emerald-900/50 border-green-700/50"
               : "bg-gradient-to-br from-orange-950/80 to-red-900/50 border-orange-700/50"
@@ -667,7 +669,10 @@ const CaptivePortal = () => {
 
         {/* Free Session Credentials - Show after getting free WiFi */}
         {freeSession && (
-          <div className="bg-gradient-to-r from-blue-900/50 to-indigo-900/50 rounded-xl border border-blue-700/50 p-6">
+          <div
+            id="free-wifi"
+            className="scroll-mt-5 bg-gradient-to-r from-blue-900/50 to-indigo-900/50 rounded-xl border border-blue-700/50 p-6"
+          >
             <div className="text-center mb-4">
               <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-3">
                 <Wifi className="w-8 h-8 text-green-400" />
@@ -747,7 +752,10 @@ const CaptivePortal = () => {
 </main>
 
       {/* Footer & Support */}
-      <footer className="mt-8 py-8 border-t border-neutral-800 bg-neutral-950">
+      <footer
+        id="support"
+        className="scroll-mt-5 mt-8 py-8 border-t border-neutral-800 bg-neutral-950"
+      >
         <div className="max-w-4xl mx-auto px-4 text-center">
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-white">

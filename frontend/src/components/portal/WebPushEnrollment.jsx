@@ -390,7 +390,10 @@ export default function WebPushEnrollment({
 
   if (status === "enabled") {
     return (
-      <section className="overflow-hidden rounded-xl border border-emerald-400/25 bg-gradient-to-r from-emerald-950/90 via-neutral-950 to-cyan-950/80 shadow-lg shadow-emerald-950/20">
+      <section
+        id="notifications"
+        className="scroll-mt-5 overflow-hidden rounded-xl border border-emerald-400/25 bg-gradient-to-r from-emerald-950/90 via-neutral-950 to-cyan-950/80 shadow-lg shadow-emerald-950/20"
+      >
         <div className="relative px-4 py-3.5 sm:px-5 sm:py-4">
           <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-emerald-400/10 blur-3xl" />
 
@@ -447,7 +450,10 @@ export default function WebPushEnrollment({
           : "Notifications are blocked in your browser settings. You can enable them later from your browser's site settings.";
 
     return (
-      <section className="rounded-2xl border border-white/10 bg-neutral-950/90 p-5 shadow-lg">
+      <section
+        id="notifications"
+        className="scroll-mt-5 rounded-2xl border border-white/10 bg-neutral-950/90 p-5 shadow-lg"
+      >
         <div className="flex items-start gap-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-300">
             <BellRing className="h-6 w-6" />
@@ -472,7 +478,10 @@ export default function WebPushEnrollment({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-blue-300/25 bg-gradient-to-r from-blue-800 via-indigo-800 to-purple-900 shadow-xl shadow-indigo-950/40">
+    <section
+      id="notifications"
+      className="scroll-mt-5 relative overflow-hidden rounded-2xl border border-blue-300/25 bg-gradient-to-r from-blue-800 via-indigo-800 to-purple-900 shadow-xl shadow-indigo-950/40"
+    >
       <div className="absolute -left-16 -top-20 h-48 w-48 rounded-full bg-cyan-300/15 blur-3xl" />
       <div className="absolute -bottom-24 -right-12 h-56 w-56 rounded-full bg-fuchsia-400/20 blur-3xl" />
 
