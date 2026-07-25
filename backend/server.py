@@ -1464,8 +1464,22 @@ notification_service = NotificationService()
 
 # ==================== Auth Routes ====================
 
+PUBLIC_REGISTRATION_ROLES = frozenset({
+    UserRole.HOTSPOT_OWNER,
+})
+
+
 @auth_router.post("/register", response_model=dict)
 async def register(user_data: UserCreate):
+    if user_data.role not in PUBLIC_REGISTRATION_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Public registration is currently available "
+                "to hotspot owners only."
+            ),
+        )
+
     existing = await db.users.find_one({"email": user_data.email})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")

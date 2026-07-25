@@ -3,14 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import { register, getDashboardPath, ROLES } from "../lib/auth";
+import { register, getDashboardPath } from "../lib/auth";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { CaiwaveLogo } from "../components/CaiwaveLogo";
@@ -24,7 +17,6 @@ const RegisterPage = () => {
     phone: "",
     password: "",
     confirmPassword: "",
-    role: "hotspot_owner",
   });
 
   const handleSubmit = async (e) => {
@@ -48,7 +40,7 @@ const RegisterPage = () => {
         email: formData.email,
         phone: formData.phone || null,
         password: formData.password,
-        role: formData.role,
+        role: "hotspot_owner",
       };
 
       const user = await register(userData);
@@ -165,22 +157,6 @@ const RegisterPage = () => {
                   className="bg-neutral-900 border-neutral-800 focus:border-blue-600"
                   data-testid="phone-input"
                 />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="role">Account Type</Label>
-                <Select
-                  value={formData.role}
-                  onValueChange={(value) => setFormData({ ...formData, role: value })}
-                >
-                  <SelectTrigger className="bg-neutral-900 border-neutral-800" data-testid="role-select">
-                    <SelectValue placeholder="Select account type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="hotspot_owner">Hotspot Owner</SelectItem>
-                    <SelectItem value="advertiser">Advertiser</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

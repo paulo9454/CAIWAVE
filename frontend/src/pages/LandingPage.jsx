@@ -528,11 +528,11 @@ const LandingPage = () => {
               </ul>
               
               <Button
-                onClick={() => navigate("/register")}
+                onClick={() => navigate("/login")}
                 className="bg-purple-600 hover:bg-purple-700 text-white"
                 data-testid="advertiser-cta"
               >
-                Start Advertising
+                Advertiser Sign In
                 <ChevronRight className="w-5 h-5 ml-2" strokeWidth={1.5} />
               </Button>
             </div>
