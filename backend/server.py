@@ -8582,22 +8582,23 @@ async def get_active_portal_session(
     # Compare MAC addresses in Python because older sessions may contain
     # different separators or formatting even though they identify the same MAC.
     candidate_sessions = await db.sessions.find(
-        {
-            "hotspot_id": hotspot_id,
-            "status": SessionStatus.ACTIVE.value,
-            "expires_at": {"$gt": now.isoformat()},
-            "user_mac": {"$nin": [None, ""]},
-        },
-        {
-            "_id": 0,
-            "username": 1,
-            "password": 1,
-            "user_mac": 1,
-            "expires_at": 1,
-            "package_id": 1,
-            "reward_type": 1,
-        },
-    ).sort("expires_at", -1).to_list(100)
+    {
+        "hotspot_id": hotspot_id,
+        "status": SessionStatus.ACTIVE.value,
+        "user_mac": {"$nin": [None, ""]},
+    },
+    {
+        "_id": 0,
+        "username": 1,
+        "password": 1,
+        "user_mac": 1,
+        "expires_at": 1,
+        "package_id": 1,
+        "package_type": 1,
+        "remaining_seconds": 1,
+        "reward_type": 1,
+    },
+).to_list(100)
 
     for session in candidate_sessions:
         if normalize_mac(session.get("user_mac")) != normalized_mac:
@@ -8609,13 +8610,31 @@ async def get_active_portal_session(
         package_id = session.get("package_id")
         reward_type = session.get("reward_type")
 
-        if not username or not password or not expires_at_value:
+        package_type = session.get("package_type", "time")
+
+        if not username or not password:
             continue
+
+        if package_type == "usage":
+            remaining_seconds = int(
+                session.get("remaining_seconds") or 0
+            )
+
+            if remaining_seconds <= 0:
+                continue
+
+            expires_at = None
+
+        else:
+             if not expires_at_value:
+                continue
 
         try:
             expires_at = datetime.fromisoformat(
                 str(expires_at_value).replace("Z", "+00:00")
             )
+
+
         except (TypeError, ValueError):
             logging.warning(
                 "Skipping active portal session with invalid expiry: %s",
@@ -8629,7 +8648,7 @@ async def get_active_portal_session(
         remaining_seconds = max(
             1,
             int((expires_at - now).total_seconds()),
-        )
+    )
 
         return {
             "active_session": True,
@@ -8637,7 +8656,13 @@ async def get_active_portal_session(
                 "username": username,
                 "password": password,
             },
-            "expires_at": expires_at.isoformat(),
+            
+           "expires_at": (
+               expires_at.isoformat()
+               if expires_at
+               else None
+            ),
+
             "package_id": package_id,
             "reward_type": reward_type,
             "remaining_seconds": remaining_seconds,
