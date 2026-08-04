@@ -35,3 +35,10 @@ class Session(SessionBase):
     is_free: bool = False
     voucher_code: Optional[str] = None
     payment_id: Optional[str] = None
+
+    # Usage-based package support (optional, backward compatible)
+    package_type: str = "time"          # time | usage
+    package_duration_seconds: Optional[int] = None
+    used_seconds: int = 0
+    remaining_seconds: Optional[int] = None
+    last_accounted_session_time: int = 0

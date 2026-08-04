@@ -64,6 +64,9 @@ from backend.services.provisioning_v2.mikrotik_builder_adapter import build_prov
 from backend.services.provisioning_v2.production_input import (
     build_persisted_production_router_record,
 )
+from backend.services.session.usage_accounting import (
+    calculate_usage_update,
+)
 from backend.models.voucher import (
     Voucher,
     VoucherBase,
@@ -721,6 +724,11 @@ class Session(SessionBase):
     username: str = ""  # RADIUS username
     password: str = ""  # RADIUS password (for vouchers)
     rate_limit: str = "2M/2M"
+    package_type: str = "time"
+    package_duration_seconds: int = 0
+    used_seconds: int = 0
+    remaining_seconds: int = 0
+    last_accounted_session_time: int = 0
     status: SessionStatus = SessionStatus.ACTIVE
     started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_at: Optional[datetime] = None
@@ -3646,7 +3654,9 @@ async def handle_paystack_wifi_success(transaction: dict, paystack_data: dict):
     username, password = generate_radius_credentials(hotspot.get("username_prefix", ""))
     
     # Create session
-    session = Session(
+    package_type = package.get("package_type", "time")
+
+    session_kwargs = dict(
         package_id=package_id,
         hotspot_id=hotspot_id,
         phone_number=phone_number,
@@ -3654,12 +3664,37 @@ async def handle_paystack_wifi_success(transaction: dict, paystack_data: dict):
         password=password,
         rate_limit=build_rate_limit_from_package(package),
         payment_id=payment.id,
-        expires_at=now + timedelta(minutes=package["duration_minutes"])
+        package_type=package_type,
     )
+
+    if package_type == "usage":
+        usage_seconds = int(package.get("usage_duration_minutes") or 0) * 60
+
+        session_kwargs.update(
+            package_duration_seconds=usage_seconds,
+            used_seconds=0,
+            remaining_seconds=usage_seconds,
+            last_accounted_session_time=0,
+        )
+    else:
+        session_kwargs["expires_at"] = (
+            now + timedelta(minutes=package["duration_minutes"])
+        )
+
+    logging.warning("========== PAYSTACK SESSION ==========")
+    logging.warning("package_type=%s", package_type)
+    logging.warning("session_kwargs=%r", session_kwargs)
+    logging.warning("======================================")
+
+    session = Session(**session_kwargs)
     
     session_dict = session.model_dump()
     session_dict["started_at"] = session_dict["started_at"].isoformat()
-    session_dict["expires_at"] = session_dict["expires_at"].isoformat()
+
+    if session_dict.get("expires_at"):
+        session_dict["expires_at"] = (
+            session_dict["expires_at"].isoformat()
+        )
     await db.sessions.insert_one(session_dict)
     
     # Update payment with session ID
@@ -3675,24 +3710,37 @@ async def handle_paystack_wifi_success(transaction: dict, paystack_data: dict):
     )
     
     # Store credentials in transaction
+    transaction_update = {
+        "wifi_username": username,
+        "wifi_password": password,
+        "session_id": session.id,
+    }
+
+    if session_dict.get("expires_at"):
+        transaction_update["expires_at"] = session_dict["expires_at"]
+
     await db.paystack_transactions.update_one(
         {"id": transaction["id"]},
-        {"$set": {
-            "wifi_username": username,
-            "wifi_password": password,
-            "session_id": session.id,
-            "expires_at": session_dict["expires_at"]
-        }}
+        {"$set": transaction_update}
     )
     
     logging.info(f"WiFi access granted - Session: {session.id}, Username: {username}")
     
-    return {
+    response = {
         "username": username,
         "password": password,
-        "expires_at": session_dict["expires_at"],
-        "duration_minutes": package["duration_minutes"]
     }
+
+    if package_type == "usage":
+        response["package_type"] = "usage"
+        response["usage_duration_minutes"] = (
+            package.get("usage_duration_minutes")
+        )
+    else:
+        response["expires_at"] = session_dict.get("expires_at")
+        response["duration_minutes"] = package["duration_minutes"]
+
+    return response
 
 # ==================== Payments Routes ====================
 
@@ -5146,15 +5194,36 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
         if session.get("password") and session.get("password") != request.password:
             return reject("Invalid password")
 
-        if session.get("expires_at"):
-            expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
+        if session.get("package_type") == "usage":
+            remaining_seconds = int(
+                session.get("remaining_seconds")
+                or session.get("package_duration_seconds")
+                or 0
+            )
+
+            if remaining_seconds <= 0:
+                await db.sessions.update_one(
+                    {"username": request.username},
+                    {"$set": {"status": SessionStatus.EXPIRED.value}}
+                )
+                return reject("Package exhausted")
+
+        elif session.get("expires_at"):
+            expires_at = datetime.fromisoformat(
+                session["expires_at"].replace("Z", "+00:00")
+            )
+
             if expires_at <= now:
                 await db.sessions.update_one(
                     {"username": request.username},
                     {"$set": {"status": SessionStatus.EXPIRED.value}}
                 )
                 return reject("Session expired")
-            remaining_seconds = int((expires_at - now).total_seconds())
+
+            remaining_seconds = int(
+                (expires_at - now).total_seconds()
+            )
+
         else:
             remaining_seconds = 3600
 
@@ -5186,6 +5255,19 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
             return reject("Voucher expired")
 
         package = await db.packages.find_one({"id": voucher["package_id"]}, {"_id": 0})
+
+        logging.warning("========== USAGE PACKAGE DEBUG ==========")
+        logging.warning("voucher_code=%s", voucher.get("code"))
+        logging.warning("package_id=%s", voucher.get("package_id"))
+        logging.warning("package=%r", package)
+        if package:
+            logging.warning("package_type=%r", package.get("package_type"))
+            logging.warning(
+                "usage_duration_minutes=%r",
+                package.get("usage_duration_minutes"),
+            )
+        logging.warning("========================================")
+
         if not package:
             return reject("Voucher package not found")
 
@@ -5193,19 +5275,48 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
         session_expires_at = now + timedelta(minutes=duration_minutes)
         request_mac = normalize_mac(request.calling_station)
 
-        created_session = Session(
+        package_type = package.get("package_type", "time")
+
+        session_kwargs = dict(
             package_id=voucher["package_id"],
             hotspot_id=voucher["hotspot_id"],
             user_mac=request_mac or None,
             username=voucher["username"],
             password=voucher["password"],
             rate_limit=package.get("speed_limit", "2M/2M"),
-            expires_at=session_expires_at,
-            voucher_code=voucher["code"]
+            package_type=package_type,
+            voucher_code=voucher["code"],
         )
+
+        if package_type == "usage":
+            usage_seconds = (
+                int(package.get("usage_duration_minutes") or 0) * 60
+            )
+
+            session_kwargs.update(
+                package_duration_seconds=usage_seconds,
+                used_seconds=0,
+                remaining_seconds=usage_seconds,
+                last_accounted_session_time=0,
+            )
+        else:
+            session_kwargs["expires_at"] = session_expires_at
+
+        logging.warning("========== SESSION CREATE ==========")
+        logging.warning("package_type=%s", package_type)
+        logging.warning("session_kwargs=%r", session_kwargs)
+        logging.warning("====================================")
+        raise RuntimeError("VOUCHER REACHED SESSION CREATION")
+
+        created_session = Session(**session_kwargs)
         session_dict = created_session.model_dump()
         session_dict["started_at"] = session_dict["started_at"].isoformat()
-        session_dict["expires_at"] = session_expires_at.isoformat()
+
+        if session_dict.get("expires_at"):
+            session_dict["expires_at"] = (
+                session_dict["expires_at"].isoformat()
+            )
+
         await db.sessions.insert_one(session_dict)
 
         await db.vouchers.update_one(
@@ -5217,7 +5328,16 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
             }}
         )
 
-        return accept(duration_minutes * 60, created_session.rate_limit)
+        if package_type == "usage":
+            return accept(
+                usage_seconds,
+                created_session.rate_limit,
+            )
+
+        return accept(
+            duration_minutes * 60,
+            created_session.rate_limit,
+        )
 
     # 3) Trial MAC fallback (only when no session + no voucher)
     request_mac = normalize_mac(request.calling_station)
@@ -5267,6 +5387,20 @@ async def radius_accounting(request: RADIUSAccountingRequest):
     total_bytes = input_octets + output_octets
     total_mb = round(total_bytes / (1024 * 1024), 2)
 
+    usage_update = None
+
+    if session.get("package_type") == "usage":
+        usage_update = calculate_usage_update(
+            package_duration_seconds=int(
+                session.get("package_duration_seconds") or 0
+            ),
+            used_seconds=int(session.get("used_seconds") or 0),
+            last_accounted_session_time=int(
+                session.get("last_accounted_session_time") or 0
+            ),
+            current_session_time=session_time,
+        )
+
     router = None
     if session.get("hotspot_id"):
         router = await db.mikrotik_routers.find_one(
@@ -5292,6 +5426,23 @@ async def radius_accounting(request: RADIUSAccountingRequest):
         )
 
     elif request.status_type.lower() in ["stop", "2"]:
+
+        if usage_update is not None:
+            stop_usage_fields = {
+                "used_seconds": usage_update.used_seconds,
+                "remaining_seconds": usage_update.remaining_seconds,
+                "last_accounted_session_time": session_time,
+            }
+
+            if usage_update.expired:
+                stop_usage_fields["status"] = SessionStatus.EXPIRED.value
+                stop_usage_fields["expires_at"] = now
+
+            await db.sessions.update_one(
+                {"username": request.username},
+                {"$set": stop_usage_fields},
+            )
+
         # Accounting-Stop ends one router connection, not the customer's
         # remaining paid entitlement. Keep the session reusable until expiry.
         session_status = SessionStatus.ACTIVE.value
@@ -5344,6 +5495,22 @@ async def radius_accounting(request: RADIUSAccountingRequest):
                 "last_accounting_update": now
             }}
         )
+
+        if usage_update is not None:
+            update_fields = {
+                "used_seconds": usage_update.used_seconds,
+                "remaining_seconds": usage_update.remaining_seconds,
+                "last_accounted_session_time": session_time,
+            }
+
+            if usage_update.expired:
+                update_fields["status"] = SessionStatus.EXPIRED.value
+                update_fields["expires_at"] = now
+
+            await db.sessions.update_one(
+                {"username": request.username},
+                {"$set": update_fields}
+            )
 
     if router:
         status_lower = request.status_type.lower()
@@ -7189,7 +7356,9 @@ async def redeem_voucher(
             detail="Voucher package is unavailable",
         )
 
-    session = Session(
+    package_type = package.get("package_type", "time")
+
+    session_kwargs = dict(
         package_id=voucher["package_id"],
         hotspot_id=hotspot_id,
         user_mac=normalize_mac(user_mac),
@@ -7198,14 +7367,38 @@ async def redeem_voucher(
         password=voucher["password"],
         rate_limit=build_rate_limit_from_package(package),
         voucher_code=normalized_code,
-        expires_at=now + timedelta(
-            minutes=package["duration_minutes"]
-        ),
+        package_type=package_type,
     )
+
+    if package_type == "usage":
+        usage_seconds = int(
+            package.get("usage_duration_minutes") or 0
+        ) * 60
+
+        session_kwargs.update(
+            package_duration_seconds=usage_seconds,
+            used_seconds=0,
+            remaining_seconds=usage_seconds,
+            last_accounted_session_time=0,
+        )
+    else:
+        session_kwargs["expires_at"] = (
+            now + timedelta(
+                minutes=package["duration_minutes"]
+            )
+        )
+
+    session = Session(**session_kwargs) 
+
+
 
     session_dict = session.model_dump()
     session_dict["started_at"] = session.started_at.isoformat()
-    session_dict["expires_at"] = session.expires_at.isoformat()
+
+    if session.expires_at:
+        session_dict["expires_at"] = session.expires_at.isoformat()
+    else:
+        session_dict["expires_at"] = None
 
     session_inserted = False
     hotspot_incremented = False
@@ -7283,9 +7476,20 @@ async def redeem_voucher(
         "wifi_credentials": {
             "username": session.username,
             "password": session.password,
-            "expires_at": session.expires_at.isoformat(),
+            "expires_at": (
+                session.expires_at.isoformat()
+                if session.expires_at
+                else None
+           ),
             "duration_minutes": package["duration_minutes"],
+            "package_type": package.get("package_type", "time"),
+            "remaining_seconds": (
+                session.remaining_seconds
+                if session.package_type == "usage"
+                else None
+           ),
         },
+
         "message": "Voucher redeemed successfully.",
     }
 

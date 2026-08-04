@@ -12,6 +12,15 @@ class PackageBase(BaseModel):
     name: str
     price: float  # KES
     duration_minutes: int
+
+    # Package mode:
+    #   time  -> traditional expiry-based package
+    #   usage -> consumed only while connected
+    package_type: str = "time"
+
+    # Used only when package_type == "usage"
+    usage_duration_minutes: Optional[int] = None
+
     speed_mbps: float = 10.0
     data_limit_mb: Optional[int] = None  # None = unlimited
     description: Optional[str] = None
