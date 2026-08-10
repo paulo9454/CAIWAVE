@@ -9,6 +9,7 @@ Refactored to use modular architecture:
 - /config.py: Configuration management
 - /database.py: MongoDB connection
 """
+
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -46,6 +47,8 @@ from backend.services.portal_notifications import (
     build_public_notification,
     select_portal_notification,
 )
+from backend.services.analytics.events import analytics_event
+from backend.services.analytics.tracker import track_event
 from backend.services.web_push import (
     WebPushValidationError,
     build_web_push_subscription_payload,
@@ -323,18 +326,6 @@ async def startup():
             "next_eligible_at",
             name="notification_reward_eligibility",
         )
-        await db.notification_enrollment_claims.create_index(
-            [
-                ("hotspot_id", 1),
-                ("device_identifier", 1),
-            ],
-            unique=True,
-            name="notification_enrollment_device_claim",
-        )
-        await db.notification_enrollment_claims.create_index(
-            "next_eligible_at",
-            name="notification_enrollment_eligibility",
-        )
         logger.info("Web Push subscription and delivery indexes ensured")
     except Exception:
         logger.exception(
@@ -481,11 +472,6 @@ class WebPushPreferencesRequest(BaseModel):
 class WebPushUnsubscribeRequest(BaseModel):
     endpoint: str
 
-
-class NotificationEnrollmentRequest(BaseModel):
-    hotspot_id: str = Field(min_length=1)
-    user_mac: Optional[str] = None
-    user_ip: Optional[str] = None
 
 
 class NotificationRewardRequest(BaseModel):
@@ -2319,6 +2305,30 @@ async def handle_wifi_payment_success(transaction: dict, mpesa_receipt: str):
     session_dict["expires_at"] = session_dict["expires_at"].isoformat()
     await db.sessions.insert_one(session_dict)
     
+    await track_event(
+        db,
+        analytics_event(
+            event_type="session_started",
+            hotspot_id=str(session_dict["hotspot_id"]),
+            user_mac=session_dict.get("user_mac"),
+            session_id=session_dict["id"],
+            extra={
+                "package_type": package_type,
+                "voucher_code": voucher["code"],
+            },
+        ),
+    )
+
+    await db.vouchers.update_one(
+        {"code": voucher["code"], "is_used": False},
+        {
+        "$set": {
+            "is_used": True,
+            "used_at": now.isoformat(),
+            "user_mac": request_mac,
+          }
+       },
+    )
     # Update payment with session ID
     await db.payments.update_one(
         {"id": payment.id},
@@ -5306,7 +5316,7 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
         logging.warning("package_type=%s", package_type)
         logging.warning("session_kwargs=%r", session_kwargs)
         logging.warning("====================================")
-        raise RuntimeError("VOUCHER REACHED SESSION CREATION")
+        
 
         created_session = Session(**session_kwargs)
         session_dict = created_session.model_dump()
@@ -5318,7 +5328,19 @@ async def radius_authorize(request: RADIUSAuthorizeRequest):
             )
 
         await db.sessions.insert_one(session_dict)
-
+        await track_event(
+            db,
+            analytics_event(
+                event_type="session_started",
+                hotspot_id=str(session_dict["hotspot_id"]),
+                user_mac=session_dict.get("user_mac"),
+                session_id=session_dict["id"],
+                extra={
+                    "package_type": package_type,
+                    "voucher_code": voucher["code"],
+                },
+            ),
+        )
         await db.vouchers.update_one(
             {"code": voucher["code"], "is_used": False},
             {"$set": {
@@ -7467,6 +7489,24 @@ async def redeem_voucher(
         )
 
         raise
+    # Record successful voucher redemption/session start in analytics.
+    # Analytics failure must not affect the successful voucher redemption.
+    try:
+        await track_event(
+            db,
+            analytics_event(
+                event_type="session_started",
+                hotspot_id=str(session_dict["hotspot_id"]),
+                user_mac=session_dict.get("user_mac"),
+                session_id=session_dict["id"],
+                extra={
+                    "package_type": package_type,
+                    "voucher_code": normalized_code,
+                },
+            ),
+        )
+    except Exception:
+        logging.exception("Failed to record voucher session analytics")
 
     return {
         "success": True,
@@ -8684,6 +8724,167 @@ async def get_active_portal_session(
 
 
 
+
+# ==================== FIRST-TIME WELCOME FREE SESSION ====================
+
+WELCOME_SESSION_DURATION_MINUTES = 15
+WELCOME_SESSION_RATE_LIMIT = "512K/512K"
+
+
+def get_welcome_device_identifier(
+    user_mac: Optional[str],
+    user_ip: Optional[str],
+) -> str:
+    """Return a stable device identifier for the first-time welcome session."""
+    normalized_mac = (user_mac or "").strip().lower()
+    normalized_ip = (user_ip or "").strip()
+
+    if normalized_mac:
+        return f"mac:{normalized_mac}"
+
+    if normalized_ip:
+        return f"ip:{normalized_ip}"
+
+    raise HTTPException(
+        status_code=400,
+        detail="A client MAC address or IP address is required.",
+    )
+
+
+@api_router.post("/portal/welcome-session")
+async def create_welcome_session(
+    hotspot_id: str,
+    user_mac: Optional[str] = None,
+    user_ip: Optional[str] = None,
+):
+    """
+    Give a device its one-time 15-minute CAIWAVE welcome session.
+
+    This is independent from:
+      - notification rewards
+      - watch-an-ad free sessions
+      - purchased packages
+
+    The app promotion is optional and never required for the free session.
+    """
+
+    device_identifier = get_welcome_device_identifier(
+        user_mac=user_mac,
+        user_ip=user_ip,
+    )
+
+    # Check whether this device has already received its welcome session
+    existing_welcome = await db.sessions.find_one(
+        {
+            "hotspot_id": hotspot_id,
+            "is_free": True,
+            "welcome_session": True,
+            "$or": [
+                {"user_mac": device_identifier},
+                {"user_ip": device_identifier},
+            ],
+        },
+        {"_id": 0},
+    )
+
+    if existing_welcome:
+        raise HTTPException(
+            status_code=403,
+            detail="This device has already received its CAIWAVE welcome session.",
+        )
+
+    hotspot = await db.hotspots.find_one(
+        {"id": hotspot_id},
+        {"_id": 0},
+    )
+
+    username, password = generate_radius_credentials(
+        hotspot.get("username_prefix", "") if hotspot else ""
+    )
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(
+        minutes=WELCOME_SESSION_DURATION_MINUTES
+    )
+
+    session = Session(
+        package_id="welcome-free",
+        hotspot_id=hotspot_id,
+        user_mac=device_identifier,
+        user_ip=device_identifier,
+        username=username,
+        password=password,
+        rate_limit=WELCOME_SESSION_RATE_LIMIT,
+        is_free=True,
+        started_at=now,
+        expires_at=expires_at,
+    )
+
+    session_dict = session.model_dump()
+    session_dict["started_at"] = now.isoformat()
+    session_dict["expires_at"] = expires_at.isoformat()
+
+    # Explicit marker so this session cannot be confused with
+    # advertisement-based free sessions.
+    session_dict["welcome_session"] = True
+    session_dict["welcome_session_duration_minutes"] = (
+        WELCOME_SESSION_DURATION_MINUTES
+    )
+
+    await db.sessions.insert_one(session_dict)
+
+    return {
+        "success": True,
+        "session_id": session.id,
+        "username": session.username,
+        "password": session.password,
+        "expires_at": expires_at.isoformat(),
+        "duration_minutes": WELCOME_SESSION_DURATION_MINUTES,
+        "welcome_session": True,
+        "app_promotion": {
+            "enabled": True,
+            "message": (
+                "Download the CAIWAVE App and enjoy free Wi-Fi every day."
+            ),
+        },
+        "message": (
+            "Welcome to CAIWAVE! "
+            "You've received 15 minutes of FREE Wi-Fi."
+        ),
+    }
+
+
+@api_router.get("/portal/welcome-session-status")
+async def get_welcome_session_status(
+    hotspot_id: str,
+    user_mac: Optional[str] = None,
+    user_ip: Optional[str] = None,
+):
+    """Check whether a device has already received its welcome session."""
+
+    device_identifier = get_welcome_device_identifier(
+        user_mac=user_mac,
+        user_ip=user_ip,
+    )
+
+    existing_welcome = await db.sessions.find_one(
+        {
+            "hotspot_id": hotspot_id,
+            "is_free": True,
+            "welcome_session": True,
+            "$or": [
+                {"user_mac": device_identifier},
+                {"user_ip": device_identifier},
+            ],
+        },
+        {"_id": 0},
+    )
+
+    return {
+        "eligible": existing_welcome is None,
+        "welcome_session_used": existing_welcome is not None,
+        "duration_minutes": WELCOME_SESSION_DURATION_MINUTES,
+    }
 @api_router.get("/portal/{hotspot_id}")
 async def get_portal_data(hotspot_id: str):
     """Get data for captive portal display"""
@@ -8804,259 +9005,10 @@ async def get_portal_data(hotspot_id: str):
         "mpesa_enabled": mpesa_service.is_configured()
     }
 
+
 NOTIFICATION_REWARD_DURATION_MINUTES = 15
 NOTIFICATION_REWARD_COOLDOWN_HOURS = 24
 NOTIFICATION_REWARD_RATE_LIMIT = "512K/512K"
-NOTIFICATION_ENROLLMENT_DURATION_SECONDS = 60
-NOTIFICATION_ENROLLMENT_COOLDOWN_HOURS = 24
-NOTIFICATION_ENROLLMENT_RATE_LIMIT = "256K/256K"
-
-
-def get_notification_reward_device_identifier(
-    user_mac: Optional[str],
-    user_ip: Optional[str],
-) -> str:
-    """Return a stable device identity for notification rewards."""
-    normalized_mac = (user_mac or "").strip().lower()
-    normalized_ip = (user_ip or "").strip()
-
-    if normalized_mac:
-        return f"mac:{normalized_mac}"
-
-    if normalized_ip:
-        return f"ip:{normalized_ip}"
-
-    raise HTTPException(
-        status_code=400,
-        detail="A client MAC address or IP address is required.",
-    )
-
-
-@api_router.post("/portal/notification-enrollment")
-async def create_notification_enrollment(
-    request: NotificationEnrollmentRequest,
-):
-    """
-    Create a short backend-controlled session so a captive-portal client
-    can reach the browser push service before claiming its full reward.
-    """
-    device_identifier = get_notification_reward_device_identifier(
-        request.user_mac,
-        request.user_ip,
-    )
-
-    hotspot = await db.hotspots.find_one(
-        {"id": request.hotspot_id},
-        {
-            "_id": 0,
-            "id": 1,
-            "username_prefix": 1,
-        },
-    )
-
-    if not hotspot:
-        raise HTTPException(
-            status_code=404,
-            detail="Hotspot not found.",
-        )
-
-    now = datetime.now(timezone.utc)
-    expires_at = now + timedelta(
-        seconds=NOTIFICATION_ENROLLMENT_DURATION_SECONDS
-    )
-    next_eligible_at = now + timedelta(
-        hours=NOTIFICATION_ENROLLMENT_COOLDOWN_HOURS
-    )
-    enrollment_id = str(uuid.uuid4())
-
-    claim_identity = {
-        "hotspot_id": request.hotspot_id,
-        "device_identifier": device_identifier,
-    }
-
-    existing_claim = await db.notification_enrollment_claims.find_one(
-        claim_identity,
-        {"_id": 0},
-    )
-
-    if existing_claim:
-        existing_expires_at = existing_claim.get("expires_at")
-
-        if isinstance(existing_expires_at, str):
-            try:
-                existing_expires_at = datetime.fromisoformat(
-                    existing_expires_at.replace("Z", "+00:00")
-                )
-            except ValueError:
-                existing_expires_at = None
-
-        if (
-            isinstance(existing_expires_at, datetime)
-            and existing_expires_at.tzinfo is None
-        ):
-            existing_expires_at = existing_expires_at.replace(
-                tzinfo=timezone.utc
-            )
-
-        if (
-            existing_expires_at
-            and existing_expires_at > now
-            and existing_claim.get("username")
-            and existing_claim.get("password")
-        ):
-            remaining_seconds = max(
-                1,
-                int((existing_expires_at - now).total_seconds()),
-            )
-
-            return {
-                "success": True,
-                "session_id": existing_claim.get("session_id"),
-                "username": existing_claim["username"],
-                "password": existing_claim["password"],
-                "expires_at": existing_expires_at.isoformat(),
-                "duration_seconds": remaining_seconds,
-                "enrollment_type": "notification",
-                "reused": True,
-                "message": (
-                    "Your notification setup connection is already active."
-                ),
-            }
-
-    claim_filter = {
-        **claim_identity,
-        "$or": [
-            {"next_eligible_at": {"$lte": now}},
-            {"next_eligible_at": {"$exists": False}},
-        ],
-    }
-
-    claim_update = {
-        "$set": {
-            "enrollment_id": enrollment_id,
-            "started_at": now,
-            "expires_at": expires_at,
-            "next_eligible_at": next_eligible_at,
-            "updated_at": now,
-            "status": "provisioning",
-        },
-        "$setOnInsert": {
-            "hotspot_id": request.hotspot_id,
-            "device_identifier": device_identifier,
-            "created_at": now,
-        },
-    }
-
-    try:
-        claim = await db.notification_enrollment_claims.find_one_and_update(
-            claim_filter,
-            claim_update,
-            upsert=True,
-            return_document=ReturnDocument.AFTER,
-        )
-    except DuplicateKeyError as exc:
-        blocked_claim = await db.notification_enrollment_claims.find_one(
-            claim_identity,
-            {
-                "_id": 0,
-                "next_eligible_at": 1,
-            },
-        )
-        blocked_until = (
-            blocked_claim.get("next_eligible_at")
-            if blocked_claim
-            else None
-        )
-
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": (
-                    "This device has already used its notification "
-                    "setup connection."
-                ),
-                "next_eligible_at": (
-                    blocked_until.isoformat()
-                    if hasattr(blocked_until, "isoformat")
-                    else blocked_until
-                ),
-            },
-        ) from exc
-
-    if not claim:
-        raise HTTPException(
-            status_code=409,
-            detail="Notification setup access is not currently available.",
-        )
-
-    username, password = generate_radius_credentials(
-        hotspot.get("username_prefix", "")
-    )
-
-    session = Session(
-        package_id="notification-enrollment",
-        hotspot_id=request.hotspot_id,
-        user_mac=(request.user_mac or None),
-        user_ip=(request.user_ip or None),
-        username=username,
-        password=password,
-        rate_limit=NOTIFICATION_ENROLLMENT_RATE_LIMIT,
-        is_free=True,
-        expires_at=expires_at,
-    )
-
-    session_dict = session.model_dump()
-    session_dict["started_at"] = session.started_at.isoformat()
-    session_dict["expires_at"] = session.expires_at.isoformat()
-    session_dict["reward_type"] = "notification-enrollment"
-    session_dict["notification_enrollment_id"] = enrollment_id
-    session_dict["duration_seconds"] = (
-        NOTIFICATION_ENROLLMENT_DURATION_SECONDS
-    )
-
-    try:
-        await db.sessions.insert_one(session_dict)
-
-        await db.notification_enrollment_claims.update_one(
-            {
-                **claim_identity,
-                "enrollment_id": enrollment_id,
-            },
-            {
-                "$set": {
-                    "session_id": session.id,
-                    "username": username,
-                    "password": password,
-                    "status": "active",
-                    "updated_at": datetime.now(timezone.utc),
-                },
-            },
-        )
-    except Exception:
-        await db.notification_enrollment_claims.delete_one(
-            {
-                **claim_identity,
-                "enrollment_id": enrollment_id,
-            }
-        )
-        raise
-
-    return {
-        "success": True,
-        "session_id": session.id,
-        "username": username,
-        "password": password,
-        "expires_at": expires_at.isoformat(),
-        "duration_seconds": NOTIFICATION_ENROLLMENT_DURATION_SECONDS,
-        "enrollment_type": "notification",
-        "reused": False,
-        "message": (
-            "One-minute notification setup connection activated. "
-            "Open CAIWAVE in Chrome and enable notifications."
-        ),
-    }
-
-
 @api_router.get("/portal/notification-reward-status")
 async def get_notification_reward_status(
     hotspot_id: str,
@@ -9404,6 +9356,7 @@ async def create_free_session(
     free_session_count = await db.sessions.count_documents({
         "is_free": True,
         "hotspot_id": hotspot_id,
+        "reward_type": {"$ne": "welcome"},
         "$or": [
             {"user_mac": user_identifier},
             {"user_ip": user_identifier}
@@ -9486,6 +9439,7 @@ async def get_free_session_status(
     free_session_count = await db.sessions.count_documents({
         "is_free": True,
         "hotspot_id": hotspot_id,
+        "reward_type": {"$ne": "welcome"},
         "$or": [
             {"user_mac": user_identifier},
             {"user_ip": user_identifier}

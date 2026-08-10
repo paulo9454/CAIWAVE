@@ -81,39 +81,6 @@ const registerWorker = async () =>
     scope: "/",
   });
 
-const openInFullBrowser = () => {
-  const currentUrl = window.location.href;
-  const isAndroid = /android/i.test(window.navigator.userAgent);
-
-  if (isAndroid) {
-    try {
-      const url = new URL(currentUrl);
-      const intentTarget =
-        `${url.host}${url.pathname}${url.search}${url.hash}`;
-
-      window.location.href =
-        `intent://${intentTarget}` +
-        `#Intent;scheme=${url.protocol.replace(":", "")};` +
-        "package=com.android.chrome;" +
-        `S.browser_fallback_url=${encodeURIComponent(currentUrl)};end`;
-
-      return;
-    } catch {
-      // Fall through to the normal browser-opening methods.
-    }
-  }
-
-  const opened = window.open(
-    currentUrl,
-    "_blank",
-    "noopener,noreferrer"
-  );
-
-  if (!opened) {
-    window.location.assign(currentUrl);
-  }
-};
-
 const sendSubscription = async (subscription, hotspotId) => {
   const serialized = subscription.toJSON();
 
@@ -168,7 +135,6 @@ export default function WebPushEnrollment({
   hotspotId,
   clientMac,
   clientIp,
-  notificationEnrollmentActive = false,
   onRewardGranted,
 }) {
   const [configuration, setConfiguration] = useState(null);
@@ -380,83 +346,6 @@ export default function WebPushEnrollment({
       cancelled = true;
     };
   }, [hotspotId, claimNotificationReward]);
-
-  const startNotificationEnrollment = async () => {
-    if (!hotspotId || busy) return;
-
-    setBusy(true);
-    setRewardStatus("claiming");
-    setRewardMessage(
-      "Preparing CAIWAVE app setup…"
-    );
-
-    try {
-      const response = await axios.post(
-        `${API_URL}/portal/notification-enrollment`,
-        {
-          hotspot_id: hotspotId,
-          user_mac: clientMac || null,
-          user_ip: clientIp || null,
-        }
-      );
-
-      const credentials = response.data;
-
-      if (!credentials?.username || !credentials?.password) {
-        throw new Error(
-          "Temporary WiFi credentials were not returned."
-        );
-      }
-
-      try {
-        window.localStorage.setItem(
-          `caiwave:notification-enrollment:${hotspotId}`,
-          JSON.stringify({
-            started_at: Date.now(),
-            expires_at: credentials.expires_at,
-            portal_url: window.location.href,
-          })
-        );
-      } catch {
-        // The backend remains authoritative when storage is unavailable.
-      }
-
-      setRewardMessage(
-        response.data?.message ||
-          "App setup access activated. Continue in Chrome to install CAIWAVE."
-      );
-
-      if (typeof onRewardGranted !== "function") {
-        throw new Error("The router login handler is unavailable.");
-      }
-
-      const submitted = onRewardGranted({
-        ...credentials,
-        destination: window.location.href,
-      });
-
-      if (submitted === false) {
-        throw new Error(
-          "The temporary WiFi login could not be submitted to the router."
-        );
-      }
-    } catch (error) {
-      console.error(
-        "Failed to start notification enrollment:",
-        error
-      );
-
-      const detail = error?.response?.data?.detail;
-
-      setRewardStatus("error");
-      setRewardMessage(
-        (typeof detail === "string" ? detail : detail?.message) ||
-          error?.message ||
-          "CAIWAVE app setup could not be started."
-      );
-      setBusy(false);
-    }
-  };
 
   const installCaiwaveApp = async () => {
     const installPrompt = installPromptRef.current;
@@ -677,33 +566,13 @@ export default function WebPushEnrollment({
             </p>
 
             {status === "unsupported" && (
-              <>
-                <button
-                  type="button"
-                  onClick={
-                    notificationEnrollmentActive
-                      ? openInFullBrowser
-                      : startNotificationEnrollment
-                  }
-                  disabled={busy && !notificationEnrollmentActive}
-                  className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                >
-                  {notificationEnrollmentActive
-                    ? "Continue in Chrome"
-                    : busy
-                      ? "Preparing App Setup…"
-                      : "Start CAIWAVE App Setup"}
-                </button>
+          <p className="mt-2 text-sm leading-6 text-neutral-400">
+            This browser cannot enable CAIWAVE notifications from the WiFi sign-in window.
+            You can install CAIWAVE from a supported browser and enable notifications there.
+          </p>
+        )}
 
-                <p className="mt-3 text-xs leading-5 text-neutral-500">
-                  {notificationEnrollmentActive
-                    ? "Your app setup connection is active. Continue in Chrome, install CAIWAVE, then enable notifications to activate your free session."
-                    : "Temporary app setup access will close automatically."}
-                </p>
-              </>
-            )}
-
-            {status !== "unsupported" && (
+        {status !== "unsupported" && (
               <p className="mt-2 text-xs text-neutral-500">
                 This does not affect WiFi access.
               </p>
