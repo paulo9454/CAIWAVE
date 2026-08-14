@@ -62,7 +62,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
-from services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
+from backend.services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
 from backend.services.provisioning_v2.production_input import (
     build_persisted_production_router_record,
@@ -2305,30 +2305,26 @@ async def handle_wifi_payment_success(transaction: dict, mpesa_receipt: str):
     session_dict["expires_at"] = session_dict["expires_at"].isoformat()
     await db.sessions.insert_one(session_dict)
     
-    await track_event(
-        db,
-        analytics_event(
-            event_type="session_started",
-            hotspot_id=str(session_dict["hotspot_id"]),
-            user_mac=session_dict.get("user_mac"),
-            session_id=session_dict["id"],
-            extra={
-                "package_type": package_type,
-                "voucher_code": voucher["code"],
-            },
-        ),
-    )
-
-    await db.vouchers.update_one(
-        {"code": voucher["code"], "is_used": False},
-        {
-        "$set": {
-            "is_used": True,
-            "used_at": now.isoformat(),
-            "user_mac": request_mac,
-          }
-       },
-    )
+    # Record successful M-Pesa session start in analytics.
+    # Analytics failure must never break successful payment/session creation.
+    try:
+        await track_event(
+            db,
+            analytics_event(
+                event_type="session_started",
+                hotspot_id=str(session_dict["hotspot_id"]),
+                user_mac=session_dict.get("user_mac"),
+                session_id=session_dict["id"],
+                extra={
+                    "package_id": package_id,
+                    "payment_id": payment.id,
+                    "payment_method": PaymentMethod.MPESA.value,
+                    "amount": amount,
+                },
+            ),
+        )
+    except Exception:
+        logging.exception("Failed to record M-Pesa session analytics")
     # Update payment with session ID
     await db.payments.update_one(
         {"id": payment.id},
@@ -2535,7 +2531,7 @@ async def get_mpesa_config_status(user: dict = Depends(require_admin)):
 
 # ==================== Paystack Payment Routes ====================
 
-from services.paystack import (
+from backend.services.paystack import (
     PaystackService, PaystackConfig, 
     TransactionInitRequest, MobileMoneyChargeRequest, SubaccountCreateRequest,
     KENYA_BANKS
@@ -2821,7 +2817,7 @@ async def owner_pay_subscription_paystack(
     await db.paystack_transactions.insert_one(transaction_record)
     
     # Use Mobile Money Charge for direct STK Push
-    from services.paystack import MobileMoneyChargeRequest
+    from backend.services.paystack import MobileMoneyChargeRequest
     
     charge_request = MobileMoneyChargeRequest(
         email=owner.get("email", f"{phone}@caiwave.com"),
@@ -2911,7 +2907,7 @@ async def advertiser_pay_ad_paystack(
     await db.paystack_transactions.insert_one(transaction_record)
     
     # Use Mobile Money Charge for direct STK Push
-    from services.paystack import MobileMoneyChargeRequest
+    from backend.services.paystack import MobileMoneyChargeRequest
     
     charge_request = MobileMoneyChargeRequest(
         email=user.get("email", f"{phone}@caiwave.com"),
@@ -3201,7 +3197,7 @@ async def client_pay_wifi_paystack(
     await db.paystack_transactions.insert_one(transaction_record)
     
     # Use Mobile Money Charge for direct STK Push
-    from services.paystack import MobileMoneyChargeRequest
+    from backend.services.paystack import MobileMoneyChargeRequest
     
     charge_request = MobileMoneyChargeRequest(
         email=email,
