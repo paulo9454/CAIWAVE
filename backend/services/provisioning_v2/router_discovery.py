@@ -44,4 +44,37 @@ def build_router_discovery_snapshot(
             "Duplicate discovered bridge names"
         )
 
+    vlan_names = [
+        item.name
+        for item in snapshot.vlans
+    ]
+
+    if len(vlan_names) != len(set(vlan_names)):
+        raise RouterDiscoveryError(
+            "Duplicate discovered VLAN names"
+        )
+
+    known_interfaces = set(interface_names)
+
+    for vlan in snapshot.vlans:
+        if vlan.parent_interface not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"VLAN parent interface does not exist: "
+                f"{vlan.parent_interface}"
+            )
+
+    for address in snapshot.addresses:
+        if address.interface not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"Address references unknown interface: "
+                f"{address.interface}"
+            )
+
+    for port in snapshot.bridge_ports:
+        if port.interface_name not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"Bridge port references unknown interface: "
+                f"{port.interface_name}"
+            )
+
     return snapshot

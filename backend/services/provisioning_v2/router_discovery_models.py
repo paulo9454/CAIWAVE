@@ -47,6 +47,30 @@ class DiscoveredAddress(StrictModel):
     interface: str
     address: str
 
+class DiscoveredBridgePort(StrictModel):
+    bridge_name: str
+    interface_name: str
+
+
+class DiscoveredRoute(StrictModel):
+    destination: str
+    gateway: str
+
+
+class DiscoveredDNS(StrictModel):
+    servers: List[str] = Field(default_factory=list)
+
+
+class DiscoveredDHCPServer(StrictModel):
+    name: str
+    interface: str
+    address_pool: str
+
+
+class DiscoveredHotspot(StrictModel):
+    name: str
+    interface: str
+    profile: str
 
 class RouterDiscoverySnapshot(StrictModel):
     router_id: str
@@ -59,3 +83,12 @@ class RouterDiscoverySnapshot(StrictModel):
     bridges: List[DiscoveredBridge] = Field(default_factory=list)
     vlans: List[DiscoveredVLAN] = Field(default_factory=list)
     addresses: List[DiscoveredAddress] = Field(default_factory=list)
+
+    bridge_ports: List[DiscoveredBridgePort] = Field(default_factory=list)
+    routes: List[DiscoveredRoute] = Field(default_factory=list)
+
+    dns: List[DiscoveredDNS] = Field(default_factory=list)
+
+    dhcp_servers: List[DiscoveredDHCPServer] = Field(default_factory=list)
+
+    hotspots: List[DiscoveredHotspot] = Field(default_factory=list)
