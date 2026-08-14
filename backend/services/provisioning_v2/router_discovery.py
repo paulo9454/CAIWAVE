@@ -75,6 +75,29 @@ def build_router_discovery_snapshot(
             raise RouterDiscoveryError(
                 f"Bridge port references unknown interface: "
                 f"{port.interface_name}"
+        )
+
+    known_bridges = set(bridge_names)
+
+    for port in snapshot.bridge_ports:
+        if port.bridge_name not in known_bridges:
+            raise RouterDiscoveryError(
+                f"Bridge port references unknown bridge: "
+                f"{port.bridge_name}"
+            )
+
+    for dhcp in snapshot.dhcp_servers:
+        if dhcp.interface not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"DHCP server references unknown interface: "
+                f"{dhcp.interface}"
+            )
+
+    for hotspot in snapshot.hotspots:
+        if hotspot.interface not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"Hotspot references unknown interface: "
+                f"{hotspot.interface}"
             )
 
     return snapshot
