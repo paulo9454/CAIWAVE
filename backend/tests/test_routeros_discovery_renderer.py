@@ -15,12 +15,16 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert "/system resource get board-name" in section.content
     assert "/system resource get version" in section.content
     assert "/system package print as-value" in section.content
-    assert "/interface wireless print as-value" in section.content
+    assert "/interface print as-value" in section.content
+    assert "/interface wireless print as-value" not in section.content
+    assert ":local wireless {};" in section.content
     assert ":serialize to=json" in section.content
     assert "/tool fetch url=" in section.content
     assert "/system script add" not in section.content
     assert "/system script run" not in section.content
     assert "CAIWAVE observational router discovery" in section.content
+    assert '[:len $json] > 60000' in section.content
+    assert 'CAIWAVE discovery payload exceeds safe size' in section.content
 
 
 
@@ -66,3 +70,4 @@ def test_discovery_script_posts_observed_router_state():
     assert "wireless_interfaces" in section.content
     assert ":serialize to=json" in section.content
     assert '/tool fetch url="' in section.content
+    assert ':local nas_identifier "CAIWAVE-TEST";' in section.content
