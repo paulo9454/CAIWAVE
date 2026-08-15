@@ -17,7 +17,11 @@ from backend.services.provisioning_v2.provisioning_bundle import (
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.snapshot_builder import build_provisioning_snapshot
 from backend.services.provisioning_v2.topology_planner import plan_topology
-
+from backend.services.provisioning_v2.wireless_planner import (
+    WirelessMode,
+    WirelessPlan,
+    WirelessRadioPlan,
+)
 
 def build_all():
     router = {
@@ -167,3 +171,53 @@ def test_rejects_firewall_wan_mismatch():
             dhcp=plans[4], dns=plans[5], nat=plans[6], hotspot=plans[7],
             portal=plans[8], radius=plans[9], firewall=bad_firewall,
         )
+
+def test_bundle_without_wireless_remains_backward_compatible():
+    plans = build_all()
+
+    bundle = build_provisioning_bundle(
+        snapshot=plans[0],
+        topology=plans[1],
+        bridge=plans[2],
+        address=plans[3],
+        dhcp=plans[4],
+        dns=plans[5],
+        nat=plans[6],
+        hotspot=plans[7],
+        portal=plans[8],
+        radius=plans[9],
+        firewall=plans[10],
+    )
+
+    assert bundle.wireless is None
+
+
+def test_bundle_can_carry_wireless_plan():
+    plans = build_all()
+
+    wireless = WirelessPlan(
+        radios=[
+            WirelessRadioPlan(
+                interface="wlan1",
+                mode=WirelessMode.AP,
+                ssid="MAIN_caiwave",
+            )
+        ]
+    )
+
+    bundle = build_provisioning_bundle(
+        snapshot=plans[0],
+        topology=plans[1],
+        bridge=plans[2],
+        address=plans[3],
+        dhcp=plans[4],
+        dns=plans[5],
+        nat=plans[6],
+        hotspot=plans[7],
+        portal=plans[8],
+        radius=plans[9],
+        firewall=plans[10],
+        wireless=wireless,
+    )
+
+    assert bundle.wireless == wireless

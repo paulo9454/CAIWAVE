@@ -31,7 +31,7 @@ from backend.services.provisioning_v2.nat_planner import NATPlan
 from backend.services.provisioning_v2.portal_planner import PortalPlan
 from backend.services.provisioning_v2.radius_planner import RadiusPlan
 from backend.services.provisioning_v2.topology_planner import TopologyPlan
-
+from backend.services.provisioning_v2.wireless_planner import WirelessPlan
 
 class ProvisioningBundleError(ValueError):
     """Raised when a provisioning bundle cannot be safely assembled."""
@@ -60,6 +60,7 @@ class ProvisioningBundle(StrictModel):
     portal: PortalPlan
     radius: RadiusPlan
     firewall: FirewallPlan
+    wireless: WirelessPlan | None = None
     warnings: List[str] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -85,6 +86,7 @@ def build_provisioning_bundle(
     portal: PortalPlan,
     radius: RadiusPlan,
     firewall: FirewallPlan,
+    wireless: WirelessPlan | None = None,
 ) -> ProvisioningBundle:
     """
     Assemble an immutable provisioning bundle from validated plans.
@@ -120,6 +122,9 @@ def build_provisioning_bundle(
     for plan in [address, dhcp, dns, nat, hotspot, portal, radius, firewall]:
         warnings.extend(getattr(plan, "warnings", []))
 
+    if wireless is not None:
+        warnings.extend(wireless.warnings)
+
     bundle_id = f"bundle:{snapshot.snapshot_id}"
 
     checksum_payload = {
@@ -135,6 +140,11 @@ def build_provisioning_bundle(
         "portal": portal.model_dump(mode="json"),
         "radius": radius.model_dump(mode="json"),
         "firewall": firewall.model_dump(mode="json"),
+        "wireless": (
+            wireless.model_dump(mode="json")
+            if wireless is not None
+            else None
+        ),
     }
 
     return ProvisioningBundle(
@@ -156,6 +166,7 @@ def build_provisioning_bundle(
         portal=portal,
         radius=radius,
         firewall=firewall,
+        wireless=wireless,
         warnings=warnings,
         metadata={
             "bundle_contract_version": "1.0",
