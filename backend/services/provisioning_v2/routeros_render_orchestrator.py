@@ -44,6 +44,9 @@ from backend.services.provisioning_v2.routeros_renderer_contracts import (
     build_render_manifest,
 )
 
+from backend.services.provisioning_v2.routeros_wireless_renderer import (
+    render_wireless_section,
+)
 
 class RouterOSRenderOrchestratorError(ValueError):
     """Raised when a bundle cannot be rendered safely."""
@@ -67,6 +70,11 @@ def _render_section(bundle: ProvisioningBundle, section_name: RouterOSSectionNam
     renderers = {
         RouterOSSectionName.IDENTITY: render_identity_section,
         RouterOSSectionName.INTERFACES: render_interface_section,
+        RouterOSSectionName.WIRELESS: lambda bundle: (
+            render_wireless_section(bundle.wireless)
+            if bundle.wireless is not None
+            else _planned_placeholder(RouterOSSectionName.WIRELESS)
+        ),
         RouterOSSectionName.BRIDGE: render_bridge_section,
         RouterOSSectionName.ADDRESSING: render_address_section,
         RouterOSSectionName.DHCP: render_dhcp_section,
