@@ -187,7 +187,37 @@ def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2Builder
         radius=radius,
         firewall=firewall,
     )
-    artifact = render_routeros_bundle(bundle=bundle)
+
+    discovery_enabled = (
+        os.environ.get(
+            "CAIWAVE_DISCOVERY_ENABLED",
+            "false",
+        ).lower()
+        == "true"
+    )
+
+    render_context = None
+
+    if discovery_enabled:
+        from backend.services.provisioning_v2.routeros_renderer_contracts import (
+            RouterOSSectionName,
+            build_render_context,
+            default_routeros_section_order,
+        )
+
+        section_order = [
+            *default_routeros_section_order(),
+            RouterOSSectionName.DISCOVERY,
+        ]
+
+        render_context = build_render_context(
+            section_order=section_order,
+        )
+
+    artifact = render_routeros_bundle(
+        bundle=bundle,
+        context=render_context,
+    )
     lint = lint_production_routeros_script(
         artifact.content,
         context=ProductionRouterOSLintContext(

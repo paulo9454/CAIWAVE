@@ -69,12 +69,24 @@ def lint_routeros_script(content: str) -> RouterOSLintResult:
             errors.append(f"Unresolved or forbidden token found: {token}")
 
     for index, line in enumerate(command_lines, start=1):
-        if not line.startswith("/"):
-            errors.append(f"Command line {index} does not start with RouterOS path: {line}")
+        is_routeros_command = line.startswith("/")
+        is_routeros_script = line.startswith(":")
+
+        if not is_routeros_command and not is_routeros_script:
+            errors.append(
+                f"Command line {index} does not start with a "
+                f"RouterOS path or script statement: {line}"
+            )
+
         if "\t" in line:
-            warnings.append(f"Command line {index} contains a tab character")
+            warnings.append(
+                f"Command line {index} contains a tab character"
+            )
+
         if line.count('"') % 2 != 0:
-            errors.append(f"Command line {index} has unbalanced quotes: {line}")
+            errors.append(
+                f"Command line {index} has unbalanced quotes: {line}"
+            )
 
     seen = set()
     duplicates = []

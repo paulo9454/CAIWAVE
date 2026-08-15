@@ -55,3 +55,19 @@ def test_detects_duplicate_commands():
 
     assert result.valid is False
     assert any("Duplicate RouterOS command found" in error for error in result.errors)
+
+def test_routeros_linter_accepts_script_statements_without_path_error():
+    content = """
+:local interfaces [/interface print as-value];
+:local payload {"interfaces"=$interfaces};
+:local json [:serialize to=json value=$payload];
+/tool fetch url="https://caiwave.com/api/mikrotik-onboard/discovery" http-method=post http-data=$json keep-result=no;
+"""
+
+    result = lint_routeros_script(content)
+
+    assert not any(
+        "does not start with a RouterOS path or script statement"
+        in error
+        for error in result.errors
+    )

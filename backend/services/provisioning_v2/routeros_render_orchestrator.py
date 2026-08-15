@@ -48,6 +48,10 @@ from backend.services.provisioning_v2.routeros_wireless_renderer import (
     render_wireless_section,
 )
 
+from backend.services.provisioning_v2.routeros_discovery_renderer import (
+    render_discovery_script,
+)
+
 class RouterOSRenderOrchestratorError(ValueError):
     """Raised when a bundle cannot be rendered safely."""
 
@@ -74,6 +78,18 @@ def _render_section(bundle: ProvisioningBundle, section_name: RouterOSSectionNam
             render_wireless_section(bundle.wireless)
             if bundle.wireless is not None
             else _planned_placeholder(RouterOSSectionName.WIRELESS)
+        ),
+        RouterOSSectionName.DISCOVERY: lambda bundle: (
+            render_discovery_script(
+                discovery_url=bundle.snapshot.heartbeat.heartbeat_url
+                .strip()
+                .rstrip("/")
+                .replace(
+                    "/mikrotik-onboard/heartbeat",
+                    "/mikrotik-onboard/discovery",
+                ),
+                nas_identifier=bundle.snapshot.identity.nas_identifier,
+            )
         ),
         RouterOSSectionName.BRIDGE: render_bridge_section,
         RouterOSSectionName.ADDRESSING: render_address_section,

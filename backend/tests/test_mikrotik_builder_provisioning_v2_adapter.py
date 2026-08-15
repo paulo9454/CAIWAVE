@@ -3,7 +3,9 @@ import os
 from backend.services.mikrotik_builder import build_mikrotik_script
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
 from backend.services.provisioning_v2.routeros_script_linter import lint_routeros_script
-
+from backend.services.provisioning_v2.routeros_renderer_contracts import (
+    RouterOSSectionName,
+)
 
 def sample_router():
     return {
@@ -69,3 +71,24 @@ def test_existing_builder_keeps_legacy_path_when_engine_v2_disabled(monkeypatch)
 
     assert "# CAIWAVE Identity" not in content
     assert "CAIWAVE" in content
+
+def test_discovery_is_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("CAIWAVE_DISCOVERY_ENABLED", raising=False)
+
+    output = build_provisioning_v2_rsc_from_router(sample_router())
+
+    assert "/system script add" in output.content
+    assert "CAIWAVE observational router discovery" not in output.content
+
+
+def test_discovery_is_added_when_feature_flag_enabled(monkeypatch):
+    monkeypatch.setenv("CAIWAVE_DISCOVERY_ENABLED", "true")
+
+    output = build_provisioning_v2_rsc_from_router(sample_router())
+
+    assert "CAIWAVE observational router discovery" in output.content
+    assert "/interface print as-value" in output.content
+    assert "/system resource get board-name" in output.content
+    assert "/system package print as-value" in output.content
+    assert "/interface wireless print as-value" in output.content
+    assert "/tool fetch url=" in output.content

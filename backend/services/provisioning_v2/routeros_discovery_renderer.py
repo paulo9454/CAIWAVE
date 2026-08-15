@@ -117,7 +117,7 @@ def render_discovery_script(
     )
 
     return RouterOSRenderedSection(
-        name=RouterOSSectionName.VALIDATION,
+        name=RouterOSSectionName.DISCOVERY,
         status=RenderStatus.RENDERED,
         content=content,
         checksum=_sha256(content),

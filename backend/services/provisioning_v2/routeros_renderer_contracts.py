@@ -35,6 +35,7 @@ class RouterOSSectionName(str, Enum):
     IDENTITY = "identity"
     INTERFACES = "interfaces"
     WIRELESS = "wireless"
+    DISCOVERY = "discovery"
     BRIDGE = "bridge"
     ADDRESSING = "addressing"
     DHCP = "dhcp"
