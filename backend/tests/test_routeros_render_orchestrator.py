@@ -24,6 +24,11 @@ from backend.services.provisioning_v2.routeros_renderer_contracts import (
 )
 from backend.services.provisioning_v2.snapshot_builder import build_provisioning_snapshot
 from backend.services.provisioning_v2.topology_planner import plan_topology
+from backend.services.provisioning_v2.wireless_planner import (
+    WirelessMode,
+    WirelessPlan,
+    WirelessRadioPlan,
+)
 
 
 def build_bundle():
@@ -165,3 +170,76 @@ def test_legacy_skeleton_alias_returns_rendered_artifact():
 
     assert artifact.status == RenderStatus.RENDERED
     assert "/system identity set" in artifact.content
+
+def test_render_orchestrator_renders_explicit_wireless_plan():
+    bundle = build_bundle()
+
+    wireless = WirelessPlan(
+        radios=[
+            WirelessRadioPlan(
+                interface="wlan1",
+                mode=WirelessMode.AP,
+                ssid="MAIN_caiwave",
+            )
+        ]
+    )
+
+    bundle = bundle.model_copy(
+        update={"wireless": wireless}
+    )
+
+    context = build_render_context(
+        section_order=[
+            RouterOSSectionName.HEADER,
+            RouterOSSectionName.INTERFACES,
+            RouterOSSectionName.WIRELESS,
+            RouterOSSectionName.BRIDGE,
+            RouterOSSectionName.FOOTER,
+        ]
+    )
+
+    artifact = render_routeros_bundle(
+        bundle=bundle,
+        context=context,
+    )
+
+    assert [section.name for section in artifact.sections] == [
+        RouterOSSectionName.HEADER,
+        RouterOSSectionName.INTERFACES,
+        RouterOSSectionName.WIRELESS,
+        RouterOSSectionName.BRIDGE,
+        RouterOSSectionName.FOOTER,
+    ]
+
+    assert "/interface wireless" in artifact.content
+    assert 'mode="ap-bridge"' in artifact.content
+    assert 'ssid="MAIN_caiwave"' in artifact.content
+    assert 'numbers="wlan1"' in artifact.content
+
+def test_default_render_context_does_not_enable_wireless():
+    bundle = build_bundle()
+
+    wireless = WirelessPlan(
+        radios=[
+            WirelessRadioPlan(
+                interface="wlan1",
+                mode=WirelessMode.AP,
+                ssid="MAIN_caiwave",
+            )
+        ]
+    )
+
+    bundle = bundle.model_copy(
+        update={"wireless": wireless}
+    )
+
+    artifact = render_routeros_bundle(
+        bundle=bundle,
+    )
+
+    assert RouterOSSectionName.WIRELESS not in [
+        section.name
+        for section in artifact.sections
+    ]
+
+    assert "/interface wireless" not in artifact.content
