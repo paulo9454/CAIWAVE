@@ -6690,9 +6690,25 @@ async def get_mikrotik_router_diagnostics(
             "heartbeat_received_at": router.get("heartbeat_received_at"),
             "heartbeat_age_seconds": heartbeat_age_seconds,
             "hotspot_id": router.get("hotspot_id"),
+            "discovery_received": bool(
+                router.get("discovery")
+            ),
+            "discovery_received_at": (
+                router.get("discovery") or {}
+            ).get("received_at"),
+            "wireless_detected": bool(
+                (router.get("discovery") or {})
+                .get("capabilities", {})
+                .get("supports_wireless")
+            ),
         },
         "checks": checks,
         "diagnostics": diag,
+        "discovery": router.get("discovery") or {
+            "received_at": None,
+            "snapshot": None,
+            "capabilities": None,
+        },
         "radius": {
             "enabled": radius_enabled,
             "configured": radius_configured,
