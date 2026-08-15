@@ -47,3 +47,22 @@ def test_discovery_renderer_rejects_blank_nas_identifier():
 
     raise AssertionError("Expected blank NAS identifier to be rejected")
 
+
+def test_discovery_script_posts_observed_router_state():
+    section = render_discovery_script(
+        discovery_url="https://caiwave.com/api/mikrotik-onboard/discovery",
+        nas_identifier="CAIWAVE-TEST",
+    )
+
+    assert section.status.value == "rendered"
+    assert "https://caiwave.com/api/mikrotik-onboard/discovery" in section.content
+    assert "nas_identifier" in section.content
+    assert "interfaces" in section.content
+    assert "bridges" in section.content
+    assert "vlans" in section.content
+    assert "addresses" in section.content
+    assert "routes" in section.content
+    assert "packages" in section.content
+    assert "wireless_interfaces" in section.content
+    assert ":serialize to=json" in section.content
+    assert '/tool fetch url="' in section.content
