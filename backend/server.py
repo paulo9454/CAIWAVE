@@ -6335,6 +6335,105 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "timestamp": now
     }
 
+
+class MikroTikDiscoveryRequest(BaseModel):
+    nas_identifier: str
+    router: dict = Field(default_factory=dict)
+    interfaces: List[dict] = Field(default_factory=list)
+    bridges: List[dict] = Field(default_factory=list)
+    vlans: List[dict] = Field(default_factory=list)
+    addresses: List[dict] = Field(default_factory=list)
+    routes: List[dict] = Field(default_factory=list)
+    packages: List[dict] = Field(default_factory=list)
+    wireless_interfaces: List[dict] = Field(default_factory=list)
+
+
+@mikrotik_onboard_router.post("/discovery")
+async def mikrotik_discovery(payload: MikroTikDiscoveryRequest):
+    from backend.services.provisioning_v2.router_capabilities import (
+        detect_router_capabilities,
+    )
+    from backend.services.provisioning_v2.router_discovery_ingest import (
+        build_discovery_snapshot_from_payload,
+    )
+
+    router = await db.mikrotik_routers.find_one(
+        {"nas_identifier": payload.nas_identifier},
+        {"_id": 0},
+    )
+
+    if not router:
+        raise HTTPException(
+            status_code=404,
+            detail="Router not registered",
+        )
+
+    raw_payload = payload.model_dump()
+
+    try:
+        discovery_snapshot = build_discovery_snapshot_from_payload(
+            raw_payload,
+            router_id=router["id"],
+        )
+        capabilities = detect_router_capabilities(
+            discovery_snapshot
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid router discovery payload: {exc}",
+        ) from exc
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    discovery_record = {
+        "received_at": now,
+        "snapshot": discovery_snapshot.model_dump(mode="json"),
+        "capabilities": capabilities.model_dump(mode="json"),
+    }
+
+    await db.mikrotik_routers.update_one(
+        {"id": router["id"]},
+        {
+            "$set": {
+                "discovery": discovery_record,
+                "updated_at": now,
+            }
+        },
+    )
+
+    await update_router_diagnostics(
+        router["id"],
+        {
+            "discovery_received": True,
+            "discovery_received_at": now,
+            "wireless_detected": capabilities.supports_wireless,
+            "wireless_interfaces": capabilities.wireless_interfaces,
+            "discovered_interface_count": capabilities.interface_count,
+        },
+    )
+
+    await record_router_event(
+        router["id"],
+        "discovery",
+        "Router discovery received",
+        "success",
+        {
+            "interface_count": capabilities.interface_count,
+            "wireless_interfaces": capabilities.wireless_interfaces,
+            "routeros_version": capabilities.routeros_version,
+            "board_name": capabilities.board_name,
+        },
+    )
+
+    return {
+        "success": True,
+        "router_id": router["id"],
+        "nas_identifier": payload.nas_identifier,
+        "discovery_received_at": now,
+        "capabilities": capabilities.model_dump(mode="json"),
+    }
+
 @mikrotik_onboard_router.post("/health/evaluate")
 async def evaluate_router_health():
 

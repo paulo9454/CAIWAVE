@@ -86,3 +86,11 @@ def test_duplicate_interfaces_are_rejected():
 
     with pytest.raises(RouterDiscoveryError):
         build_discovery_snapshot_from_payload(payload)
+
+def test_internal_router_id_can_override_nas_identifier():
+    snapshot = build_discovery_snapshot_from_payload(
+        _payload(),
+        router_id="mongo-router-123",
+    )
+
+    assert snapshot.router_id == "mongo-router-123"

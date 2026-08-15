@@ -283,6 +283,8 @@ def _normalize_routes(
 
 def build_discovery_snapshot_from_payload(
     payload: dict[str, Any],
+    *,
+    router_id: str | None = None,
 ) -> RouterDiscoverySnapshot:
     if not isinstance(payload, dict):
         raise RouterDiscoveryIngestionError(
@@ -300,6 +302,16 @@ def build_discovery_snapshot_from_payload(
         "nas_identifier",
         "payload",
     )
+    effective_router_id = (
+        str(router_id).strip()
+        if router_id is not None
+        else nas_identifier
+    )
+
+    if not effective_router_id:
+        raise RouterDiscoveryIngestionError(
+            "router_id cannot be blank"
+        )
 
     interfaces = _normalize_interfaces(
         payload.get("interfaces", [])
@@ -322,7 +334,7 @@ def build_discovery_snapshot_from_payload(
     )
 
     snapshot = RouterDiscoverySnapshot(
-        router_id=nas_identifier,
+        router_id=effective_router_id,
         board_name=_required_string(
             router,
             "board_name",
