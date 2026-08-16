@@ -4,6 +4,11 @@ from backend.services.provisioning_v2.router_capabilities import (
     RouterCapabilityFacts,
     detect_router_capabilities,
 )
+
+from backend.services.provisioning_v2.router_discovery import (
+    build_router_discovery_snapshot,
+)
+
 from backend.services.provisioning_v2.router_discovery_models import (
     DiscoveredInterface,
     RouterDiscoverySnapshot,
@@ -85,3 +90,37 @@ def test_invalid_discovery_snapshot_is_rejected():
 
     with pytest.raises(ValueError):
         detect_router_capabilities(snapshot)
+
+def test_wlan_interface_is_detected_as_wireless():
+    snapshot = build_router_discovery_snapshot(
+        RouterDiscoverySnapshot(
+            router_id="wlan-router-1",
+            board_name="RB951Ui-2HnD",
+            routeros_version="7.22",
+            architecture="mipsbe",
+            interfaces=[
+                DiscoveredInterface(
+                    name="ether1",
+                    type="ether",
+                    running=True,
+                ),
+                DiscoveredInterface(
+                    name="wlan1",
+                    type="wlan",
+                    running=False,
+                ),
+            ],
+            bridges=[],
+            bridge_ports=[],
+            vlans=[],
+            addresses=[],
+            routes=[],
+            dhcp_servers=[],
+            hotspots=[],
+        )
+    )
+
+    facts = detect_router_capabilities(snapshot)
+
+    assert facts.wireless_interfaces == ["wlan1"]
+    assert facts.supports_wireless is True

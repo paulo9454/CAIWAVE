@@ -70,6 +70,7 @@ def detect_router_capabilities(
             "wireless",
             "wifi",
             "wifiwave2",
+            "wlan",
         }
     ]
 
