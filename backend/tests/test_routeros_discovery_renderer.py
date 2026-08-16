@@ -17,7 +17,6 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert "/system package print as-value" in section.content
     assert "/interface print as-value" in section.content
     assert "/interface wireless print as-value" not in section.content
-    assert ":local wireless" not in section.content
     assert ":local nasid" in section.content
     assert ":local nas_identifier" not in section.content
     assert '"nas_identifier"=$nasid' in section.content
@@ -26,8 +25,8 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert "/system script add" not in section.content
     assert "/system script run" not in section.content
     assert "CAIWAVE observational router discovery" in section.content
-    assert '[:len $json] > 60000' in section.content
-    assert 'CAIWAVE discovery payload exceeds safe size' in section.content
+    assert '[:len $json] <= 60000' in section.content
+    assert ':if ([:len $json] <= 60000) do={' in section.content
     assert "/interface bridge port print as-value" in section.content
     assert "/ip dhcp-server print as-value" in section.content
     assert "/ip hotspot print as-value" in section.content
@@ -38,6 +37,11 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert ":local dhcpservers" in section.content
     assert ":local bridge_ports" not in section.content
     assert ":local dhcp_servers" not in section.content
+    assert section.content.count("/tool fetch url=") == 1
+    assert ":do {" in section.content
+    assert section.content.endswith(
+        '} on-error={ :log warning "CAIWAVE discovery execution failed"; };'
+    )
 
 
 def test_discovery_renderer_rejects_non_https_url():
@@ -79,7 +83,6 @@ def test_discovery_script_posts_observed_router_state():
     assert "addresses" in section.content
     assert "routes" in section.content
     assert "packages" in section.content
-    assert "wireless_interfaces" in section.content
     assert ":serialize to=json" in section.content
     assert '/tool fetch url="' in section.content
     assert ':local nasid "CAIWAVE-TEST";' in section.content

@@ -94,5 +94,4 @@ def test_discovery_is_added_when_feature_flag_enabled(monkeypatch):
     assert ":local wireless" not in output.content
     assert ":local nasid" in output.content
     assert '"nas_identifier"=$nasid' in output.content
-    assert '"wireless_interfaces"=[]' in output.content
     assert "/tool fetch url=" in output.content

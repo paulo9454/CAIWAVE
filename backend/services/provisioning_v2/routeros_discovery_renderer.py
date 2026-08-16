@@ -63,6 +63,7 @@ def render_discovery_script(
         )
 
     script_body = (
+        ':do { '
         f':local nasid "{nas_identifier}"; '
         ':local interfaces [/interface print as-value]; '
         ':local bridges [/interface bridge print as-value]; '
@@ -92,18 +93,16 @@ def render_discovery_script(
         '"addresses"=$addresses; '
         '"routes"=$routes; '
         '"packages"=$packages; '
-        '"wireless_interfaces"=[]; '
         '}; '
         ':local json [:serialize to=json value=$payload]; '
-        ':if ([:len $json] > 60000) do={ '
-        ':log warning "CAIWAVE discovery payload exceeds safe size"; '
-        ':return; '
-        '}; '
+        ':if ([:len $json] <= 60000) do={ '
         f'/tool fetch url="{discovery_url}" '
         'http-method=post '
         'http-header-field="Content-Type: application/json" '
         'http-data=$json '
-        'keep-result=no;'
+        'keep-result=no; '
+        '}; '
+        '} on-error={ :log warning "CAIWAVE discovery execution failed"; };'
     )
 
     commands = [
