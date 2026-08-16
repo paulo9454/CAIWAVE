@@ -83,14 +83,50 @@ def valid_payload():
                 "running": True,
             },
             {
+                "name": "ether2",
+                "type": "ethernet",
+                "running": True,
+            },
+            {
                 "name": "wlan1",
                 "type": "wireless",
                 "running": True,
             },
+            {
+                "name": "bridge-hotspot",
+                "type": "bridge",
+                "running": True,
+            },
         ],
-        "bridges": [],
+        "bridges": [
+            {
+                "name": "bridge-hotspot",
+                "running": True,
+            }
+        ],
+        "bridge_ports": [
+            {
+                "bridge": "bridge-hotspot",
+                "interface": "ether2",
+            }
+        ],
         "vlans": [],
         "addresses": [],
+        "routes": [],
+        "dhcp_servers": [
+            {
+                "name": "caiwave-dhcp-hotspot",
+                "interface": "bridge-hotspot",
+                "address-pool": "caiwave-pool-hotspot",
+            }
+        ],
+        "hotspots": [
+            {
+                "name": "caiwave-hotspot",
+                "interface": "bridge-hotspot",
+                "profile": "caiwave-profile",
+            }
+        ],
         "routes": [],
         "packages": [],
         "wireless_interfaces": [],
@@ -116,6 +152,9 @@ def test_discovery_endpoint_accepts_registered_router(
     assert body["nas_identifier"] == "CAIWAVE-TEST"
     assert body["capabilities"]["supports_wireless"] is True
     assert body["capabilities"]["wireless_interfaces"] == ["wlan1"]
+    assert body["capabilities"]["bridge_count"] == 1
+    assert body["capabilities"]["dhcp_server_count"] == 1
+    assert body["capabilities"]["hotspot_count"] == 1
 
     stored_router = fake_db.mikrotik_routers.documents[0]
 

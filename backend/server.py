@@ -6341,12 +6341,14 @@ class MikroTikDiscoveryRequest(BaseModel):
     router: dict = Field(default_factory=dict)
     interfaces: List[dict] = Field(default_factory=list)
     bridges: List[dict] = Field(default_factory=list)
+    bridge_ports: List[dict] = Field(default_factory=list)
     vlans: List[dict] = Field(default_factory=list)
     addresses: List[dict] = Field(default_factory=list)
     routes: List[dict] = Field(default_factory=list)
+    dhcp_servers: List[dict] = Field(default_factory=list)
+    hotspots: List[dict] = Field(default_factory=list)
     packages: List[dict] = Field(default_factory=list)
     wireless_interfaces: List[dict] = Field(default_factory=list)
-
 
 @mikrotik_onboard_router.post("/discovery")
 async def mikrotik_discovery(payload: MikroTikDiscoveryRequest):
