@@ -37,6 +37,17 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert ":local dhcpservers" in section.content
     assert ":local bridge_ports" not in section.content
     assert ":local dhcp_servers" not in section.content
+    assert ":local boardname" in section.content
+    assert ":local rosver" in section.content
+    assert ":local arch" in section.content
+
+    assert ":local board " not in section.content
+    assert ":local version " not in section.content
+    assert ":local architecture " not in section.content
+
+    assert '"board_name"=$boardname;' in section.content
+    assert '"routeros_version"=$rosver;' in section.content
+    assert '"architecture"=$arch };' in section.content
     assert section.content.count("/tool fetch url=") == 1
     assert ":do {" in section.content
     assert section.content.endswith(
@@ -88,3 +99,7 @@ def test_discovery_script_posts_observed_router_state():
     assert ':local nasid "CAIWAVE-TEST";' in section.content
     assert ':local nas_identifier "CAIWAVE-TEST";' not in section.content
     assert '"nas_identifier"=$nasid' in section.content
+    assert '"architecture"=$arch };' in section.content
+    assert '"packages"=$packages };' in section.content
+    assert '"architecture"=$architecture; };' not in section.content
+    assert '"packages"=$packages; };' not in section.content
