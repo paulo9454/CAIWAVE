@@ -21,6 +21,9 @@ from backend.services.provisioning_v2.router_discovery import (
 from backend.services.provisioning_v2.router_discovery_models import (
     DiscoveredAddress,
     DiscoveredBridge,
+    DiscoveredBridgePort,
+    DiscoveredDHCPServer,
+    DiscoveredHotspot,
     DiscoveredInterface,
     DiscoveredRoute,
     DiscoveredVLAN,
@@ -235,6 +238,153 @@ def _normalize_addresses(
     return result
 
 
+
+def _normalize_bridge_ports(
+    values: Any,
+) -> list[DiscoveredBridgePort]:
+    if not isinstance(values, list):
+        raise RouterDiscoveryIngestionError(
+            "bridge_ports must be a list"
+        )
+
+    result: list[DiscoveredBridgePort] = []
+
+    for item in values:
+        if not isinstance(item, dict):
+            raise RouterDiscoveryIngestionError(
+                "Each discovered bridge port must be an object"
+            )
+
+        bridge_name = str(
+            item.get("bridge")
+            or item.get("bridge_name")
+            or ""
+        ).strip()
+
+        interface_name = str(
+            item.get("interface")
+            or item.get("interface_name")
+            or ""
+        ).strip()
+
+        if not bridge_name:
+            raise RouterDiscoveryIngestionError(
+                "Discovered bridge port bridge is required"
+            )
+
+        if not interface_name:
+            raise RouterDiscoveryIngestionError(
+                "Discovered bridge port interface is required"
+            )
+
+        result.append(
+            DiscoveredBridgePort(
+                bridge_name=bridge_name,
+                interface_name=interface_name,
+            )
+        )
+
+    return result
+
+
+def _normalize_dhcp_servers(
+    values: Any,
+) -> list[DiscoveredDHCPServer]:
+    if not isinstance(values, list):
+        raise RouterDiscoveryIngestionError(
+            "dhcp_servers must be a list"
+        )
+
+    result: list[DiscoveredDHCPServer] = []
+
+    for item in values:
+        if not isinstance(item, dict):
+            raise RouterDiscoveryIngestionError(
+                "Each discovered DHCP server must be an object"
+            )
+
+        name = str(item.get("name") or "").strip()
+        interface = str(item.get("interface") or "").strip()
+        address_pool = str(
+            item.get("address-pool")
+            or item.get("address_pool")
+            or ""
+        ).strip()
+
+        if not name:
+            raise RouterDiscoveryIngestionError(
+                "Discovered DHCP server name is required"
+            )
+
+        if not interface:
+            raise RouterDiscoveryIngestionError(
+                f"Discovered DHCP server interface is required: {name}"
+            )
+
+        if not address_pool:
+            raise RouterDiscoveryIngestionError(
+                f"Discovered DHCP server address pool is required: {name}"
+            )
+
+        result.append(
+            DiscoveredDHCPServer(
+                name=name,
+                interface=interface,
+                address_pool=address_pool,
+            )
+        )
+
+    return result
+
+
+def _normalize_hotspots(
+    values: Any,
+) -> list[DiscoveredHotspot]:
+    if not isinstance(values, list):
+        raise RouterDiscoveryIngestionError(
+            "hotspots must be a list"
+        )
+
+    result: list[DiscoveredHotspot] = []
+
+    for item in values:
+        if not isinstance(item, dict):
+            raise RouterDiscoveryIngestionError(
+                "Each discovered hotspot must be an object"
+            )
+
+        name = str(item.get("name") or "").strip()
+        interface = str(item.get("interface") or "").strip()
+        profile = str(
+            item.get("profile")
+            or ""
+        ).strip()
+
+        if not name:
+            raise RouterDiscoveryIngestionError(
+                "Discovered hotspot name is required"
+            )
+
+        if not interface:
+            raise RouterDiscoveryIngestionError(
+                f"Discovered hotspot interface is required: {name}"
+            )
+
+        if not profile:
+            raise RouterDiscoveryIngestionError(
+                f"Discovered hotspot profile is required: {name}"
+            )
+
+        result.append(
+            DiscoveredHotspot(
+                name=name,
+                interface=interface,
+                profile=profile,
+            )
+        )
+
+    return result
+
 def _normalize_routes(
     values: Any,
 ) -> list[DiscoveredRoute]:
@@ -332,6 +482,17 @@ def build_discovery_snapshot_from_payload(
     routes = _normalize_routes(
         payload.get("routes", [])
     )
+    bridge_ports = _normalize_bridge_ports(
+        payload.get("bridge_ports", [])
+    )
+
+    dhcp_servers = _normalize_dhcp_servers(
+        payload.get("dhcp_servers", [])
+    )
+
+    hotspots = _normalize_hotspots(
+        payload.get("hotspots", [])
+    )
 
     snapshot = RouterDiscoverySnapshot(
         router_id=effective_router_id,
@@ -352,9 +513,12 @@ def build_discovery_snapshot_from_payload(
         ),
         interfaces=interfaces,
         bridges=bridges,
+        bridge_ports=bridge_ports,
         vlans=vlans,
         addresses=addresses,
         routes=routes,
+        dhcp_servers=dhcp_servers,
+        hotspots=hotspots,
     )
 
     return build_router_discovery_snapshot(snapshot)

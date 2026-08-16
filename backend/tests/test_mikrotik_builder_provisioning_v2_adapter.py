@@ -91,6 +91,8 @@ def test_discovery_is_added_when_feature_flag_enabled(monkeypatch):
     assert "/system resource get board-name" in output.content
     assert "/system package print as-value" in output.content
     assert "/interface wireless print as-value" not in output.content
-    assert ":local wireless {};" in output.content
+    assert ":local wireless" not in output.content
+    assert ":local nasid" in output.content
+    assert '"nas_identifier"=$nasid' in output.content
     assert '"wireless_interfaces"=[]' in output.content
     assert "/tool fetch url=" in output.content

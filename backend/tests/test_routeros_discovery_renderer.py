@@ -17,7 +17,10 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert "/system package print as-value" in section.content
     assert "/interface print as-value" in section.content
     assert "/interface wireless print as-value" not in section.content
-    assert ":local wireless {};" in section.content
+    assert ":local wireless" not in section.content
+    assert ":local nasid" in section.content
+    assert ":local nas_identifier" not in section.content
+    assert '"nas_identifier"=$nasid' in section.content
     assert ":serialize to=json" in section.content
     assert "/tool fetch url=" in section.content
     assert "/system script add" not in section.content
@@ -25,7 +28,16 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert "CAIWAVE observational router discovery" in section.content
     assert '[:len $json] > 60000' in section.content
     assert 'CAIWAVE discovery payload exceeds safe size' in section.content
-
+    assert "/interface bridge port print as-value" in section.content
+    assert "/ip dhcp-server print as-value" in section.content
+    assert "/ip hotspot print as-value" in section.content
+    assert '"bridge_ports"=$bridgeports' in section.content
+    assert '"dhcp_servers"=$dhcpservers' in section.content
+    assert '"hotspots"=$hotspots' in section.content
+    assert ":local bridgeports" in section.content
+    assert ":local dhcpservers" in section.content
+    assert ":local bridge_ports" not in section.content
+    assert ":local dhcp_servers" not in section.content
 
 
 def test_discovery_renderer_rejects_non_https_url():
@@ -70,4 +82,6 @@ def test_discovery_script_posts_observed_router_state():
     assert "wireless_interfaces" in section.content
     assert ":serialize to=json" in section.content
     assert '/tool fetch url="' in section.content
-    assert ':local nas_identifier "CAIWAVE-TEST";' in section.content
+    assert ':local nasid "CAIWAVE-TEST";' in section.content
+    assert ':local nas_identifier "CAIWAVE-TEST";' not in section.content
+    assert '"nas_identifier"=$nasid' in section.content
