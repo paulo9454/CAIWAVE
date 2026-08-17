@@ -5830,6 +5830,10 @@ class MikroTikRegisterRequest(BaseModel):
     bridge_name: Optional[str] = "bridge-hotspot"
 
     mode: Literal["fresh", "existing"] = "fresh"
+    hotspot_enabled: bool = True
+
+    wifi_enabled: bool = False
+    wifi_ssid: Optional[str] = None
 
     hotspot_cidr: str
     dhcp_pool: str
@@ -5997,6 +6001,10 @@ async def register_mikrotik(
 
         # Provisioning mode
         "mode": request.mode,
+        "hotspot_enabled": request.hotspot_enabled,
+
+        "wifi_enabled": request.wifi_enabled,
+        "wifi_ssid": request.wifi_ssid,
 
         # Topology (raw)
         "wan_interface": wan_interface,
@@ -6079,8 +6087,14 @@ async def register_mikrotik(
     # GENERATE PROVISIONING OUTPUTS
     # ================================
 
+    intent = ProvisioningIntent(
+        hotspot_enabled=request.hotspot_enabled,
+        wifi_enabled=request.wifi_enabled,
+        wifi_ssid=request.wifi_ssid,
+    )
     single_rsc = build_provisioning_v2_rsc_from_router(
-        router_record
+        router_record,
+        provisioning_intent=intent,
     )
 
     return {
@@ -6354,6 +6368,9 @@ class MikroTikDiscoveryRequest(BaseModel):
 async def mikrotik_discovery(payload: MikroTikDiscoveryRequest):
     from backend.services.provisioning_v2.router_capabilities import (
         detect_router_capabilities,
+    )
+    from backend.services.provisioning_v2.provisioning_intent import (
+        ProvisioningIntent,
     )
     from backend.services.provisioning_v2.router_discovery_ingest import (
         build_discovery_snapshot_from_payload,
