@@ -43,6 +43,14 @@ from backend.services.provisioning_v2.router_capabilities import (
 )
 from backend.services.provisioning_v2.wireless_planner import plan_wireless
 
+from backend.services.provisioning_v2.provisioning_intent import (
+    ProvisioningIntent,
+)
+from backend.services.provisioning_v2.provisioning_plan import (
+    ProvisioningPlan,
+    build_provisioning_plan,
+)
+
 @dataclass(frozen=True)
 class ProvisioningV2BuilderOutput:
     filename: str
@@ -128,13 +136,79 @@ def _apply_wireless_capability(
 
     return normalized, wireless_plan
 
-def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2BuilderOutput:
+def _prepare_intent_aware_router(
+    router: dict,
+    intent: ProvisioningIntent,
+) -> tuple[dict, ProvisioningPlan]:
+    discovery = router.get("discovery") or {}
+    capabilities_data = discovery.get("capabilities")
+
+    if not capabilities_data:
+        raise ValueError(
+            "Provisioning intent requires verified router discovery capabilities"
+        )
+
+    capabilities = RouterCapabilityFacts.model_validate(
+        capabilities_data
+    )
+
+    plan = build_provisioning_plan(
+        capabilities=capabilities,
+        intent=intent,
+        requested_wan_interface=router.get("wan_interface"),
+        requested_wired_interfaces=list(
+            router.get("lan_interfaces") or []
+        ),
+    )
+
+    prepared = {
+        **router,
+        "wan_interface": plan.wan_interface,
+        "lan_interfaces": list(plan.client_interfaces),
+        "wifi_enabled": plan.wifi_enabled,
+        "wifi_ssid": plan.wifi_ssid,
+    }
+
+    return prepared, plan
+
+def build_provisioning_v2_rsc_from_router(
+    router: dict,
+    provisioning_intent: ProvisioningIntent | None = None,
+) -> ProvisioningV2BuilderOutput:
+
+    if provisioning_intent is not None:
+        router, provisioning_plan = _prepare_intent_aware_router(
+            router,
+            provisioning_intent,
+        )
+    else:
+        provisioning_plan = None
+
     validated = validate_production_router_input(router)
 
-    effective_lan_interfaces, wireless_plan = _apply_wireless_capability(
-        router,
-        list(validated.lan_interfaces),
-    )
+    if provisioning_plan is not None:
+        effective_lan_interfaces = list(
+            provisioning_plan.client_interfaces
+        )
+
+        wireless_plan = None
+
+        if provisioning_plan.wifi_enabled:
+            capabilities = RouterCapabilityFacts.model_validate(
+                (router.get("discovery") or {}).get("capabilities")
+            )
+
+            wireless_plan = plan_wireless(
+                capabilities=capabilities,
+                ssid=provisioning_plan.wifi_ssid,
+            )
+    else:
+        effective_lan_interfaces, wireless_plan = (
+            _apply_wireless_capability(
+                router,
+                list(validated.lan_interfaces),
+            )
+        )
 
     router = {
         **router,
