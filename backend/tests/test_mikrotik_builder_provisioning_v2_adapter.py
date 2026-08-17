@@ -1,5 +1,5 @@
 import os
-
+import pytest
 from backend.services.mikrotik_builder import build_mikrotik_script
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
 from backend.services.provisioning_v2.routeros_script_linter import lint_routeros_script
@@ -33,6 +33,88 @@ def sample_router():
         ),
     }
 
+def sample_router_with_wireless():
+    router = sample_router()
+    router.update(
+        {
+            "wifi_enabled": True,
+            "wifi_ssid": "CAIWAVE",
+            "discovery": {
+                "capabilities": {
+                    "router_id": router["id"],
+                    "board_name": "RB951Ui-2HnD",
+                    "routeros_version": "7.22",
+                    "architecture": "mipsbe",
+                    "interface_count": 8,
+                    "ethernet_interfaces": [
+                        "ether1",
+                        "ether2",
+                        "ether3",
+                        "ether4",
+                        "ether5",
+                    ],
+                    "wireless_interfaces": ["wlan1"],
+                    "bridge_count": 1,
+                    "vlan_count": 0,
+                    "route_count": 3,
+                    "dhcp_server_count": 1,
+                    "hotspot_count": 1,
+                    "supports_wireless": True,
+                }
+            },
+        }
+    )
+    return router
+
+def test_adapter_provisions_verified_wireless_interface():
+    output = build_provisioning_v2_rsc_from_router(
+        sample_router_with_wireless()
+    )
+
+    assert "/interface wireless" in output.content
+    assert 'wlan1' in output.content
+    assert "ap-bridge" in output.content
+    assert "CAIWAVE" in output.content
+    assert 'interface="wlan1"' in output.content
+    assert lint_routeros_script(output.content).valid is True
+
+def test_adapter_rejects_wifi_when_router_has_no_wireless_capability():
+    router = sample_router()
+    router.update(
+        {
+            "wifi_enabled": True,
+            "wifi_ssid": "CAIWAVE",
+            "discovery": {
+                "capabilities": {
+                    "router_id": router["id"],
+                    "board_name": "RB750",
+                    "routeros_version": "7.21.4",
+                    "architecture": "mipsbe",
+                    "interface_count": 7,
+                    "ethernet_interfaces": [
+                        "ether1",
+                        "ether2",
+                        "ether3",
+                        "ether4",
+                        "ether5",
+                    ],
+                    "wireless_interfaces": [],
+                    "bridge_count": 1,
+                    "vlan_count": 0,
+                    "route_count": 3,
+                    "dhcp_server_count": 1,
+                    "hotspot_count": 1,
+                    "supports_wireless": False,
+                }
+            },
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="does not support wireless",
+    ):
+        build_provisioning_v2_rsc_from_router(router)
 
 def test_adapter_builds_linted_routeros_script():
     output = build_provisioning_v2_rsc_from_router(sample_router())

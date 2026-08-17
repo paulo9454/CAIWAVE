@@ -38,6 +38,10 @@ from backend.services.provisioning_v2.routeros_script_linter import (
 from backend.services.provisioning_v2.snapshot_builder import build_provisioning_snapshot
 from backend.services.provisioning_v2.topology_planner import plan_topology
 
+from backend.services.provisioning_v2.router_capabilities import (
+    RouterCapabilityFacts,
+)
+from backend.services.provisioning_v2.wireless_planner import plan_wireless
 
 @dataclass(frozen=True)
 class ProvisioningV2BuilderOutput:
@@ -67,9 +71,70 @@ def _router_interfaces(router: dict) -> list[dict]:
 
     return [{"name": name} for name in unique]
 
+def _apply_wireless_capability(
+    router: dict,
+    lan_interfaces: list[str],
+) -> tuple[list[str], object | None]:
+    """
+    Add verified wireless interfaces to the client topology only when
+    wireless provisioning has explicitly been requested.
+    """
+
+    if not bool(router.get("wifi_enabled", False)):
+        return list(lan_interfaces), None
+
+    discovery = router.get("discovery") or {}
+    capabilities_data = discovery.get("capabilities")
+
+    if not capabilities_data:
+        raise ValueError(
+            "Wi-Fi provisioning was requested but verified router discovery "
+            "capabilities are unavailable"
+        )
+
+    capabilities = RouterCapabilityFacts.model_validate(
+        capabilities_data
+    )
+
+    if not capabilities.supports_wireless:
+        raise ValueError(
+            "Wi-Fi provisioning was requested but the discovered router "
+            "does not support wireless"
+        )
+
+    wireless_interfaces = list(capabilities.wireless_interfaces)
+
+    if not wireless_interfaces:
+        raise ValueError(
+            "Wi-Fi provisioning was requested but no wireless interfaces "
+            "were discovered"
+        )
+
+    normalized = list(lan_interfaces)
+
+    for interface_name in wireless_interfaces:
+        if interface_name not in normalized:
+            normalized.append(interface_name)
+
+    ssid = str(router.get("wifi_ssid") or "CAIWAVE").strip()
+
+    if not ssid:
+        raise ValueError("wifi_ssid cannot be blank when Wi-Fi is enabled")
+
+    wireless_plan = plan_wireless(
+        capabilities=capabilities,
+        ssid=ssid,
+    )
+
+    return normalized, wireless_plan
 
 def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2BuilderOutput:
     validated = validate_production_router_input(router)
+
+    effective_lan_interfaces, wireless_plan = _apply_wireless_capability(
+        router,
+        list(validated.lan_interfaces),
+    )
 
     router = {
         **router,
@@ -79,7 +144,7 @@ def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2Builder
         "hotspot_id": validated.hotspot_id,
         "nas_identifier": validated.nas_identifier,
         "wan_interface": validated.wan_interface,
-        "lan_interfaces": list(validated.lan_interfaces),
+        "lan_interfaces": effective_lan_interfaces,
         "create_bridge": validated.create_bridge,
         "bridge_name": validated.bridge_name,
         "hotspot_cidr": validated.hotspot_cidr,
@@ -186,6 +251,7 @@ def build_provisioning_v2_rsc_from_router(router: dict) -> ProvisioningV2Builder
         portal=portal,
         radius=radius,
         firewall=firewall,
+        wireless=wireless_plan,
     )
 
     discovery_enabled = (

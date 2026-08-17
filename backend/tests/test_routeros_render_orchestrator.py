@@ -216,30 +216,11 @@ def test_render_orchestrator_renders_explicit_wireless_plan():
     assert 'ssid="MAIN_caiwave"' in artifact.content
     assert 'numbers="wlan1"' in artifact.content
 
-def test_default_render_context_does_not_enable_wireless():
-    bundle = build_bundle()
+def test_default_routeros_section_order_includes_wireless():
+    context = build_render_context()
 
-    wireless = WirelessPlan(
-        radios=[
-            WirelessRadioPlan(
-                interface="wlan1",
-                mode=WirelessMode.AP,
-                ssid="MAIN_caiwave",
-            )
-        ]
+    assert RouterOSSectionName.WIRELESS in context.section_order
+    assert (
+        context.section_order.index(RouterOSSectionName.WIRELESS)
+        < context.section_order.index(RouterOSSectionName.BRIDGE)
     )
-
-    bundle = bundle.model_copy(
-        update={"wireless": wireless}
-    )
-
-    artifact = render_routeros_bundle(
-        bundle=bundle,
-    )
-
-    assert RouterOSSectionName.WIRELESS not in [
-        section.name
-        for section in artifact.sections
-    ]
-
-    assert "/interface wireless" not in artifact.content

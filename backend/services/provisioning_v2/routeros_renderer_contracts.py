@@ -101,6 +101,7 @@ def default_routeros_section_order() -> List[RouterOSSectionName]:
         RouterOSSectionName.HEADER,
         RouterOSSectionName.IDENTITY,
         RouterOSSectionName.INTERFACES,
+        RouterOSSectionName.WIRELESS,
         RouterOSSectionName.BRIDGE,
         RouterOSSectionName.ADDRESSING,
         RouterOSSectionName.DHCP,
