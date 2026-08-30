@@ -64,6 +64,9 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from backend.services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
+from backend.services.provisioning_v2.provisioning_intent import (
+    ProvisioningIntent,
+)
 from backend.services.provisioning_v2.production_input import (
     build_persisted_production_router_record,
 )
@@ -5963,6 +5966,8 @@ async def register_mikrotik(
     hotspot_network = str(ip_interface.network)
     hotspot_gateway = str(ip_interface.ip)
 
+    effective_wifi_ssid = (request.wifi_ssid or "CAIWAVE").strip()
+
     # Validate DHCP pool
     pool_start, pool_end = request.dhcp_pool.split("-")
     pool_start_ip = ipaddress.ip_address(pool_start.strip())
@@ -6004,7 +6009,7 @@ async def register_mikrotik(
         "hotspot_enabled": request.hotspot_enabled,
 
         "wifi_enabled": request.wifi_enabled,
-        "wifi_ssid": request.wifi_ssid,
+        "wifi_ssid": effective_wifi_ssid,
 
         # Topology (raw)
         "wan_interface": wan_interface,
@@ -6090,7 +6095,7 @@ async def register_mikrotik(
     intent = ProvisioningIntent(
         hotspot_enabled=request.hotspot_enabled,
         wifi_enabled=request.wifi_enabled,
-        wifi_ssid=request.wifi_ssid,
+        wifi_ssid=effective_wifi_ssid,
     )
     single_rsc = build_provisioning_v2_rsc_from_router(
         router_record,
