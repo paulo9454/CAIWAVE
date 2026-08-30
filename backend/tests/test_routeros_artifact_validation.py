@@ -29,6 +29,7 @@ def test_rendered_artifact_section_order_is_stable():
         "header",
         "identity",
         "interfaces",
+        "wireless",
         "bridge",
         "addressing",
         "dhcp",
