@@ -233,39 +233,36 @@ def build_provisioning_v2_rsc_from_router(
     }
 
     router_id = validated.router_id
-    hotspot_id = router.get("hotspot_id") or "hotspot-1"
-    owner_id = router.get("owner_id") or "owner-1"
+    hotspot_id = router["hotspot_id"]
+    owner_id = router["owner_id"]
 
     router_input = {
         "id": router_id,
-        "name": router.get("name", "CAIWAVE-Router"),
+        "name": router["name"],
         "owner_id": owner_id,
         "hotspot_id": hotspot_id,
-        "nas_identifier": router.get("nas_identifier", f"CAIWAVE-{router_id}"),
-        "wan_interface": router.get("wan_interface", "ether1"),
-        "lan_interfaces": router.get("lan_interfaces") or ["ether2"],
-        "create_bridge": router.get("create_bridge", True),
-        "bridge_name": router.get("bridge_name", "bridge-hotspot"),
-        "effective_lan_interface": router.get("effective_lan_interface", router.get("bridge_name", "bridge-hotspot")),
-        "mode": router.get("mode", "fresh"),
-        "hotspot_cidr": router.get("hotspot_cidr", "10.10.0.0/24"),
-        "hotspot_gateway": router.get("hotspot_gateway", "10.10.0.1"),
-        "dhcp_pool": router.get("dhcp_pool", "10.10.0.10-10.10.0.254"),
-        "dns_name": router.get("dns_name", "wifi.caiwave.com"),
+        "nas_identifier": router["nas_identifier"],
+        "wan_interface": router["wan_interface"],
+        "lan_interfaces": list(router["lan_interfaces"]),
+        "create_bridge": router["create_bridge"],
+        "bridge_name": router["bridge_name"],
+        "effective_lan_interface": router["effective_lan_interface"],
+        "mode": router["mode"],
+        "hotspot_cidr": router["hotspot_cidr"],
+        "hotspot_gateway": router["hotspot_gateway"],
+        "dhcp_pool": router["dhcp_pool"],
+        "dns_name": router["dns_name"],
     }
     hotspot_input = {
         "id": hotspot_id,
         "owner_id": owner_id,
     }
     config = {
-        "radius_host": router.get(
-            "radius_host",
-            os.environ.get("RADIUS_HOST", "radius.caiwave.com"),
-        ),
+        "radius_host": router["radius_host"],
         "radius_secret_ref": router["radius_secret"],
-        "portal_public_url": router.get("portal_public_url", os.environ.get("PUBLIC_URL", "https://caiwave.com")),
-        "api_public_url": router.get("api_public_url", os.environ.get("API_PUBLIC_URL", "https://caiwave.com/api")),
-        "heartbeat_url": router.get("heartbeat_url", os.environ.get("HEARTBEAT_URL", "https://caiwave.com/api/mikrotik-onboard/heartbeat")),
+        "portal_public_url": router["portal_public_url"],
+        "api_public_url": router["api_public_url"],
+        "heartbeat_url": router["heartbeat_url"],
         "router_dns_upstreams": router.get("router_dns_upstreams", ["1.1.1.1"]),
         "client_dns_servers": router.get("client_dns_servers", [router_input["hotspot_gateway"]]),
     }

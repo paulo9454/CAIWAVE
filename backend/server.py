@@ -64,6 +64,8 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from backend.services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
 from backend.services.provisioning_v2.mikrotik_builder_adapter import build_provisioning_v2_rsc_from_router
+from backend.routes.mikrotik import mikrotik_router
+from backend.routes.provisioning import router as provisioning_router
 from backend.services.provisioning_v2.provisioning_intent import (
     ProvisioningIntent,
 )
@@ -5997,7 +5999,7 @@ async def register_mikrotik(
         "notes": request.notes,
 
         # Provisioning metadata
-        "provisioning_version": 1,
+        "provisioning_version": 2,
         "provisioning_source": "owner_dashboard",
 
         # RADIUS identity
@@ -6092,16 +6094,9 @@ async def register_mikrotik(
     # GENERATE PROVISIONING OUTPUTS
     # ================================
 
-    intent = ProvisioningIntent(
-        hotspot_enabled=request.hotspot_enabled,
-        wifi_enabled=request.wifi_enabled,
-        wifi_ssid=effective_wifi_ssid,
-    )
     single_rsc = build_provisioning_v2_rsc_from_router(
         router_record,
-        provisioning_intent=intent,
     )
-
     return {
         "router_id": router_id,
         "router_name": request.name,
@@ -10759,6 +10754,8 @@ api_router.include_router(analytics_router)
 api_router.include_router(locations_router)
 api_router.include_router(radius_router)
 api_router.include_router(mikrotik_onboard_router)
+api_router.include_router(mikrotik_router)
+api_router.include_router(provisioning_router)
 api_router.include_router(notifications_router)
 api_router.include_router(settings_router)
 api_router.include_router(vouchers_router)
