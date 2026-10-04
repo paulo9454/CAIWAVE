@@ -150,6 +150,55 @@ def test_get_active_credentials():
 
     asyncio.run(run())
 
+def test_get_active_and_pending_credentials():
+    async def run():
+        collection = FakeCollection()
+        repository = RouterControlCredentialRepository(collection)
+
+        active = {
+            "credential_id": "credential-active",
+            "router_id": "router-active",
+            "secret_hash": "active-hash",
+            "status": "active",
+            "created_at": "2026-09-06T12:00:00+00:00",
+            "expires_at": "2026-10-06T12:00:00+00:00",
+        }
+
+        pending = {
+            "credential_id": "credential-pending",
+            "router_id": "router-pending",
+            "secret_hash": "pending-hash",
+            "status": "pending",
+            "created_at": "2026-09-06T12:00:00+00:00",
+            "expires_at": "2026-10-06T12:00:00+00:00",
+        }
+
+        revoked = {
+            "credential_id": "credential-revoked",
+            "router_id": "router-revoked",
+            "secret_hash": "revoked-hash",
+            "status": "revoked",
+            "created_at": "2026-09-06T12:00:00+00:00",
+            "expires_at": "2026-10-06T12:00:00+00:00",
+        }
+
+        await repository.create(active)
+        await repository.create(pending)
+        await repository.create(revoked)
+
+        credentials = await repository.get_active_and_pending_credentials()
+
+        assert len(credentials) == 2
+        assert {
+            credential["credential_id"]
+            for credential in credentials
+        } == {
+            "credential-active",
+            "credential-pending",
+        }
+
+    asyncio.run(run())
+
 def test_get_missing_credential_returns_none():
     async def run():
         collection = FakeCollection()
@@ -241,6 +290,116 @@ def test_rotate_supersedes_existing_credential():
         old = await repository.get_by_id("credential-old")
 
         assert old["status"] == "superseded"
+        assert old["superseded_by"] == "credential-new"
+
+    asyncio.run(run())
+
+def test_replace_pending_supersedes_old_pending_and_keeps_active():
+    async def run():
+        collection = FakeCollection()
+        repository = RouterControlCredentialRepository(collection)
+
+        active = {
+            "credential_id": "credential-active",
+            "router_id": "router-replace",
+            "secret_hash": "active-hash",
+            "status": "active",
+            "created_at": "2026-10-01T10:00:00+00:00",
+            "expires_at": "2026-10-31T10:00:00+00:00",
+        }
+
+        old_pending = {
+            "credential_id": "credential-pending-old",
+            "router_id": "router-replace",
+            "secret_hash": "old-pending-hash",
+            "status": "pending",
+            "created_at": "2026-10-02T10:00:00+00:00",
+            "expires_at": "2026-11-01T10:00:00+00:00",
+        }
+
+        new_pending = {
+            "credential_id": "credential-pending-new",
+            "router_id": "router-replace",
+            "secret_hash": "new-pending-hash",
+            "status": "pending",
+            "created_at": "2026-10-03T10:00:00+00:00",
+            "expires_at": "2026-11-02T10:00:00+00:00",
+        }
+
+        await repository.create(active)
+        await repository.create(old_pending)
+
+        created = await repository.replace_pending(
+            router_id="router-replace",
+            document=new_pending,
+            replaced_at="2026-10-03T10:00:00+00:00",
+        )
+
+        assert created["credential_id"] == "credential-pending-new"
+        assert created["status"] == "pending"
+
+        stored_active = await repository.get_by_id("credential-active")
+        stored_old_pending = await repository.get_by_id(
+            "credential-pending-old"
+        )
+        stored_new_pending = await repository.get_by_id(
+            "credential-pending-new"
+        )
+
+        assert stored_active["status"] == "active"
+
+        assert stored_old_pending["status"] == "superseded"
+        assert stored_old_pending["superseded_at"] == (
+            "2026-10-03T10:00:00+00:00"
+        )
+        assert stored_old_pending["superseded_by"] == (
+            "credential-pending-new"
+        )
+
+        assert stored_new_pending["status"] == "pending"
+
+    asyncio.run(run())
+
+def test_promote_pending_supersedes_active_and_activates_pending():
+    async def run():
+        collection = FakeCollection()
+        repository = RouterControlCredentialRepository(collection)
+
+        active = {
+            "credential_id": "credential-old",
+            "router_id": "router-1",
+            "secret_hash": "old-hash",
+            "status": "active",
+            "created_at": "2026-09-20T10:00:00+00:00",
+            "expires_at": "2026-10-20T10:00:00+00:00",
+        }
+
+        pending = {
+            "credential_id": "credential-new",
+            "router_id": "router-1",
+            "secret_hash": "new-hash",
+            "status": "pending",
+            "created_at": "2026-09-20T11:00:00+00:00",
+            "expires_at": "2026-10-20T11:00:00+00:00",
+        }
+
+        await repository.create(active)
+        await repository.create(pending)
+
+        promoted = await repository.promote_pending(
+            "router-1",
+            "credential-new",
+            "2026-09-20T12:00:00+00:00",
+        )
+
+        assert promoted["credential_id"] == "credential-new"
+        assert promoted["status"] == "active"
+        assert promoted["activated_at"] == "2026-09-20T12:00:00+00:00"
+
+        old = await repository.get_by_id("credential-old")
+
+        assert old["status"] == "superseded"
+        assert old["superseded_at"] == "2026-09-20T12:00:00+00:00"
         assert old["superseded_by"] == "credential-new"
 
     asyncio.run(run())

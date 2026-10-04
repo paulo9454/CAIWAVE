@@ -1,28 +1,44 @@
-from backend.services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file
-import os
+"""
+CAIWAVE MikroTik Router Engine.
+
+Compatibility facade for existing callers.
+
+All RouterOS provisioning generation is delegated to
+Provisioning Engine v2.
+"""
+
+from __future__ import annotations
+
+from backend.services.provisioning_v2.mikrotik_builder_adapter import (
+    build_provisioning_v2_rsc_from_router,
+)
 
 
 class MikroTikLegacyEngine:
+    """
+    Compatibility facade for legacy callers.
+
+    Generation is handled exclusively by Provisioning Engine v2.
+    """
+
     @staticmethod
     def generate(router: dict):
-        single_rsc = generate_single_rsc_provisioning_file(
-            router_name=router["name"],
-            nas_id=router["nas_identifier"],
-            radius_secret=router["radius_secret"],
-            radius_host=os.environ.get("RADIUS_HOST", "radius.caiwave.com"),
-            callback_url=os.environ.get("MPESA_CALLBACK_URL", "").replace(
-                "/mpesa/callback", "/mikrotik-onboard/confirm"
-            )
-        )
+        result = build_provisioning_v2_rsc_from_router(router)
 
         return {
-            "script": single_rsc.content,
+            "script": result.content,
             "mode": "legacy",
-            "single_rsc_provisioning": single_rsc
+            "single_rsc_provisioning": result,
         }
 
 
 class MikroTikV1Engine:
+    """
+    Compatibility facade for V1 callers.
+
+    Generation is handled exclusively by Provisioning Engine v2.
+    """
+
     @staticmethod
     def validate(router: dict):
         required_fields = [
@@ -34,10 +50,11 @@ class MikroTikV1Engine:
             "effective_lan_interface",
             "bridge_name",
             "create_bridge",
-            "mode"
+            "mode",
         ]
 
         missing = [f for f in required_fields if not router.get(f)]
+
         if missing:
             raise ValueError(f"Missing fields: {missing}")
 
@@ -59,30 +76,35 @@ class MikroTikV1Engine:
             "dns_name": router["dns_name"],
             "mode": router["mode"],
             "hotspot_gateway": router.get("hotspot_gateway"),
-            "hotspot_network": router.get("hotspot_network")
+            "hotspot_network": router.get("hotspot_network"),
         }
 
     @staticmethod
     def generate(router: dict):
         MikroTikV1Engine.validate(router)
+
         normalized = MikroTikV1Engine.normalize(router)
 
-        single_rsc = generate_single_rsc_provisioning_file(
-            router_name=normalized["name"],
-            nas_id=normalized["nas_identifier"],
-            radius_secret=normalized["radius_secret"],
-            radius_host=os.environ.get("RADIUS_HOST", "radius.caiwave.com"),
-            callback_url=""
-        )
+        result = build_provisioning_v2_rsc_from_router(router)
 
         return {
-            "script": single_rsc.content,
+            "script": result.content,
             "mode": "v1",
-            "normalized_router": normalized
+            "normalized_router": normalized,
+            "single_rsc_provisioning": result,
         }
 
 
 class MikroTikRouterEngine:
+    """
+    Public compatibility entry point.
+
+    Existing callers may continue using:
+        MikroTikRouterEngine.generate(router)
+
+    Provisioning Engine v2 remains the only RouterOS generator.
+    """
+
     @staticmethod
     def generate(router: dict):
         version = router.get("provisioning_version", 1)

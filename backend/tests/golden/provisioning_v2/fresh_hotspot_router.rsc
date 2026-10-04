@@ -68,6 +68,8 @@
 # Failure URL: https://caiwave.com/portal/failed
 /file remove [find name="hotspot/login.html"]
 /file add name="hotspot/login.html" contents="<html><head><meta http-equiv=\"refresh\" content=\"0; url=https://caiwave.com/portal/portal/hotspot-1?mac=\$(mac)&ip=\$(ip)&dst=\$(link-orig-esc)&login_url=\$(link-login-only)\"></head><body>Redirecting to CAIWAVE...<script>window.location.href=\"https://caiwave.com/portal/portal/hotspot-1?mac=\$(mac)&ip=\$(ip)&dst=\$(link-orig-esc)&login_url=\$(link-login-only)\";</script></body></html>"
+/file remove [find name="hotspot/redirect.html"]
+/file add name="hotspot/redirect.html" contents="\$(if http-status == 302)Hotspot login required\$(endif)\$(if http-header == \"Location\")\$(link-redirect)\$(endif)"
 /ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="caiwave.com"
 /ip hotspot walled-garden add action="allow" comment="CAIWAVE managed portal walled garden host" dst-host="checkout.paystack.com"
 
@@ -75,7 +77,8 @@
 # CAIWAVE RADIUS
 # ========================================================================
 # NAS identifier: CAIWAVE-GOODLIFE
-/radius add accounting-port="1813" address="radius.caiwave.com" authentication-port="1812" comment="CAIWAVE managed RADIUS server" require-message-auth=no secret="router-radius-secret:router-1" service=hotspot timeout="3s"
+# RADIUS host: radius.caiwave.com -> 136.65.3.100
+/radius add accounting-port="1813" address="136.65.3.100" authentication-port="1812" comment="CAIWAVE managed RADIUS server" require-message-auth=no secret="router-radius-secret:router-1" service=hotspot timeout="3s"
 /radius incoming set accept=no
 
 # ========================================================================

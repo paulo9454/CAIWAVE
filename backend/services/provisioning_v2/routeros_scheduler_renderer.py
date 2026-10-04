@@ -4,7 +4,9 @@ RouterOS scheduler renderer for CAIWAVE Provisioning Engine v2.
 Generates:
 - one immediate provisioning confirmation;
 - one immediate heartbeat;
-- one recurring heartbeat scheduler.
+- one recurring heartbeat scheduler;
+- one persistent CAIWAVE provisioning control agent when a
+  control secret is supplied.
 
 The callbacks are non-blocking so a temporary CAIWAVE outage cannot stop
 the remaining RouterOS import.
@@ -22,6 +24,10 @@ from backend.services.provisioning_v2.routeros_command_builder import (
     build_command,
     build_comment,
     build_section,
+    join_script,
+)
+from backend.services.provisioning_v2.routeros_control_renderer import (
+    render_control_section,
 )
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
@@ -81,12 +87,20 @@ def _fetch_source(
     url: str,
     json_body: str,
     failure_log: str,
+    control_secret: str | None = None,
 ) -> str:
+    headers = "Content-Type: application/json"
+
+    if control_secret:
+        headers += (
+            f",Authorization: Bearer {control_secret}"
+        )
+
     return (
         ':do {'
         f' /tool fetch url="{url}"'
         ' http-method=post'
-        ' http-header-field="Content-Type: application/json"'
+        f' http-header-field="{headers}"'
         f' http-data="{json_body}"'
         ' keep-result=no;'
         f' }} on-error={{ :log warning "{failure_log}"; }}'
@@ -95,6 +109,7 @@ def _fetch_source(
 
 def render_scheduler_section(
     bundle: ProvisioningBundle,
+    control_secret: str | None = None,
 ) -> RouterOSRenderedSection:
     heartbeat = bundle.snapshot.heartbeat
     identity = bundle.snapshot.identity
@@ -123,6 +138,7 @@ def render_scheduler_section(
         f'\\"{nas_identifier}\\"'
         '}'
     )
+
     confirm_json = (
         '{\\"router_id\\":'
         f'\\"{router_id}\\",'
@@ -137,13 +153,16 @@ def render_scheduler_section(
         failure_log=(
             "CAIWAVE heartbeat failed; scheduler will retry"
         ),
+        control_secret=control_secret,
     )
+
     confirm_source = _fetch_source(
         url=confirm_url,
         json_body=confirm_json,
         failure_log=(
             "CAIWAVE provisioning confirmation failed"
         ),
+        control_secret=control_secret,
     )
 
     commands = [
@@ -176,6 +195,7 @@ def render_scheduler_section(
                 "source": heartbeat_source,
             },
         ),
+
         build_command(
             "/system script",
             "add",
@@ -185,6 +205,7 @@ def render_scheduler_section(
                 "source": confirm_source,
             },
         ),
+
         build_command(
             "/system scheduler",
             "add",
@@ -203,10 +224,25 @@ def render_scheduler_section(
         f"/system script run {HEARTBEAT_SCRIPT_NAME}",
     ]
 
-    content = build_section(
+    heartbeat_content = build_section(
         "CAIWAVE Heartbeat and Confirmation",
         commands,
     )
+
+    rendered_parts = [heartbeat_content]
+
+    # The control agent requires a credential. Existing callers that
+    # intentionally render without a control secret retain the previous
+    # heartbeat/confirmation-only behavior.
+    if control_secret:
+        control_section = render_control_section(
+            bundle,
+            control_secret=control_secret,
+        )
+
+        rendered_parts.append(control_section.content)
+
+    content = join_script(rendered_parts)
 
     return RouterOSRenderedSection(
         name=RouterOSSectionName.SCHEDULERS,

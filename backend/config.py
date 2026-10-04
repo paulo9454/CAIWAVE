@@ -53,7 +53,6 @@ TWILIO_WHATSAPP_NUMBER = os.environ.get('TWILIO_WHATSAPP_NUMBER', '')
 
 # FreeRADIUS Configuration
 RADIUS_HOST = os.environ.get('RADIUS_HOST', 'localhost')
-RADIUS_SECRET = os.environ.get('RADIUS_SECRET', 'testing123')
 RADIUS_AUTH_PORT = int(os.environ.get('RADIUS_AUTH_PORT', '1812'))
 RADIUS_ACCT_PORT = int(os.environ.get('RADIUS_ACCT_PORT', '1813'))
 

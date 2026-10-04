@@ -326,29 +326,36 @@ def infer_topology(
         # Fresh-router topology:
         #
         # No existing service-bearing client bridge was discovered.
-        # When WAN evidence is unique, the remaining discovered physical
-        # Ethernet interfaces are safe client-side candidates. Link state
-        # is deliberately ignored because an unplugged client port is still
-        # a valid port that CAIWAVE may configure.
+        # Use observed physical link state as topology evidence instead of
+        # assuming every unused Ethernet port is a client interface.
         physical_ethernet = _physical_ethernet_interfaces(snapshot)
 
-        client_candidates = [
-            name
-            for name in physical_ethernet
-            if name != top.interface
+        running_client_candidates = [
+            interface.name
+            for interface in snapshot.interfaces
+            if (
+                interface.name
+                and interface.name in physical_ethernet
+                and interface.name != top.interface
+                and interface.running
+                and not interface.disabled
+            )
         ]
+
+        client_candidates = list(dict.fromkeys(running_client_candidates))
 
         if not client_candidates:
             return TopologyInferenceResult(
-                status="INFERRED",
+                status="AMBIGUOUS",
                 wan_interface=top.interface,
                 client_interfaces=[],
                 client_bridge_interfaces=[],
-                confidence=confidence,
+                confidence="LOW",
                 evidence=evidence,
                 warnings=[
-                    "WAN was identified but no eligible physical "
-                    "Ethernet client interfaces were discovered"
+                    "WAN was identified, but no active physical Ethernet "
+                    "client interface was discovered. Connect the intended "
+                    "client-side interface and run discovery again."
                 ],
             )
 
@@ -361,8 +368,8 @@ def infer_topology(
             evidence=evidence,
             warnings=[
                 "No existing service-bearing client bridge was discovered; "
-                "client interfaces were derived from the discovered "
-                "physical Ethernet inventory excluding the verified WAN. "
+                "client interfaces were derived from active discovered "
+                "physical Ethernet links excluding the verified WAN. "
                 "A new client bridge may be created."
             ],
         )

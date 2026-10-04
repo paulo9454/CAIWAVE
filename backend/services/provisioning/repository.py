@@ -67,18 +67,24 @@ class ProvisioningJobRepository:
     async def get_active_for_router(
         self,
         router_id: str,
+        job_type: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        jobs = await self.collection.find(
-            {
-                "router_id": router_id,
-                "status": {
-                    "$in": [
-                        "queued",
-                        "dispatched",
-                        "running",
-                    ],
-                },
+        query = {
+            "router_id": router_id,
+            "status": {
+                "$in": [
+                    "queued",
+                    "dispatched",
+                    "running",
+                ],
             },
+        }
+
+        if job_type is not None:
+            query["job_type"] = job_type
+
+        jobs = await self.collection.find(
+            query,
             {"_id": 0},
         ).sort("created_at", -1).to_list(1)
 
@@ -101,20 +107,30 @@ class ProvisioningJobRepository:
     async def claim_next_for_router(
         self,
         router_id: str,
+        job_type: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        Atomically claim the oldest queued provisioning job for a router.
+        Atomically claim the oldest queued job for a router.
+
+        When claiming a provisioning job, legacy queued jobs without a
+        job_type are treated as provisioning jobs for backward compatibility.
+        Explicitly typed non-provisioning jobs are never claimed by this path.
 
         The MongoDB find_one_and_update operation ensures that two
         simultaneous router polls cannot claim the same queued job.
         """
         now = datetime.now(timezone.utc)
 
+        query = {
+            "router_id": router_id,
+            "status": "queued",
+        }
+
+        if job_type is not None:
+            query["job_type"] = job_type
+
         job = await self.collection.find_one_and_update(
-            {
-                "router_id": router_id,
-                "status": "queued",
-            },
+            query,
             {
                 "$set": {
                     "status": "dispatched",
@@ -127,7 +143,32 @@ class ProvisioningJobRepository:
             return_document=ReturnDocument.AFTER,
         )
 
-        return job
+        if job is not None or job_type != "provisioning":
+            return job
+
+        # Backward compatibility for the existing pre-job-type provisioning
+        # job format. Keep this as a separate query so the repository remains
+        # compatible with the lightweight fake collections used by tests.
+        legacy_query = {
+            "router_id": router_id,
+            "status": "queued",
+            "job_type": {"$exists": False},
+        }
+
+        return await self.collection.find_one_and_update(
+            legacy_query,
+            {
+                "$set": {
+                    "status": "dispatched",
+                    "updated_at": now,
+                    "dispatched_at": now,
+                    "job_type": "provisioning",
+                },
+            },
+            sort=[("created_at", 1)],
+            projection={"_id": 0},
+            return_document=ReturnDocument.AFTER,
+        )
     async def update(
         self,
         job_id: str,

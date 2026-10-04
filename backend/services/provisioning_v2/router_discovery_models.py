@@ -55,6 +55,14 @@ class DiscoveredBridgePort(StrictModel):
 class DiscoveredRoute(StrictModel):
     destination: str
     gateway: str
+    interface: Optional[str] = None
+
+
+class DiscoveredDHCPClient(StrictModel):
+    interface: str
+    address: Optional[str] = None
+    gateway: Optional[str] = None
+    status: Optional[str] = None
 
 
 class DiscoveredDNS(StrictModel):
@@ -90,5 +98,7 @@ class RouterDiscoverySnapshot(StrictModel):
     dns: List[DiscoveredDNS] = Field(default_factory=list)
 
     dhcp_servers: List[DiscoveredDHCPServer] = Field(default_factory=list)
+
+    dhcp_clients: List[DiscoveredDHCPClient] = Field(default_factory=list)
 
     hotspots: List[DiscoveredHotspot] = Field(default_factory=list)

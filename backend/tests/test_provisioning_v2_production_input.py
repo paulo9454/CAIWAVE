@@ -21,7 +21,7 @@ def valid_router(**overrides):
         "hotspot_gateway": "10.10.0.1",
         "dhcp_pool": "10.10.0.10-10.10.0.254",
         "dns_name": "login.caiwave.local",
-        "radius_host": "34.134.75.132",
+        "radius_host": "radius.caiwave.com",
         "radius_secret": "real-router-specific-secret",
         "portal_public_url": "https://www.caiwave.com",
         "api_public_url": "https://www.caiwave.com/api",
@@ -38,7 +38,7 @@ def test_accepts_complete_production_router_input():
 
     assert result.router_name == "qqqqqqqq"
     assert result.captive_dns_name == "login.caiwave.local"
-    assert result.radius_host == "34.134.75.132"
+    assert result.radius_host == "radius.caiwave.com"
     assert result.lan_interfaces == ("ether2", "ether3")
 
 

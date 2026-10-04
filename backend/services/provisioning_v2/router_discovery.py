@@ -77,6 +77,20 @@ def build_router_discovery_snapshot(
                 f"{port.interface_name}"
         )
 
+    for route in snapshot.routes:
+        if route.interface and route.interface not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"Route references unknown interface: "
+                f"{route.interface}"
+            )
+
+    for dhcp_client in snapshot.dhcp_clients:
+        if dhcp_client.interface not in known_interfaces:
+            raise RouterDiscoveryError(
+                f"DHCP client references unknown interface: "
+                f"{dhcp_client.interface}"
+            )
+
     known_bridges = set(bridge_names)
 
     for port in snapshot.bridge_ports:

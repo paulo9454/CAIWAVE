@@ -346,3 +346,112 @@ def test_claim_next_for_router():
         assert second_claim is None
 
     asyncio.run(run())
+
+def test_claim_provisioning_job_accepts_legacy_missing_job_type():
+    import asyncio
+    from datetime import datetime, timezone
+
+    class FakeCollection:
+        def __init__(self):
+            self.jobs = [
+                {
+                    "job_id": "legacy-provisioning",
+                    "router_id": "router-legacy",
+                    "status": "queued",
+                    "created_at": datetime.now(timezone.utc),
+                }
+            ]
+
+        async def find_one_and_update(
+            self,
+            query,
+            update,
+            sort=None,
+            projection=None,
+            return_document=None,
+        ):
+            for job in self.jobs:
+                if (
+                    job["router_id"] != query["router_id"]
+                    or job["status"] != query["status"]
+                ):
+                    continue
+
+                if "job_type" in query:
+                    expected = query["job_type"]
+
+                    if isinstance(expected, dict):
+                        if "$exists" in expected:
+                            exists = "job_type" in job
+                            if exists != expected["$exists"]:
+                                continue
+                    elif job.get("job_type") != expected:
+                        continue
+
+                job.update(update["$set"])
+                return dict(job)
+
+            return None
+
+    async def run():
+        repository = ProvisioningJobRepository(FakeCollection())
+
+        claimed = await repository.claim_next_for_router(
+            "router-legacy",
+            job_type="provisioning",
+        )
+
+        assert claimed is not None
+        assert claimed["job_id"] == "legacy-provisioning"
+        assert claimed["status"] == "dispatched"
+        assert claimed["job_type"] == "provisioning"
+
+    asyncio.run(run())
+
+
+def test_claim_provisioning_job_does_not_claim_rotation_job():
+    import asyncio
+    from datetime import datetime, timezone
+
+    class FakeCollection:
+        def __init__(self):
+            self.jobs = [
+                {
+                    "job_id": "rotation-job",
+                    "router_id": "router-rotation",
+                    "job_type": "control_credential_rotation",
+                    "status": "queued",
+                    "created_at": datetime.now(timezone.utc),
+                }
+            ]
+
+        async def find_one_and_update(
+            self,
+            query,
+            update,
+            sort=None,
+            projection=None,
+            return_document=None,
+        ):
+            for job in self.jobs:
+                if (
+                    job["router_id"] == query["router_id"]
+                    and job["status"] == query["status"]
+                    and job.get("job_type") == query.get("job_type")
+                ):
+                    job.update(update["$set"])
+                    return dict(job)
+
+            return None
+
+    async def run():
+        repository = ProvisioningJobRepository(FakeCollection())
+
+        claimed = await repository.claim_next_for_router(
+            "router-rotation",
+            job_type="provisioning",
+        )
+
+        assert claimed is None
+
+    asyncio.run(run())

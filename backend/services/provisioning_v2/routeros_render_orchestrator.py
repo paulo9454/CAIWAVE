@@ -70,7 +70,12 @@ def _planned_placeholder(section_name: RouterOSSectionName) -> RouterOSRenderedS
     )
 
 
-def _render_section(bundle: ProvisioningBundle, section_name: RouterOSSectionName) -> RouterOSRenderedSection:
+def _render_section(
+    bundle: ProvisioningBundle,
+    section_name: RouterOSSectionName,
+    *,
+    control_secret: str | None = None,
+) -> RouterOSRenderedSection:
     renderers = {
         RouterOSSectionName.IDENTITY: render_identity_section,
         RouterOSSectionName.INTERFACES: render_interface_section,
@@ -100,8 +105,12 @@ def _render_section(bundle: ProvisioningBundle, section_name: RouterOSSectionNam
         RouterOSSectionName.PORTAL: render_portal_section,
         RouterOSSectionName.RADIUS: render_radius_section,
         RouterOSSectionName.FIREWALL: render_firewall_section,
-        RouterOSSectionName.SCHEDULERS: render_scheduler_section,
     }
+    if section_name == RouterOSSectionName.SCHEDULERS:
+        return render_scheduler_section(
+            bundle,
+            control_secret=control_secret,
+        )
 
     renderer = renderers.get(section_name)
     if renderer is None:
@@ -113,6 +122,7 @@ def render_routeros_bundle(
     *,
     bundle: ProvisioningBundle,
     context: RouterOSRenderContext | None = None,
+    control_secret: str | None = None,
 ) -> RouterOSRenderedArtifact:
     """
     Render a deterministic RouterOS artifact from a valid provisioning bundle.
@@ -130,7 +140,11 @@ def render_routeros_bundle(
     manifest = build_render_manifest(bundle=bundle, context=render_context)
 
     sections = [
-        _render_section(bundle, section_name)
+        _render_section(
+            bundle,
+            section_name,
+            control_secret=control_secret,
+        )
         for section_name in render_context.section_order
     ]
 

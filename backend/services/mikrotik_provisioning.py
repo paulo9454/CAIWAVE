@@ -14,8 +14,6 @@ def normalize_request(req: MikroTikProvisionRequest) -> dict:
     if not data.get("nas_identifier"):
         clean = "".join(c for c in data["name"] if c.isalnum())[:10].upper()
         data["nas_identifier"] = f"CAIWAVE-{clean}-{secrets.token_hex(4).upper()}"
-        clean = "".join(c for c in data["name"] if c.isalnum())[:10].upper()
-        data["nas_identifier"] = f"CAIWAVE-{clean}-{secrets.token_hex(4).upper()}"
 
     # Clean LAN interfaces
     data["lan_interfaces"] = [
@@ -61,7 +59,10 @@ def build_context(req: MikroTikProvisionRequest) -> dict:
     validate_request(data)
 
     return {
+        "id": data["id"],
         "name": data["name"],
+        "owner_id": data["owner_id"],
+        "hotspot_id": data["hotspot_id"],
         "nas_identifier": data["nas_identifier"],
         "radius_secret": data["radius_secret"],
         "radius_host": data["radius_host"],

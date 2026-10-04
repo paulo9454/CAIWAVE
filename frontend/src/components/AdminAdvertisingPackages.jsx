@@ -41,7 +41,7 @@ const AdminAdvertisingPackages = () => {
     Authorization: `Bearer ${getAuthToken()}`,
   });
 
-  const fetchPackages = async () => {
+  const fetchPackages = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -63,11 +63,11 @@ const AdminAdvertisingPackages = () => {
     } finally {
       setLoading(false);
     }
-  };
+    }, []);
 
   useEffect(() => {
     fetchPackages();
-  }, []);
+    }, [fetchPackages]);
 
   const openCreate = () => {
     setEditingPackage(null);

@@ -1,5 +1,10 @@
+import logging
+
 from backend.models.provisioning_run import ProvisioningRun
-from backend.services.provisioning_repository import ProvisioningRepository
+from backend.services.provisioning_tracker import log_provisioning
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProvisioningObserver:
@@ -12,35 +17,67 @@ class ProvisioningObserver:
         self.runs[router_id] = run
         return run
 
-    def success(self, router_id: str, script: str = ""):
+    async def success(
+        self,
+        router_id: str,
+        script: str = "",
+        router: dict | None = None,
+    ):
         run = self.runs.get(router_id)
+
         if not run:
             return
 
         run.log("Provisioning successful")
         run.mark_success()
 
-        ProvisioningRepository.save_sync({
-            "router_id": router_id,
-            "status": "success",
-            "script": script,
-            "logs": run.logs,
-        })
+        router_data = router or {
+            "id": router_id,
+            "nas_identifier": router_id,
+        }
 
-    def fail(self, router_id: str, error: str):
+        try:
+            await log_provisioning(
+                router=router_data,
+                script=script,
+                status="success",
+            )
+        except Exception:
+            logger.exception(
+                "Provisioning persistence failed for %s",
+                router_data.get("nas_identifier", router_id),
+            )
+
+    async def fail(
+        self,
+        router_id: str,
+        error: str,
+        router: dict | None = None,
+    ):
         run = self.runs.get(router_id)
+
         if not run:
             return
 
         run.log(f"Provisioning failed: {error}")
         run.mark_failed(error)
 
-        ProvisioningRepository.save_sync({
-            "router_id": router_id,
-            "status": "failed",
-            "error": error,
-            "logs": run.logs,
-        })
+        router_data = router or {
+            "id": router_id,
+            "nas_identifier": router_id,
+        }
+
+        try:
+            await log_provisioning(
+                router=router_data,
+                script="",
+                status="failed",
+            )
+        except Exception:
+            logger.exception(
+                "Provisioning failure persistence failed for %s",
+                router_data.get("nas_identifier", router_id),
+            )
 
 
 observer = ProvisioningObserver()

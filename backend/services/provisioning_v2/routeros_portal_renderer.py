@@ -7,7 +7,12 @@ from __future__ import annotations
 import hashlib
 
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
-from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_section
+from backend.services.provisioning_v2.routeros_command_builder import (
+    build_command,
+    build_comment,
+    build_section,
+    quote_routeros_value,
+)
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedSection,
@@ -18,6 +23,10 @@ from backend.services.provisioning_v2.routeros_renderer_contracts import (
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+def _quote_routeros_preserving_backslashes(value: str) -> str:
+    if "\n" in value or "\r" in value:
+        raise ValueError("RouterOS values must not contain newlines")
+    return f'"{value}"'
 
 def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection:
     portal = bundle.portal
@@ -48,10 +57,17 @@ def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
             "</body></html>"
         )
 
+        redirect_html = (
+            '\\$(if http-status == 302)Hotspot login required\\$(endif)'
+            '\\$(if http-header == \\"Location\\")\\$(link-redirect)\\$(endif)'
+        )
+
         commands.extend(
             [
                 '/file remove [find name="hotspot/login.html"]',
-                f'/file add name="hotspot/login.html" contents="{login_html}"',
+                f'/file add name="hotspot/login.html" contents={_quote_routeros_preserving_backslashes(login_html)}',
+                '/file remove [find name="hotspot/redirect.html"]',
+                f'/file add name="hotspot/redirect.html" contents={_quote_routeros_preserving_backslashes(redirect_html)}',
             ]
         )
 

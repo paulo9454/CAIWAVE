@@ -85,7 +85,11 @@ const AdminOverview = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get(`${API_URL}/analytics/dashboard`);
+      const response = await axios.get(`${API_URL}/analytics/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+      });
       setStats(response.data?.detail ? [] : response.data);
     } catch (error) {
       console.error("Failed to fetch stats:", error);
@@ -1734,6 +1738,7 @@ const AllHotspotsPage = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [generatedMikroTik, setGeneratedMikroTik] = useState(null);
+  const [adminMikrotikDiagnostic, setAdminMikrotikDiagnostic] = useState(null);
   const [editingLocationHotspot, setEditingLocationHotspot] = useState(null);
   const [newHotspot, setNewHotspot] = useState({
     name: "",
@@ -1763,6 +1768,44 @@ const AllHotspotsPage = () => {
     }
   };
 
+  useEffect(() => {
+    const routerId = generatedMikroTik?.router_id;
+
+    if (!routerId) {
+      setAdminMikrotikDiagnostic(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const fetchDiagnostic = async () => {
+      try {
+        const response = await axios.get(
+          `${API_URL}/mikrotik-onboard/routers/${routerId}/diagnostics`,
+          {
+            headers: { Authorization: `Bearer ${getAuthToken()}` },
+          }
+        );
+
+        if (!cancelled) {
+          setAdminMikrotikDiagnostic(response.data);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to fetch MikroTik diagnostics:", error);
+        }
+      }
+    };
+
+    fetchDiagnostic();
+    const interval = setInterval(fetchDiagnostic, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [generatedMikroTik?.router_id]);
+
   const handleStatusChange = async (hotspotId, status) => {
     try {
       await axios.put(`${API_URL}/hotspots/${hotspotId}/status?status=${status}`);
@@ -1781,8 +1824,8 @@ const AllHotspotsPage = () => {
           name: `${hotspot.name} MikroTik`,
           hotspot_id: hotspot.id,
           notes: `Admin lifetime hotspot MikroTik setup for ${hotspot.name}`,
-          wan_interface: "ether1",
-          lan_interfaces: ["ether2", "ether3", "ether4", "ether5"],
+          // Physical WAN/LAN topology is discovered from the MikroTik.
+          // Never assume ether1/ether2-ether5 here.
           create_bridge: true,
           bridge_name: "bridge-hotspot",
           mode: "fresh",
@@ -1796,7 +1839,36 @@ const AllHotspotsPage = () => {
       );
 
       setGeneratedMikroTik(response.data);
-      toast.success("MikroTik .rsc provisioning file generated!");
+      setAdminMikrotikDiagnostic(null);
+      toast.success("MikroTik discovery bootstrap generated!");
+    } catch (error) {
+      toast.error(safeError(error));
+    }
+  };
+  const handleRotateMikroTikCredential = async () => {
+    const routerId = generatedMikroTik?.router_id;
+    if (!routerId) {
+      toast.error("MikroTik router ID is not available.");
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/mikrotik-onboard/routers/${routerId}/rotate-control-credential`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+        }
+      );
+
+      setGeneratedMikroTik((current) => ({
+        ...current,
+        ...response.data,
+      }));
+      setAdminMikrotikDiagnostic(null);
+      toast.success("Secure discovery bootstrap generated!");
     } catch (error) {
       toast.error(safeError(error));
     }
@@ -1920,20 +1992,128 @@ const AllHotspotsPage = () => {
 
           <div className="bg-neutral-950 rounded-lg p-4">
             <p className="text-sm text-neutral-400 mb-2">
-              Download this .rsc file, upload it to MikroTik, then import it from RouterOS terminal.
+              Download this CAIWAVE bootstrap, upload it to the MikroTik, then import it from the RouterOS terminal. It performs router discovery first, then establishes the persistent CAIWAVE control channel. Final provisioning is generated only after the topology is verified.
             </p>
             <code className="text-xs text-blue-400">
-              {generatedMikroTik.single_rsc_provisioning?.filename || "caiwave-provisioning.rsc"}
+              {generatedMikroTik.bootstrap_rsc?.filename || "caiwave-bootstrap.rsc"}
             </code>
           </div>
+
+          {adminMikrotikDiagnostic && (
+            <div className="mt-4 bg-neutral-950 rounded-lg p-4 border border-neutral-800">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="font-semibold text-sm">
+                    Discovery & Provisioning Status
+                  </h4>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Auto-refreshing every 15 seconds
+                  </p>
+                </div>
+
+                <span className="text-xs px-2 py-1 rounded border border-neutral-700 text-neutral-300">
+                  {adminMikrotikDiagnostic.router?.status ||
+                    adminMikrotikDiagnostic.status ||
+                    "pending_discovery"}
+                </span>
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-neutral-500">Discovery</span>
+                  <span className={
+                    adminMikrotikDiagnostic.router?.discovery_received ||
+                    adminMikrotikDiagnostic.discovery?.received_at
+                      ? "text-green-400"
+                      : "text-yellow-400"
+                  }>
+                    {adminMikrotikDiagnostic.router?.discovery_received ||
+                    adminMikrotikDiagnostic.discovery?.received_at
+                      ? "Received"
+                      : "Waiting for router"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-4">
+                  <span className="text-neutral-500">Topology</span>
+                  <span className="text-neutral-200">
+                    {adminMikrotikDiagnostic.router?.topology_status ||
+                      adminMikrotikDiagnostic.topology_status ||
+                      "PENDING"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-4">
+                  <span className="text-neutral-500">WAN interface</span>
+                  <code className="text-blue-400">
+                    {adminMikrotikDiagnostic.configuration?.wan_interface ||
+                      adminMikrotikDiagnostic.router?.wan_interface ||
+                      "—"}
+                  </code>
+                </div>
+
+                <div className="flex justify-between gap-4">
+                  <span className="text-neutral-500">LAN interfaces</span>
+                  <code className="text-blue-400 text-right">
+                    {(adminMikrotikDiagnostic.configuration?.lan_interfaces ||
+                      adminMikrotikDiagnostic.router?.lan_interfaces ||
+                      []).join(", ") || "—"}
+                  </code>
+                </div>
+
+                <div className="flex justify-between gap-4">
+                  <span className="text-neutral-500">Final artifact</span>
+                  <span className={
+                    adminMikrotikDiagnostic.checks?.rsc_generated
+                      ? "text-green-400"
+                      : "text-yellow-400"
+                  }>
+                    {adminMikrotikDiagnostic.checks?.rsc_generated
+                      ? "Generated"
+                      : "Waiting"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between gap-4">
+                  <span className="text-neutral-500">Production ready</span>
+                  <span className={
+                    adminMikrotikDiagnostic.production_ready
+                      ? "text-green-400"
+                      : "text-yellow-400"
+                  }>
+                    {adminMikrotikDiagnostic.production_ready
+                      ? "Yes"
+                      : "Not yet"}
+                  </span>
+                </div>
+              </div>
+
+              {adminMikrotikDiagnostic.next_action && (
+                <div className="mt-3 pt-3 border-t border-neutral-800 text-xs text-neutral-500">
+                  Next: {adminMikrotikDiagnostic.next_action}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-4 flex gap-3">
             <Button
               size="sm"
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleRotateMikroTikCredential}
+            >
+              Generate Secure Bootstrap
+            </Button>
+            <Button
+              size="sm"
               className="bg-green-600 hover:bg-green-700"
               onClick={() => {
-                const file = generatedMikroTik.single_rsc_provisioning;
-                const blob = new Blob([file.content], { type: file.content_type || "text/plain" });
+                const file = generatedMikroTik.bootstrap_rsc;
+                if (!file?.content) {
+                  toast.error("CAIWAVE bootstrap is not available.");
+                  return;
+                }
+                const blob = new Blob([file.content], { type: "text/plain;charset=utf-8" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
@@ -1944,18 +2124,18 @@ const AllHotspotsPage = () => {
                 URL.revokeObjectURL(url);
               }}
             >
-              Download .rsc File
+              Download CAIWAVE Bootstrap
             </Button>
 
             <Button
               size="sm"
               variant="outline"
               onClick={() => {
-                navigator.clipboard.writeText(generatedMikroTik.single_rsc_provisioning?.content || "");
-                toast.success(".rsc content copied to clipboard!");
+                navigator.clipboard.writeText(generatedMikroTik.bootstrap_rsc?.content || "");
+                toast.success("CAIWAVE bootstrap copied to clipboard!");
               }}
             >
-              Copy .rsc Content
+              Copy CAIWAVE Bootstrap
             </Button>
           </div>
         </div>

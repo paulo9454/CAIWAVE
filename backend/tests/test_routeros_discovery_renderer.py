@@ -8,6 +8,7 @@ def test_discovery_renderer_generates_read_only_collection_script():
     section = render_discovery_script(
         discovery_url="https://caiwave.com/api/mikrotik-onboard/discovery",
         nas_identifier="CAIWAVE-TEST",
+        control_secret="TEST-CONTROL-SECRET",
     )
 
     assert section.status.value == "rendered"
@@ -60,7 +61,8 @@ def test_discovery_renderer_rejects_non_https_url():
         render_discovery_script(
             discovery_url="http://caiwave.com/api/mikrotik-onboard/discovery",
             nas_identifier="CAIWAVE-TEST",
-        )
+            control_secret="TEST-CONTROL-SECRET",
+)
     except RouterOSDiscoveryRendererError:
         return
 
@@ -72,7 +74,8 @@ def test_discovery_renderer_rejects_blank_nas_identifier():
         render_discovery_script(
             discovery_url="https://caiwave.com/api/mikrotik-onboard/discovery",
             nas_identifier="   ",
-        )
+            control_secret="TEST-CONTROL-SECRET",
+    )
     except RouterOSDiscoveryRendererError:
         return
 
@@ -83,6 +86,7 @@ def test_discovery_script_posts_observed_router_state():
     section = render_discovery_script(
         discovery_url="https://caiwave.com/api/mikrotik-onboard/discovery",
         nas_identifier="CAIWAVE-TEST",
+        control_secret="TEST-CONTROL-SECRET",
     )
 
     assert section.status.value == "rendered"
@@ -94,6 +98,9 @@ def test_discovery_script_posts_observed_router_state():
     assert "addresses" in section.content
     assert "routes" in section.content
     assert "packages" in section.content
+    assert "dhcp_clients" in section.content
+    assert ":local dhcpclients" in section.content
+    assert "/ip dhcp-client print as-value" in section.content
     assert ":serialize to=json" in section.content
     assert '/tool fetch url="' in section.content
     assert ':local nasid "CAIWAVE-TEST";' in section.content

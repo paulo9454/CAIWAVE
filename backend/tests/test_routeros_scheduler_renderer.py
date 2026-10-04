@@ -94,3 +94,17 @@ def test_rejects_unexpected_heartbeat_path():
         match="must end with",
     ):
         render_scheduler_section(bad_bundle)
+
+def test_scheduler_includes_control_authorization_header():
+    bundle = build_bundle()
+
+    section = render_scheduler_section(
+        bundle,
+        control_secret="test-control-secret-123",
+    )
+
+    assert (
+        'Authorization: Bearer test-control-secret-123'
+        in section.content
+    )
+    assert "Content-Type: application/json" in section.content

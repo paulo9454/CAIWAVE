@@ -18,6 +18,7 @@ class SingleRscProvisioningInput:
     nas_identifier: str
     radius_secret: str
     radius_host: str
+    router_id: str = ""
     hotspot_id: str = ""
     callback_url: str = ""
     generated_at: Optional[datetime] = None
@@ -46,6 +47,7 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
 
     radius_host = config.radius_host
     radius_secret = config.radius_secret
+    router_id = config.router_id
     router_name = config.router_name
     nas_identifier = config.nas_identifier
     hotspot_id = config.hotspot_id
@@ -153,7 +155,7 @@ def build_single_rsc_provisioning_script(config: SingleRscProvisioningInput) -> 
 
 # CONFIRM CALLBACK - BEST EFFORT ONLY
 :do {{
-    /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\\"router_id\\\":\\\"\\\",\\\"nas_identifier\\\":\\\"{nas_identifier}\\\"}}" keep-result=no
+    /tool fetch url="{callback_url}" http-method=post http-header-field="Content-Type: application/json" http-data="{{\\\"router_id\\\":\\\"{router_id}\\\",\\\"nas_identifier\\\":\\\"{nas_identifier}\\\"}}" keep-result=no
 }} on-error={{
     :log warning "CAIWAVE: confirm callback failed, heartbeat will continue"
 }}
@@ -180,11 +182,13 @@ def generate_single_rsc_provisioning_script(
     radius_secret: str,
     radius_host: str,
     hotspot_id: str = "",
+    router_id: str = "",
     callback_url: str = "",
     generated_at: Optional[datetime] = None,
 ) -> str:
     return build_single_rsc_provisioning_script(
         SingleRscProvisioningInput(
+            router_id=router_id,
             router_name=router_name,
             nas_identifier=nas_identifier,
             radius_secret=radius_secret,

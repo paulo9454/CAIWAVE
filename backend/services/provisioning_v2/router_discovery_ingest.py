@@ -22,6 +22,7 @@ from backend.services.provisioning_v2.router_discovery_models import (
     DiscoveredAddress,
     DiscoveredBridge,
     DiscoveredBridgePort,
+    DiscoveredDHCPClient,
     DiscoveredDHCPServer,
     DiscoveredHotspot,
     DiscoveredInterface,
@@ -406,10 +407,22 @@ def _normalize_routes(
             or item.get("destination")
             or ""
         ).strip()
+
         gateway = str(
             item.get("gateway")
             or ""
         ).strip()
+
+        interface_value = (
+            item.get("interface")
+            or item.get("gateway-interface")
+        )
+
+        interface = (
+            str(interface_value).strip()
+            if interface_value is not None
+            else None
+        )
 
         if not destination:
             raise RouterDiscoveryIngestionError(
@@ -425,10 +438,74 @@ def _normalize_routes(
             DiscoveredRoute(
                 destination=destination,
                 gateway=gateway,
+                interface=interface or None,
             )
         )
 
     return result
+
+
+def _normalize_dhcp_clients(
+    values: Any,
+) -> list[DiscoveredDHCPClient]:
+    if not isinstance(values, list):
+        raise RouterDiscoveryIngestionError(
+            "dhcp_clients must be a list"
+        )
+
+    result: list[DiscoveredDHCPClient] = []
+
+    for item in values:
+        if not isinstance(item, dict):
+            raise RouterDiscoveryIngestionError(
+                "Each discovered DHCP client must be an object"
+            )
+
+        interface = str(
+            item.get("interface")
+            or ""
+        ).strip()
+
+        if not interface:
+            raise RouterDiscoveryIngestionError(
+                "Discovered DHCP client interface is required"
+            )
+
+        address_value = (
+            item.get("address")
+            or item.get("active-address")
+        )
+
+        gateway_value = (
+            item.get("gateway")
+            or item.get("active-gateway")
+        )
+
+        status_value = item.get("status")
+
+        result.append(
+            DiscoveredDHCPClient(
+                interface=interface,
+                address=(
+                    str(address_value).strip()
+                    if address_value is not None
+                    else None
+                ),
+                gateway=(
+                    str(gateway_value).strip()
+                    if gateway_value is not None
+                    else None
+                ),
+                status=(
+                    str(status_value).strip()
+                    if status_value is not None
+                    else None
+                ),
+            )
+        )
+
+    return result
+
 
 
 def build_discovery_snapshot_from_payload(
@@ -490,6 +567,10 @@ def build_discovery_snapshot_from_payload(
         payload.get("dhcp_servers", [])
     )
 
+    dhcp_clients = _normalize_dhcp_clients(
+        payload.get("dhcp_clients", [])
+    )
+
     hotspots = _normalize_hotspots(
         payload.get("hotspots", [])
     )
@@ -518,6 +599,7 @@ def build_discovery_snapshot_from_payload(
         addresses=addresses,
         routes=routes,
         dhcp_servers=dhcp_servers,
+        dhcp_clients=dhcp_clients,
         hotspots=hotspots,
     )
 

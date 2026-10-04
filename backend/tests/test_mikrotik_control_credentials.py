@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -121,3 +122,63 @@ def test_invalid_ttl_is_rejected():
 
     with pytest.raises(ValueError):
         build_control_credential(ttl_days=-1)
+
+
+def test_control_authentication_accepts_active_and_pending_credentials():
+    async def run():
+        import backend.server as server
+        from fastapi.security import HTTPAuthorizationCredentials
+
+        active_secret = "active-test-secret"
+        pending_secret = "pending-test-secret"
+
+        active = {
+            "credential_id": "credential-active",
+            "router_id": "router-1",
+            "secret_hash": hash_control_secret(active_secret),
+            "status": "active",
+            "created_at": "2026-09-20T10:00:00+00:00",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+        }
+
+        pending = {
+            "credential_id": "credential-pending",
+            "router_id": "router-1",
+            "secret_hash": hash_control_secret(pending_secret),
+            "status": "pending",
+            "created_at": "2026-09-20T10:00:00+00:00",
+            "expires_at": "2099-01-01T00:00:00+00:00",
+        }
+
+        class FakeRepository:
+            async def get_active_and_pending_credentials(self):
+                return [active, pending]
+
+        original_repository = server.router_control_credential_repository
+        server.router_control_credential_repository = FakeRepository()
+
+        try:
+            active_result = await server.require_mikrotik_control_credential(
+                HTTPAuthorizationCredentials(
+                    scheme="Bearer",
+                    credentials=active_secret,
+                )
+            )
+
+            pending_result = await server.require_mikrotik_control_credential(
+                HTTPAuthorizationCredentials(
+                    scheme="Bearer",
+                    credentials=pending_secret,
+                )
+            )
+
+            assert active_result["credential_id"] == "credential-active"
+            assert active_result["status"] == "active"
+
+            assert pending_result["credential_id"] == "credential-pending"
+            assert pending_result["status"] == "pending"
+
+        finally:
+            server.router_control_credential_repository = original_repository
+
+    asyncio.run(run())

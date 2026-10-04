@@ -12,6 +12,7 @@ preserving the current builder API.
 
 from __future__ import annotations
 
+import hashlib
 import os
 from dataclasses import dataclass
 
@@ -31,6 +32,22 @@ from backend.services.provisioning_v2.production_input import (
 from backend.services.provisioning_v2.provisioning_bundle import build_provisioning_bundle
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.routeros_render_orchestrator import render_routeros_bundle
+from backend.services.provisioning_v2.routeros_renderer_contracts import (
+    RenderStatus,
+    RouterOSRenderedArtifact,
+    RouterOSRenderedSection,
+    RouterOSSectionName,
+)
+
+from backend.services.provisioning_v2.routeros_discovery_renderer import (
+    render_discovery_script,
+)
+from backend.services.provisioning_v2.routeros_control_renderer import (
+    render_control_bootstrap,
+)
+from backend.services.provisioning_v2.routeros_command_builder import (
+    join_script,
+)
 from backend.services.provisioning_v2.routeros_script_linter import (
     ProductionRouterOSLintContext,
     lint_production_routeros_script,
@@ -61,16 +78,103 @@ class ProvisioningV2BuilderOutput:
 def _safe(name: str) -> str:
     return "".join(c.lower() if c.isalnum() else "-" for c in str(name)).strip("-") or "router"
 
+def build_discovery_bootstrap(
+    *,
+    discovery_url: str,
+    nas_identifier: str,
+    control_secret: str,
+) -> RouterOSRenderedSection:
+
+    """
+    Build the observational-only RouterOS discovery bootstrap.
+
+    This path deliberately does not require or infer WAN/LAN topology.
+    It only collects router facts and sends them to CAIWAVE discovery.
+    """
+    return render_discovery_script(
+        discovery_url=discovery_url,
+        nas_identifier=nas_identifier,
+        control_secret=control_secret,
+    )
+
+def build_onboarding_bootstrap(
+    *,
+    discovery_url: str,
+    heartbeat_url: str,
+    nas_identifier: str,
+    control_secret: str,
+) -> RouterOSRenderedSection:
+    """
+    Build the single CAIWAVE installer bootstrap.
+
+    The bootstrap first sends observational router discovery to CAIWAVE,
+    then installs and starts the persistent CAIWAVE control agent.
+
+    It does not make WAN/LAN assumptions or perform provisioning itself.
+    """
+    discovery_section = build_discovery_bootstrap(
+        discovery_url=discovery_url,
+        nas_identifier=nas_identifier,
+        control_secret=control_secret,
+    )
+
+    control_section = render_control_bootstrap(
+        heartbeat_url=heartbeat_url,
+        nas_identifier=nas_identifier,
+        control_secret=control_secret,
+    )
+
+    content = join_script(
+        [
+            discovery_section.content,
+            control_section.content,
+        ]
+    )
+
+    checksum = hashlib.sha256(
+        content.encode("utf-8")
+    ).hexdigest()
+
+    return RouterOSRenderedSection(
+        name=RouterOSSectionName.SCHEDULERS,
+        status=RenderStatus.RENDERED,
+        content=content,
+        checksum=checksum,
+        warnings=[
+            *discovery_section.warnings,
+            *control_section.warnings,
+        ],
+    )
+
 
 def _router_interfaces(router: dict) -> list[dict]:
-    names = []
-    wan = router.get("wan_interface", "ether1")
-    if wan:
-        names.append(wan)
+    """
+    Build the interface inventory from verified topology only.
 
-    for item in router.get("lan_interfaces") or ["ether2"]:
-        if item:
-            names.append(item)
+    Production provisioning must never invent physical interface names.
+    WAN/LAN topology must already have been established by registration
+    input or router discovery before this function is called.
+    """
+    wan = router.get("wan_interface")
+    lan_interfaces = router.get("lan_interfaces")
+
+    if not isinstance(wan, str) or not wan.strip():
+        raise ValueError(
+            "Verified WAN interface is required before provisioning"
+        )
+
+    if not isinstance(lan_interfaces, (list, tuple)) or not lan_interfaces:
+        raise ValueError(
+            "Verified LAN interfaces are required before provisioning"
+        )
+
+    names = [wan.strip()]
+    for item in lan_interfaces:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(
+                "Verified LAN interfaces must contain non-empty names"
+            )
+        names.append(item.strip())
 
     unique = []
     for name in names:
@@ -142,23 +246,49 @@ def _prepare_intent_aware_router(
 ) -> tuple[dict, ProvisioningPlan]:
     discovery = router.get("discovery") or {}
     capabilities_data = discovery.get("capabilities")
+    topology_data = discovery.get("topology")
 
     if not capabilities_data:
         raise ValueError(
             "Provisioning intent requires verified router discovery capabilities"
         )
 
+    if not topology_data:
+        raise ValueError(
+            "Provisioning intent requires verified router discovery topology"
+        )
+
     capabilities = RouterCapabilityFacts.model_validate(
         capabilities_data
     )
 
+    discovered_wan = str(
+        topology_data.get("wan_interface") or ""
+    ).strip()
+
+    discovered_lan = [
+        str(item).strip()
+        for item in (
+            topology_data.get("client_interfaces") or []
+        )
+        if str(item).strip()
+    ]
+
+    if not discovered_wan:
+        raise ValueError(
+            "Verified discovery topology does not contain a WAN interface"
+        )
+
+    if not discovered_lan:
+        raise ValueError(
+            "Verified discovery topology does not contain client interfaces"
+        )
+
     plan = build_provisioning_plan(
         capabilities=capabilities,
         intent=intent,
-        requested_wan_interface=router.get("wan_interface"),
-        requested_wired_interfaces=list(
-            router.get("lan_interfaces") or []
-        ),
+        requested_wan_interface=discovered_wan,
+        requested_wired_interfaces=discovered_lan,
     )
 
     prepared = {
@@ -171,10 +301,11 @@ def _prepare_intent_aware_router(
 
     return prepared, plan
 
-def build_provisioning_v2_rsc_from_router(
+def build_provisioning_v2_artifact_from_router(
     router: dict,
     provisioning_intent: ProvisioningIntent | None = None,
-) -> ProvisioningV2BuilderOutput:
+    control_secret: str | None = None,
+) -> RouterOSRenderedArtifact:
 
     if provisioning_intent is not None:
         router, provisioning_plan = _prepare_intent_aware_router(
@@ -263,6 +394,7 @@ def build_provisioning_v2_rsc_from_router(
         "portal_public_url": router["portal_public_url"],
         "api_public_url": router["api_public_url"],
         "heartbeat_url": router["heartbeat_url"],
+        "snapshot_id": router.get("snapshot_id"),
         "router_dns_upstreams": router.get("router_dns_upstreams", ["1.1.1.1"]),
         "client_dns_servers": router.get("client_dns_servers", [router_input["hotspot_gateway"]]),
     }
@@ -325,35 +457,14 @@ def build_provisioning_v2_rsc_from_router(
         wireless=wireless_plan,
     )
 
-    discovery_enabled = (
-        os.environ.get(
-            "CAIWAVE_DISCOVERY_ENABLED",
-            "false",
-        ).lower()
-        == "true"
-    )
-
+    # Discovery is a separate observational bootstrap artifact.
+    # It must never be embedded in the final production provisioning script.
     render_context = None
-
-    if discovery_enabled:
-        from backend.services.provisioning_v2.routeros_renderer_contracts import (
-            RouterOSSectionName,
-            build_render_context,
-            default_routeros_section_order,
-        )
-
-        section_order = [
-            *default_routeros_section_order(),
-            RouterOSSectionName.DISCOVERY,
-        ]
-
-        render_context = build_render_context(
-            section_order=section_order,
-        )
 
     artifact = render_routeros_bundle(
         bundle=bundle,
         context=render_context,
+        control_secret=control_secret,
     )
     lint = lint_production_routeros_script(
         artifact.content,
@@ -375,7 +486,20 @@ def build_provisioning_v2_rsc_from_router(
             + "; ".join(lint.errors)
         )
 
+    return artifact
+
+def build_provisioning_v2_rsc_from_router(
+    router: dict,
+    provisioning_intent: ProvisioningIntent | None = None,
+    control_secret: str | None = None,
+) -> ProvisioningV2BuilderOutput:
+    artifact = build_provisioning_v2_artifact_from_router(
+        router,
+        provisioning_intent=provisioning_intent,
+        control_secret=control_secret,
+    )
+
     return ProvisioningV2BuilderOutput(
-        filename=f"{_safe(router_input['name'])}-{_safe(router_input['nas_identifier'])}.rsc",
+        filename=f"{_safe(router['name'])}-{_safe(router['nas_identifier'])}.rsc",
         content=artifact.content,
     )

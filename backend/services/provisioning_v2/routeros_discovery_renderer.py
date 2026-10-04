@@ -48,18 +48,24 @@ def _validate_url(url: str) -> str:
 
     return value
 
-
 def render_discovery_script(
     *,
     discovery_url: str,
     nas_identifier: str,
+    control_secret: str,
 ) -> RouterOSRenderedSection:
+
     discovery_url = _validate_url(discovery_url)
 
     nas_identifier = nas_identifier.strip()
     if not nas_identifier:
         raise RouterOSDiscoveryRendererError(
             "NAS identifier is required"
+        )
+    control_secret = control_secret.strip()
+    if not control_secret:
+        raise RouterOSDiscoveryRendererError(
+            "MikroTik control secret is required"
         )
 
     script_body = (
@@ -70,6 +76,7 @@ def render_discovery_script(
         ':local bridgeports [/interface bridge port print as-value]; '
         ':local vlans [/interface vlan print as-value]; '
         ':local dhcpservers [/ip dhcp-server print as-value]; '
+        ':local dhcpclients [/ip dhcp-client print as-value]; '
         ':local hotspots [/ip hotspot print as-value]; '
         ':local addresses [/ip address print as-value]; '
         ':local routes [/ip route print as-value]; '
@@ -89,6 +96,7 @@ def render_discovery_script(
         '"bridge_ports"=$bridgeports; '
         '"vlans"=$vlans; '
         '"dhcp_servers"=$dhcpservers; '
+        '"dhcp_clients"=$dhcpclients; '
         '"hotspots"=$hotspots; '
         '"addresses"=$addresses; '
         '"routes"=$routes; '
@@ -98,7 +106,7 @@ def render_discovery_script(
         ':if ([:len $json] <= 60000) do={ '
         f'/tool fetch url="{discovery_url}" '
         'http-method=post '
-        'http-header-field="Content-Type: application/json" '
+        f'http-header-field="Content-Type: application/json,Authorization: Bearer {control_secret}" '
         'http-data=$json '
         'keep-result=no; '
         '}; '

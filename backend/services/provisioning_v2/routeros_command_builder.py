@@ -49,7 +49,7 @@ def quote_routeros_value(value: Any) -> str:
     if "\n" in text or "\r" in text:
         raise RouterOSCommandBuilderError("RouterOS values must not contain newlines")
 
-    text = text.replace("\\", "\\\\").replace('"', '\\"')
+    text = text.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$")
     return f'"{text}"'
 
 

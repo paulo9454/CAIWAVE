@@ -27,7 +27,7 @@ def incomplete_router_record():
 def test_builds_complete_persisted_production_router_record():
     record = build_persisted_production_router_record(
         incomplete_router_record(),
-        radius_host="34.134.75.132",
+        radius_host="radius.caiwave.com",
         portal_public_url="https://www.caiwave.com",
         api_public_url="https://www.caiwave.com/api",
         heartbeat_url=(
@@ -39,7 +39,7 @@ def test_builds_complete_persisted_production_router_record():
     validated = validate_production_router_input(record)
 
     assert record["hotspot_cidr"] == "10.10.0.0/24"
-    assert record["radius_host"] == "34.134.75.132"
+    assert record["radius_host"] == "radius.caiwave.com"
     assert record["portal_public_url"] == "https://www.caiwave.com"
     assert record["api_public_url"] == "https://www.caiwave.com/api"
     assert record["heartbeat_url"].endswith(
@@ -55,7 +55,7 @@ def test_snapshot_does_not_replace_router_specific_radius_secret():
 
     record = build_persisted_production_router_record(
         original,
-        radius_host="34.134.75.132",
+        radius_host="radius.caiwave.com",
         portal_public_url="https://www.caiwave.com",
         api_public_url="https://www.caiwave.com/api",
         heartbeat_url=(

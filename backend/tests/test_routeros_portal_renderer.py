@@ -113,6 +113,9 @@ def test_renders_portal_section():
 
     assert f"# Login redirect URL: {expected_login_url}" in section.content
     assert 'name="hotspot/login.html"' in section.content
+    assert 'name="hotspot/redirect.html"' in section.content
+    assert '\\$(if http-status == 302)Hotspot login required\\$(endif)' in section.content
+    assert '\\$(if http-header == \\"Location\\")\\$(link-redirect)\\$(endif)' in section.content
     assert expected_login_url in section.content
     assert "/portal/login?hotspot=" not in section.content
     assert "?hotspot=" not in section.content

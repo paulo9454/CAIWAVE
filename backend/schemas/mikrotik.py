@@ -5,6 +5,10 @@ from typing import List, Optional
 class MikroTikProvisionRequest(BaseModel):
     name: str = Field(default="Auto-Router", min_length=2)
 
+    id: Optional[str] = None
+    owner_id: Optional[str] = None
+    hotspot_id: Optional[str] = None
+
     nas_identifier: Optional[str] = None
 
     radius_secret: Optional[str] = None

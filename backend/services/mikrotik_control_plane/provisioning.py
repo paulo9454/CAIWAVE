@@ -77,6 +77,7 @@ class MikroTikProvisioningOrchestrator:
             bundle_id=bundle_id,
             snapshot_id=snapshot_id,
             artifact_checksum=artifact_checksum,
+            job_type="provisioning",
             payload=payload,
         )
 

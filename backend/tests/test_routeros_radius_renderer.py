@@ -103,7 +103,8 @@ def test_renders_radius_section():
     assert section.checksum
     assert "# CAIWAVE RADIUS" in section.content
     assert "# NAS identifier: CAIWAVE-GOODLIFE" in section.content
-    assert '/radius add accounting-port="1813" address="radius.caiwave.com" authentication-port="1812" comment="CAIWAVE managed RADIUS server" require-message-auth=no secret="router-radius-secret:router-1" service=hotspot timeout="3s"' in section.content
+    assert '/radius add accounting-port="1813" address="136.65.3.100" authentication-port="1812" comment="CAIWAVE managed RADIUS server" require-message-auth=no secret="router-radius-secret:router-1" service=hotspot timeout="3s"' in section.content
+    assert "# RADIUS host: radius.caiwave.com -> 136.65.3.100" in section.content
     assert "/radius incoming set accept=no" in section.content
 
 

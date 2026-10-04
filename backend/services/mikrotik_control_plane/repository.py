@@ -56,9 +56,35 @@ class RouterControlCredentialRepository:
         )
         return await cursor.to_list(length=None)
 
+    async def get_active_and_pending_credentials(
+        self,
+    ) -> list[Dict[str, Any]]:
+        active_cursor = self.collection.find(
+            {"status": "active"},
+            {"_id": 0},
+        )
+        pending_cursor = self.collection.find(
+            {"status": "pending"},
+            {"_id": 0},
+        )
+
+        active = await active_cursor.to_list(length=None)
+        pending = await pending_cursor.to_list(length=None)
+
+        return active + pending
+
     async def get_by_router_id(self, router_id: str) -> Optional[Dict[str, Any]]:
         return await self.collection.find_one(
             {"router_id": router_id, "status": "active"},
+            {"_id": 0},
+        )
+
+    async def get_pending_by_router_id(
+        self,
+        router_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        return await self.collection.find_one(
+            {"router_id": router_id, "status": "pending"},
             {"_id": 0},
         )
 
@@ -95,16 +121,131 @@ class RouterControlCredentialRepository:
 
         return result.matched_count > 0
 
+    async def create_pending(
+        self,
+        router_id: str,
+        document: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Create a pending replacement credential without invalidating the
+        currently active credential.
+        """
+        existing = await self.get_pending_by_router_id(router_id)
+
+        if existing:
+            raise ValueError(
+                f"Router {router_id} already has a pending control credential"
+            )
+
+        pending_document = dict(document)
+        pending_document["router_id"] = router_id
+        pending_document["status"] = "pending"
+
+        return await self.create(pending_document)
+
+    async def replace_pending(
+        self,
+        router_id: str,
+        document: Dict[str, Any],
+        replaced_at: str,
+    ) -> Dict[str, Any]:
+        """
+        Replace an existing pending credential without invalidating the
+        currently active credential.
+        """
+        existing = await self.get_pending_by_router_id(router_id)
+
+        if existing:
+            await self.collection.update_one(
+                {
+                    "router_id": router_id,
+                    "credential_id": existing["credential_id"],
+                    "status": "pending",
+                },
+                {
+                    "$set": {
+                        "status": "superseded",
+                        "superseded_at": replaced_at,
+                        "superseded_by": document["credential_id"],
+                    }
+                },
+            )
+
+        replacement_document = dict(document)
+        replacement_document["router_id"] = router_id
+        replacement_document["status"] = "pending"
+
+        return await self.create(replacement_document)
+
+    async def promote_pending(
+        self,
+        router_id: str,
+        credential_id: str,
+        promoted_at: str,
+    ) -> Dict[str, Any]:
+        """
+        Promote a pending credential to active and supersede the previous
+        active credential atomically from the repository perspective.
+        """
+        pending = await self.collection.find_one(
+            {
+                "router_id": router_id,
+                "credential_id": credential_id,
+                "status": "pending",
+            },
+            {"_id": 0},
+        )
+
+        if not pending:
+            raise RouterControlCredentialNotFound(
+                f"Pending router control credential {credential_id} not found."
+            )
+
+        await self.collection.update_one(
+            {"router_id": router_id, "status": "active"},
+            {
+                "$set": {
+                    "status": "superseded",
+                    "superseded_at": promoted_at,
+                    "superseded_by": credential_id,
+                }
+            },
+        )
+
+        await self.collection.update_one(
+            {
+                "router_id": router_id,
+                "credential_id": credential_id,
+                "status": "pending",
+            },
+            {
+                "$set": {
+                    "status": "active",
+                    "activated_at": promoted_at,
+                }
+            },
+        )
+
+        promoted = await self.get_by_id(credential_id)
+
+        if not promoted:
+            raise RuntimeError(
+                "Pending router control credential was promoted "
+                "but could not be read back."
+            )
+
+        return promoted
+
     async def rotate(
         self,
         router_id: str,
         document: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
-        Replace the active credential for a router.
+        Backward-compatible immediate rotation.
 
-        The caller is responsible for generating the new credential and
-        deciding the appropriate lifecycle timestamps.
+        New lifecycle code should use create_pending() followed by
+        promote_pending() after the router confirms the replacement.
         """
         await self.collection.update_one(
             {"router_id": router_id, "status": "active"},

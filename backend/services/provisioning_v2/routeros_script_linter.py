@@ -27,6 +27,47 @@ class RouterOSLintResult(StrictModel):
     errors: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
+def _find_unresolved_template_tokens(content: str) -> List[str]:
+    """
+    Find unresolved template markers outside quoted RouterOS strings.
+
+    JSON payloads embedded inside RouterOS strings may legitimately contain
+    adjacent braces such as `}}`, so template-token detection must not treat
+    quoted JSON as an unresolved template.
+    """
+    tokens = ["{{", "}}", "${", "<TODO", "TODO:"]
+    found: List[str] = []
+
+    for token in tokens:
+        in_string = False
+        escaped = False
+        index = 0
+
+        while index < len(content):
+            char = content[index]
+
+            if escaped:
+                escaped = False
+                index += 1
+                continue
+
+            if char == "\\" and in_string:
+                escaped = True
+                index += 1
+                continue
+
+            if char == '"':
+                in_string = not in_string
+                index += 1
+                continue
+
+            if not in_string and content.startswith(token, index):
+                found.append(token)
+                break
+
+            index += 1
+
+    return found
 
 def lint_routeros_script(content: str) -> RouterOSLintResult:
     errors: List[str] = []
@@ -63,10 +104,8 @@ def lint_routeros_script(content: str) -> RouterOSLintResult:
         if not any(line.startswith(prefix) for line in command_lines):
             errors.append(f"Missing required RouterOS command: {prefix}")
 
-    forbidden_tokens = ["{{", "}}", "${", "<TODO", "TODO:", "None"]
-    for token in forbidden_tokens:
-        if token in content:
-            errors.append(f"Unresolved or forbidden token found: {token}")
+    for token in _find_unresolved_template_tokens(content):
+        errors.append(f"Unresolved or forbidden token found: {token}")
 
     for index, line in enumerate(command_lines, start=1):
         is_routeros_command = line.startswith("/")

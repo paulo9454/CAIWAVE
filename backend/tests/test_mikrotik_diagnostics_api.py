@@ -22,6 +22,34 @@ class FakeCollection:
 
         return None
 
+    def find(self, query, projection=None):
+        documents = []
+
+        for document in self.documents:
+            if all(
+                document.get(key) == value
+                for key, value in query.items()
+            ):
+                result = dict(document)
+                result.pop("_id", None)
+                documents.append(result)
+
+        class FakeCursor:
+            def __init__(self, items):
+                self.items = items
+
+            def sort(self, key, direction):
+                reverse = direction == -1
+                self.items.sort(
+                    key=lambda item: item.get(key),
+                    reverse=reverse,
+                )
+                return self
+
+            async def to_list(self, limit):
+                return self.items[:limit]
+
+        return FakeCursor(documents)
 
 async def fake_role_checker():
     return {
@@ -32,6 +60,13 @@ async def fake_role_checker():
 
 def create_diagnostics_client(fake_db, monkeypatch):
     monkeypatch.setattr(server, "db", fake_db)
+    monkeypatch.setattr(
+        server,
+        "provisioning_job_repository",
+        server.ProvisioningJobRepository(
+            fake_db.provisioning_jobs
+        ),
+    )
 
     app = FastAPI()
     app.include_router(
@@ -94,6 +129,7 @@ def test_diagnostics_surfaces_discovery(monkeypatch):
         router_diagnostics=FakeCollection(),
         radius_auth_logs=FakeCollection(),
         sessions=FakeCollection(),
+        provisioning_jobs=FakeCollection(),
     )
 
     with create_diagnostics_client(
@@ -143,6 +179,7 @@ def test_diagnostics_without_discovery_returns_empty_discovery_state(
         router_diagnostics=FakeCollection(),
         radius_auth_logs=FakeCollection(),
         sessions=FakeCollection(),
+        provisioning_jobs=FakeCollection(),
     )
 
     with create_diagnostics_client(
@@ -162,3 +199,63 @@ def test_diagnostics_without_discovery_returns_empty_discovery_state(
     assert body["router"]["wireless_detected"] is False
     assert body["discovery"]["snapshot"] is None
     assert body["discovery"]["capabilities"] is None
+
+def test_diagnostics_surfaces_latest_provisioning_job(monkeypatch):
+    router = {
+        "id": "router-job-1",
+        "nas_identifier": "CAIWAVE-JOB-TEST",
+        "hotspot_id": "hotspot-job-1",
+        "owner_id": "owner-1",
+        "status": "online",
+        "health_status": "healthy",
+        "connection_confirmed": True,
+    }
+
+    fake_db = SimpleNamespace(
+        mikrotik_routers=FakeCollection([router]),
+        router_diagnostics=FakeCollection(),
+        radius_auth_logs=FakeCollection(),
+        sessions=FakeCollection(),
+        provisioning_jobs=FakeCollection(
+            [
+                {
+                    "job_id": "job-123",
+                    "router_id": "router-job-1",
+                    "job_type": "provisioning",
+                    "status": "queued",
+                    "artifact_id": "artifact-123",
+                    "artifact_checksum": "checksum-123",
+                    "attempts": 0,
+                    "started_at": None,
+                    "completed_at": None,
+                    "last_error": None,
+                    "created_at": "2026-09-23T08:00:00+00:00",
+                }
+            ]
+        ),
+    )
+
+    with create_diagnostics_client(
+        fake_db,
+        monkeypatch,
+    ) as client:
+        response = client.get(
+            "/api/mikrotik-onboard/routers/"
+            "router-job-1/diagnostics"
+        )
+
+    assert response.status_code == 200
+
+    body = response.json()
+
+    assert body["provisioning_job"] == {
+        "job_id": "job-123",
+        "job_type": "provisioning",
+        "status": "queued",
+        "artifact_id": "artifact-123",
+        "artifact_checksum": "checksum-123",
+        "attempts": 0,
+        "started_at": None,
+        "completed_at": None,
+        "last_error": None,
+    }
