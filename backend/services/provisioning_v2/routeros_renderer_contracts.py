@@ -111,7 +111,6 @@ def default_routeros_section_order() -> List[RouterOSSectionName]:
         RouterOSSectionName.PORTAL,
         RouterOSSectionName.RADIUS,
         RouterOSSectionName.FIREWALL,
-        RouterOSSectionName.SCHEDULERS,
         RouterOSSectionName.VALIDATION,
         RouterOSSectionName.FOOTER,
     ]
