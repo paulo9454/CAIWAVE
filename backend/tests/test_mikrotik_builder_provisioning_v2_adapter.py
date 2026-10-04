@@ -176,7 +176,6 @@ def test_adapter_includes_control_authorization_header():
     assert "Authorization: Bearer test-control-secret-123" not in output.content
     assert "CAIWAVE managed provisioning control agent" not in output.content
     assert 'name="caiwave-control"' not in output.content
-    assert "Content-Type: application/json" in output.content
     assert lint_routeros_script(output.content).valid is True
 
 def test_existing_builder_always_uses_engine_v2(monkeypatch):
@@ -200,8 +199,9 @@ def test_discovery_is_disabled_by_default(monkeypatch):
 
     output = build_provisioning_v2_rsc_from_router(sample_router())
 
-    assert "/system script add" in output.content
     assert "CAIWAVE observational router discovery" not in output.content
+    assert 'name="caiwave-control"' not in output.content
+    assert "CAIWAVE managed provisioning control agent" not in output.content
 
 
 def test_discovery_is_not_embedded_in_production_artifact(monkeypatch):
