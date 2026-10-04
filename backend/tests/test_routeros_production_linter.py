@@ -20,7 +20,6 @@ def context():
         captive_dns_name=router["dns_name"],
         portal_public_url=router["portal_public_url"],
         radius_host=router["radius_host"],
-        heartbeat_url=router["heartbeat_url"],
     )
 
 
@@ -97,24 +96,6 @@ def test_rejects_missing_radius_accounting():
     assert result.valid is False
     assert any(
         "radius-accounting=yes" in error
-        for error in result.errors
-    )
-
-
-def test_rejects_missing_heartbeat_scheduler():
-    content = production_script().replace(
-        'name="caiwave-heartbeat"',
-        'name="removed-heartbeat"',
-    )
-
-    result = lint_production_routeros_script(
-        content,
-        context=context(),
-    )
-
-    assert result.valid is False
-    assert any(
-        "caiwave-heartbeat" in error
         for error in result.errors
     )
 
