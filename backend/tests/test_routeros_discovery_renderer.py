@@ -50,9 +50,11 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert '"routeros_version"=$rosver;' in section.content
     assert '"architecture"=$arch };' in section.content
     assert section.content.count("/tool fetch url=") == 1
-    assert ":do {" in section.content
+    assert ":onerror discoveryError in={" in section.content
+    assert "} do={" in section.content
+    assert 'CAIWAVE discovery execution failed: " . [:tostr $discoveryError]' in section.content
     assert section.content.endswith(
-        '} on-error={ :log warning "CAIWAVE discovery execution failed"; };'
+        '} do={ :log warning ("CAIWAVE discovery execution failed: " . [:tostr $discoveryError]); };'
     )
 
 

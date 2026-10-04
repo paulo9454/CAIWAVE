@@ -144,6 +144,73 @@ def test_inference_does_not_guess_when_wan_evidence_is_ambiguous():
     assert result.wan_interface is None
     assert result.confidence == "LOW"
 
+def test_fresh_router_uses_enabled_disconnected_ethernet_ports_as_clients():
+    snapshot = RouterDiscoverySnapshot(
+        router_id="fresh-rb750",
+        board_name="RB750",
+        routeros_version="7.24.5",
+        architecture="mipsbe",
+        interfaces=[
+            DiscoveredInterface(
+                name="ether1",
+                type="ethernet",
+                running=True,
+                disabled=False,
+            ),
+            DiscoveredInterface(
+                name="ether2",
+                type="ethernet",
+                running=False,
+                disabled=False,
+            ),
+            DiscoveredInterface(
+                name="ether3",
+                type="ethernet",
+                running=False,
+                disabled=False,
+            ),
+            DiscoveredInterface(
+                name="ether4",
+                type="ethernet",
+                running=False,
+                disabled=False,
+            ),
+            DiscoveredInterface(
+                name="ether5",
+                type="ethernet",
+                running=False,
+                disabled=False,
+            ),
+        ],
+        dhcp_clients=[
+            DiscoveredDHCPClient(
+                interface="ether1",
+                address="192.168.8.107/24",
+                gateway="192.168.8.1",
+                status="bound",
+            ),
+        ],
+        routes=[
+            DiscoveredRoute(
+                destination="0.0.0.0/0",
+                gateway="192.168.8.1",
+                interface=None,
+            ),
+        ],
+    )
+
+    result = infer_topology(snapshot)
+
+    assert result.status == "INFERRED"
+    assert result.wan_interface == "ether1"
+    assert result.client_interfaces == [
+        "ether2",
+        "ether3",
+        "ether4",
+        "ether5",
+    ]
+    assert result.client_bridge_interfaces == []
+
 def test_inference_uses_topology_evidence_not_interface_names():
     snapshot = RouterDiscoverySnapshot(
         router_id="router-named-differently",

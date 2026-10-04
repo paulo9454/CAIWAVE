@@ -69,7 +69,7 @@ def render_discovery_script(
         )
 
     script_body = (
-        ':do { '
+        ':onerror discoveryError in={ '
         f':local nasid "{nas_identifier}"; '
         ':local interfaces [/interface print as-value]; '
         ':local bridges [/interface bridge print as-value]; '
@@ -110,7 +110,9 @@ def render_discovery_script(
         'http-data=$json '
         'keep-result=no; '
         '}; '
-        '} on-error={ :log warning "CAIWAVE discovery execution failed"; };'
+        '} do={ '
+        ':log warning ("CAIWAVE discovery execution failed: " . [:tostr $discoveryError]); '
+        '};'
     )
 
     commands = [

@@ -326,23 +326,23 @@ def infer_topology(
         # Fresh-router topology:
         #
         # No existing service-bearing client bridge was discovered.
-        # Use observed physical link state as topology evidence instead of
-        # assuming every unused Ethernet port is a client interface.
+        # Enabled physical Ethernet ports are valid client candidates
+        # for a fresh router, regardless of current link state.
         physical_ethernet = _physical_ethernet_interfaces(snapshot)
 
-        running_client_candidates = [
+        client_candidates = [
             interface.name
             for interface in snapshot.interfaces
             if (
                 interface.name
                 and interface.name in physical_ethernet
                 and interface.name != top.interface
-                and interface.running
                 and not interface.disabled
             )
         ]
 
-        client_candidates = list(dict.fromkeys(running_client_candidates))
+        client_candidates = list(dict.fromkeys(client_candidates))
+
 
         if not client_candidates:
             return TopologyInferenceResult(
