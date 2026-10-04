@@ -57,10 +57,9 @@ def test_adapter_returns_persistable_rendered_artifact():
     assert artifact.manifest.model_dump()
     assert artifact.sections
 
-    assert (
-        "Authorization: Bearer test-control-secret-123"
-        in artifact.content
-    )
+    assert "Authorization: Bearer test-control-secret-123" not in artifact.content
+    assert "CAIWAVE managed provisioning control agent" not in artifact.content
+    assert 'name="caiwave-control"' not in artifact.content
 
 def sample_router_with_wireless():
     router = sample_router()
@@ -174,10 +173,9 @@ def test_adapter_includes_control_authorization_header():
         control_secret="test-control-secret-123",
     )
 
-    assert (
-        'Authorization: Bearer test-control-secret-123'
-        in output.content
-    )
+    assert "Authorization: Bearer test-control-secret-123" not in output.content
+    assert "CAIWAVE managed provisioning control agent" not in output.content
+    assert 'name="caiwave-control"' not in output.content
     assert "Content-Type: application/json" in output.content
     assert lint_routeros_script(output.content).valid is True
 
@@ -230,10 +228,9 @@ def test_adapter_returns_complete_rendered_artifact():
     assert artifact.checksum
     assert artifact.content
     assert artifact.content_type == "text/routeros-script"
-    assert (
-        "Authorization: Bearer test-control-secret-123"
-        in artifact.content
-    )
+    assert "Authorization: Bearer test-control-secret-123" not in artifact.content
+    assert "CAIWAVE managed provisioning control agent" not in artifact.content
+    assert 'name="caiwave-control"' not in artifact.content
 
 
 def test_intent_aware_router_uses_discovered_topology_over_persisted_interfaces():

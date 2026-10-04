@@ -464,7 +464,6 @@ def build_provisioning_v2_artifact_from_router(
     artifact = render_routeros_bundle(
         bundle=bundle,
         context=render_context,
-        control_secret=control_secret,
     )
     lint = lint_production_routeros_script(
         artifact.content,
