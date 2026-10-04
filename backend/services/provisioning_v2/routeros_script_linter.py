@@ -154,7 +154,6 @@ class ProductionRouterOSLintContext(StrictModel):
     captive_dns_name: str
     portal_public_url: str
     radius_host: str
-    heartbeat_url: str
 
 
 def lint_production_routeros_script(
@@ -181,17 +180,10 @@ def lint_production_routeros_script(
         context.nas_identifier,
         context.captive_dns_name,
         context.radius_host,
-        context.heartbeat_url,
         "/file add",
         'name="hotspot/login.html"',
         "radius-accounting=yes",
         "radius-interim-update=5m",
-        "/system script add",
-        'name="caiwave-heartbeat"',
-        'name="caiwave-confirm"',
-        "/system scheduler add",
-        "/system script run caiwave-confirm",
-        "/system script run caiwave-heartbeat",
         "require-message-auth=no",
         'list="CAIWAVE-PREAUTH"',
         'address="www.caiwave.com"',
@@ -238,10 +230,6 @@ def lint_production_routeros_script(
     required_command_prefixes = [
         "/file remove",
         "/file add",
-        "/system script remove",
-        "/system script add",
-        "/system scheduler remove",
-        "/system scheduler add",
     ]
 
     command_lines = [
@@ -262,11 +250,6 @@ def lint_production_routeros_script(
     if context.portal_public_url.startswith("http://"):
         errors.append(
             "Production portal_public_url must use HTTPS"
-        )
-
-    if context.heartbeat_url.startswith("http://"):
-        errors.append(
-            "Production heartbeat_url must use HTTPS"
         )
 
     preauth_allow_position = next(

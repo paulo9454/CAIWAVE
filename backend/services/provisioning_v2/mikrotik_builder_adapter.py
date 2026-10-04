@@ -474,7 +474,6 @@ def build_provisioning_v2_artifact_from_router(
             captive_dns_name=validated.captive_dns_name,
             portal_public_url=validated.portal_public_url,
             radius_host=validated.radius_host,
-            heartbeat_url=validated.heartbeat_url,
         ),
     )
 
