@@ -74,6 +74,14 @@ class FakeRepository:
         await self.collection.insert_one(document)
         return document
 
+    async def update(self, document):
+        for index, existing in enumerate(self.collection.documents):
+            if existing.get("job_id") == document.get("job_id"):
+                self.collection.documents[index] = dict(document)
+                return document
+
+        raise AssertionError("job not found")
+
 
 def test_creates_queued_job_when_no_active_job_exists():
     async def scenario():
@@ -100,7 +108,36 @@ def test_creates_queued_job_when_no_active_job_exists():
     asyncio.run(scenario())
 
 
-def test_returns_existing_active_job_instead_of_creating_duplicate():
+def test_reuses_active_job_when_artifact_checksum_is_unchanged():
+    async def scenario():
+        repository = FakeRepository()
+        orchestrator = MikroTikProvisioningOrchestrator(repository)
+
+        first_job = await orchestrator.get_or_create_provisioning_job(
+            router_id="router-1",
+            artifact_id="artifact-1",
+            bundle_id="bundle-1",
+            snapshot_id="snapshot-1",
+            artifact_checksum="checksum-1",
+        )
+
+        second_job = await orchestrator.get_or_create_provisioning_job(
+            router_id="router-1",
+            artifact_id="artifact-1",
+            bundle_id="bundle-1",
+            snapshot_id="snapshot-1",
+            artifact_checksum="checksum-1",
+        )
+
+        assert second_job["job_id"] == first_job["job_id"]
+        assert second_job["artifact_checksum"] == "checksum-1"
+        assert second_job["status"] == "queued"
+        assert len(repository.collection.documents) == 1
+
+    asyncio.run(scenario())
+
+
+def test_supersedes_active_job_when_artifact_checksum_changes():
     async def scenario():
         repository = FakeRepository()
         orchestrator = MikroTikProvisioningOrchestrator(repository)
@@ -121,9 +158,24 @@ def test_returns_existing_active_job_instead_of_creating_duplicate():
             artifact_checksum="checksum-2",
         )
 
-        assert second_job["job_id"] == first_job["job_id"]
-        assert second_job["artifact_id"] == "artifact-1"
+        assert second_job["job_id"] != first_job["job_id"]
+        assert second_job["artifact_id"] == "artifact-2"
+        assert second_job["bundle_id"] == "bundle-2"
+        assert second_job["snapshot_id"] == "snapshot-2"
+        assert second_job["artifact_checksum"] == "checksum-2"
         assert second_job["status"] == "queued"
-        assert len(repository.collection.documents) == 1
+
+        stored_jobs = repository.collection.documents
+        assert len(stored_jobs) == 2
+
+        old_job = next(
+            job for job in stored_jobs
+            if job["job_id"] == first_job["job_id"]
+        )
+
+        assert old_job["status"] == "failed"
+        assert old_job["last_error"] == (
+            "Superseded by newer provisioning artifact"
+        )
 
     asyncio.run(scenario())

@@ -69,7 +69,15 @@ class MikroTikProvisioningOrchestrator:
         active_job = await self.repository.get_active_for_router(router_id)
 
         if active_job:
-            return active_job
+            if active_job.get("artifact_checksum") == artifact_checksum:
+                return active_job
+
+            superseded_job = job_service.transition(
+                active_job,
+                status="failed",
+                error="Superseded by newer provisioning artifact",
+            )
+            await self.repository.update(superseded_job)
 
         job = job_service.create_job(
             router_id=router_id,
