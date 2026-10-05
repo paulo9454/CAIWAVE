@@ -74,14 +74,15 @@ class FakeRepository:
         await self.collection.insert_one(document)
         return document
 
-    async def update(self, document):
+    async def update(self, job_id, updates):
         for index, existing in enumerate(self.collection.documents):
-            if existing.get("job_id") == document.get("job_id"):
-                self.collection.documents[index] = dict(document)
-                return document
+            if existing.get("job_id") == job_id:
+                updated = dict(existing)
+                updated.update(updates)
+                self.collection.documents[index] = updated
+                return updated
 
         raise AssertionError("job not found")
-
 
 def test_creates_queued_job_when_no_active_job_exists():
     async def scenario():
