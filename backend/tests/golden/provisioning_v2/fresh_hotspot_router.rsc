@@ -99,21 +99,6 @@
 /ip firewall filter add action="drop" chain="input" comment="CAIWAVE default drop WAN input" in-interface="ether1"
 /ip firewall filter add action="drop" chain="forward" comment="CAIWAVE default drop unmatched forward"
 
-# ========================================================================
-# CAIWAVE Heartbeat and Confirmation
-# ========================================================================
-# Heartbeat interval: 300s
-# Heartbeat URL: https://caiwave.com/api/mikrotik-onboard/heartbeat
-# Confirmation URL: https://caiwave.com/api/mikrotik-onboard/confirm
-/system scheduler remove [find where name="caiwave-heartbeat"]
-/system script remove [find where name="caiwave-heartbeat"]
-/system script remove [find where name="caiwave-confirm"]
-/system script add name="caiwave-heartbeat" policy="read,write,test" source=":do { /tool fetch url=\"https://caiwave.com/api/mikrotik-onboard/heartbeat\" http-method=post http-header-field=\"Content-Type: application/json\" http-data=\"{\\\"nas_identifier\\\":\\\"CAIWAVE-GOODLIFE\\\"}\" keep-result=no; } on-error={ :log warning \"CAIWAVE heartbeat failed; scheduler will retry\"; }"
-/system script add name="caiwave-confirm" policy="read,write,test" source=":do { /tool fetch url=\"https://caiwave.com/api/mikrotik-onboard/confirm\" http-method=post http-header-field=\"Content-Type: application/json\" http-data=\"{\\\"router_id\\\":\\\"router-1\\\",\\\"nas_identifier\\\":\\\"CAIWAVE-GOODLIFE\\\"}\" keep-result=no; } on-error={ :log warning \"CAIWAVE provisioning confirmation failed\"; }"
-/system scheduler add comment="CAIWAVE managed heartbeat scheduler" disabled=no interval="5m" name="caiwave-heartbeat" on-event="caiwave-heartbeat"
-/system script run caiwave-confirm
-/system script run caiwave-heartbeat
-
 # section planned: validation
 
 # section planned: footer
