@@ -207,7 +207,9 @@ def _control_source(
         '/import file-name=$artifactFile verbose=yes dry-run; '
 
         # Only execute after dry-run validation succeeds.
+        ':log warning "CAIWAVE control: before provisioning import"; '
         '/import file-name=$artifactFile; '
+        ':log warning "CAIWAVE control: provisioning import completed"; '
 
         # Remove the artifact after successful execution.
         f'/file remove [find where name="{CONTROL_ARTIFACT_FILE}"]; '
@@ -219,7 +221,8 @@ def _control_source(
         # ---------------------------------------------------------
         ':do { '
 
-        ':log warning ("CAIWAVE provisioning import failed: " . [:tostr $importError]); '
+        ':log warning ("CAIWAVE control: provisioning import failed: " . [:tostr $importError]); '
+        ':log warning "CAIWAVE control: before failure callback"; '
         ':local errorJson [:serialize to=json value=[:tostr $importError]]; '
         f':local failureBody ("{failure_json_prefix}" . $errorJson . "}}"); '
 
@@ -230,6 +233,8 @@ def _control_source(
         'http-data=$failureBody '
         'output=none '
         'check-certificate=yes '
+
+        ':log warning "CAIWAVE control: failure callback completed"; '
 
         '} on-error={ '
 
@@ -251,6 +256,8 @@ def _control_source(
         # ---------------------------------------------------------
         ':do { '
 
+        ':log warning "CAIWAVE control: before success callback"; '
+
         f':local successBody "{success_json}"; '
 
         f'/tool fetch '
@@ -261,6 +268,8 @@ def _control_source(
         'output=none '
         'check-certificate=yes '
 
+        ':log warning "CAIWAVE control: success callback completed"; '
+
         '} on-error={ '
 
         ':log warning "CAIWAVE failed to report provisioning success"; '
@@ -269,7 +278,7 @@ def _control_source(
 
         '} on-error={ '
 
-        ':log warning "CAIWAVE control agent failed"; '
+        ':log warning ("CAIWAVE control agent failed: " . [:tostr $outerError]); '
 
         '};'
     )
