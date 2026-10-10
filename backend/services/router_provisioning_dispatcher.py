@@ -37,7 +37,7 @@ def dispatch_router_provisioning(router: dict, mode: str = "script"):
             with open(filename, "w") as f:
                 f.write(script)
 
-            getattr(observer, "success", lambda *a, **k: None)(router_id, script=script)
+            getattr(observer, "success", lambda *a, **k: None)(router_id, script=script, run=run)
 
             return {
                 "status": "saved",
@@ -49,7 +49,7 @@ def dispatch_router_provisioning(router: dict, mode: str = "script"):
         raise ValueError(f"Unknown mode: {mode}")
 
     except Exception as e:
-        getattr(observer, "fail", lambda *a, **k: None)(router_id, str(e))
+        getattr(observer, "fail", lambda *a, **k: None)(router_id, str(e), run=run)
 
         return {
             "status": "error",

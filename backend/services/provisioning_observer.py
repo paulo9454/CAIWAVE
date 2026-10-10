@@ -1,46 +1,80 @@
+from threading import RLock
+
 from backend.models.provisioning_run import ProvisioningRun
 from backend.services.provisioning_repository import ProvisioningRepository
 
 
 class ProvisioningObserver:
+    TERMINAL_STATUSES = {"active", "failed"}
+
     def __init__(self):
         self.runs = {}
+        self._lock = RLock()
 
     def start(self, router_id: str):
-        run = ProvisioningRun(router_id)
-        run.log("Provisioning started")
-        self.runs[router_id] = run
-        return run
+        with self._lock:
+            run = ProvisioningRun(router_id)
+            run.log("Provisioning started")
+            self.runs[router_id] = run
+            return run
 
-    def success(self, router_id: str, script: str = ""):
-        run = self.runs.get(router_id)
-        if not run:
-            return
+    def _get_current_run(self, router_id: str, run=None):
+        current = self.runs.get(router_id)
+        candidate = run if run is not None else current
 
-        run.log("Provisioning successful")
-        run.mark_success()
+        if candidate is None or candidate is not current:
+            return None
 
-        ProvisioningRepository.save_sync({
-            "router_id": router_id,
-            "status": "success",
-            "script": script,
-            "logs": run.logs,
-        })
+        if candidate.status in self.TERMINAL_STATUSES:
+            return None
 
-    def fail(self, router_id: str, error: str):
-        run = self.runs.get(router_id)
-        if not run:
-            return
+        return candidate
 
-        run.log(f"Provisioning failed: {error}")
-        run.mark_failed(error)
+    def _finish(self, router_id: str, status: str, run=None,
+                script: str = "", error: str = ""):
+        with self._lock:
+            current_run = self._get_current_run(router_id, run)
+            if current_run is None:
+                return
 
-        ProvisioningRepository.save_sync({
-            "router_id": router_id,
-            "status": "failed",
-            "error": error,
-            "logs": run.logs,
-        })
+            previous_status = current_run.status
+            previous_finished_at = current_run.finished_at
+            previous_error = current_run.error
+            previous_logs = list(current_run.logs)
+
+            if status == "active":
+                current_run.log("Provisioning successful")
+                current_run.mark_success()
+                record = {
+                    "router_id": router_id,
+                    "status": "success",
+                    "script": script,
+                    "logs": list(current_run.logs),
+                }
+            else:
+                current_run.log(f"Provisioning failed: {error}")
+                current_run.mark_failed(error)
+                record = {
+                    "router_id": router_id,
+                    "status": "failed",
+                    "error": error,
+                    "logs": list(current_run.logs),
+                }
+
+            try:
+                ProvisioningRepository.save_sync(record)
+            except Exception:
+                current_run.status = previous_status
+                current_run.finished_at = previous_finished_at
+                current_run.error = previous_error
+                current_run.logs[:] = previous_logs
+                raise
+
+    def success(self, router_id: str, script: str = "", run=None):
+        self._finish(router_id, "active", run=run, script=script)
+
+    def fail(self, router_id: str, error: str, run=None):
+        self._finish(router_id, "failed", run=run, error=error)
 
 
 observer = ProvisioningObserver()
