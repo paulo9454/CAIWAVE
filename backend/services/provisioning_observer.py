@@ -69,7 +69,7 @@ class ProvisioningObserver:
 
             try:
                 await ProvisioningRepository.save(record)
-            except Exception:
+            except (Exception, asyncio.CancelledError):
                 current_run.status = previous_status
                 current_run.finished_at = previous_finished_at
                 current_run.error = previous_error

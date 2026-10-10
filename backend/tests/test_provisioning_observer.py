@@ -253,3 +253,50 @@ def test_file_saved_but_status_persistence_fails(monkeypatch, tmp_path):
         assert run.finished_at is None
 
     execute(scenario())
+
+
+def test_cancelled_persistence_restores_run_and_allows_retry(monkeypatch):
+    import asyncio
+
+    saved = []
+    attempts = {"count": 0}
+
+    async def save_with_one_cancellation(record):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise asyncio.CancelledError()
+        saved.append(record)
+
+    monkeypatch.setattr(
+        ProvisioningRepository, "save", save_with_one_cancellation
+    )
+    observer = ProvisioningObserver()
+
+    async def scenario():
+        run = await observer.start("router-cancel-retry")
+        original_logs = list(run.logs)
+
+        try:
+            await observer.success(
+                "router-cancel-retry", script="script", run=run
+            )
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("Expected cancellation")
+
+        assert run.status == "pending"
+        assert run.finished_at is None
+        assert run.error is None
+        assert run.logs == original_logs
+        assert saved == []
+
+        await observer.success(
+            "router-cancel-retry", script="script", run=run
+        )
+
+        assert run.status == "active"
+        assert len(saved) == 1
+        assert saved[0]["status"] == "success"
+
+    execute(scenario())
