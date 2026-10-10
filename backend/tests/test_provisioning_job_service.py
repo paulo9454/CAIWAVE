@@ -129,6 +129,61 @@ def test_transition_to_failed_stores_error():
     assert failed["last_error"] == "Router did not acknowledge command"
 
 
+@pytest.mark.parametrize(
+    ("current_status", "requested_status"),
+    [
+        ("queued", "succeeded"),
+        ("dispatched", "queued"),
+        ("succeeded", "failed"),
+        ("failed", "succeeded"),
+        ("cancelled", "running"),
+    ],
+)
+def test_transition_rejects_invalid_transition(
+    current_status,
+    requested_status,
+):
+    service = build_service()
+    job = build_job(service)
+    job["status"] = current_status
+
+    with pytest.raises(ProvisioningJobError, match="Invalid provisioning job transition"):
+        service.transition(job, status=requested_status)
+
+
+def test_duplicate_running_transition_does_not_increment_attempts():
+    service = build_service()
+    job = build_job(service)
+
+    running = service.transition(job, status="running")
+    repeated = service.transition(running, status="running")
+
+    assert repeated["attempts"] == 1
+    assert repeated["started_at"] == running["started_at"]
+    assert repeated["updated_at"] == running["updated_at"]
+
+
+def test_duplicate_terminal_transition_preserves_original_result():
+    service = build_service()
+    job = build_job(service)
+    running = service.transition(job, status="running")
+
+    succeeded = service.transition(
+        running,
+        status="succeeded",
+        result={"router_status": "provisioned"},
+    )
+    repeated = service.transition(
+        succeeded,
+        status="succeeded",
+        result={"router_status": "different"},
+        error="Late duplicate callback",
+    )
+
+    assert repeated["completed_at"] == succeeded["completed_at"]
+    assert repeated["result"] == {"router_status": "provisioned"}
+    assert repeated.get("last_error") == succeeded.get("last_error")
+
 def test_transition_rejects_invalid_status():
     service = build_service()
     job = build_job(service)

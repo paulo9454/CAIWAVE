@@ -644,7 +644,7 @@ def test_mikrotik_control_credential_accepts_valid_secret(monkeypatch):
         "router_id": "router-test-1",
         "secret_hash": hash_control_secret(secret),
         "created_at": "2026-09-06T00:00:00+00:00",
-        "expires_at": "2026-10-06T00:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
         "status": "active",
     }
 
@@ -689,7 +689,7 @@ def test_confirm_mikrotik_connection_creates_provisioning_job(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(control_secret),
         "created_at": "2026-09-08T00:00:00+00:00",
-        "expires_at": "2026-10-08T00:00:00+00:00",
+        "expires_at": "2099-01-01T00:00:00+00:00",
         "status": "active",
     }
 
@@ -1671,6 +1671,21 @@ def test_mikrotik_job_poll_fails_when_artifact_is_missing():
                 claimed["status"] = "dispatched"
                 return claimed
 
+            async def update_if_status(
+                self,
+                job_id,
+                expected_status,
+                updates,
+            ):
+                assert job_id == job["job_id"]
+                assert expected_status == "dispatched"
+                assert updates["status"] == "failed"
+                assert updates["last_error"] == "Provisioning artifact not found"
+                result = dict(job)
+                result["status"] = expected_status
+                result.update(updates)
+                return result
+
             async def update(self, job_id, updates):
                 assert job_id == job["job_id"]
                 assert updates["status"] == "failed"
@@ -1919,6 +1934,20 @@ def test_mikrotik_job_result_marks_job_succeeded(monkeypatch):
                 "Authorization": f"Bearer {secret}",
             },
         )
+        late_failure_response = client.post(
+            "/api/mikrotik-onboard/job-result",
+            json={
+                "nas_identifier": router["nas_identifier"],
+                "job_id": job["job_id"],
+                "status": "failed",
+                "error": "Late stale failure callback",
+                "result": {"router_status": "failed"},
+            },
+            headers={"Authorization": f"Bearer {secret}"},
+        )
+
+        assert late_failure_response.status_code == 409
+
 
     assert success_response.status_code == 200
 
@@ -2027,6 +2056,19 @@ def test_mikrotik_job_result_marks_job_failed(monkeypatch):
                 "Authorization": f"Bearer {secret}",
             },
         )
+        late_success_response = client.post(
+            "/api/mikrotik-onboard/job-result",
+            json={
+                "nas_identifier": router["nas_identifier"],
+                "job_id": job["job_id"],
+                "status": "succeeded",
+                "result": {"router_status": "incorrect_late_success"},
+            },
+            headers={"Authorization": f"Bearer {secret}"},
+        )
+
+        assert late_success_response.status_code == 409
+
 
     assert response.status_code == 200
 

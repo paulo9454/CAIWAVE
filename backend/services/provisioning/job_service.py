@@ -110,6 +110,27 @@ class ProvisioningJobService:
                 f"Invalid provisioning job status: {status}"
             )
 
+        current_status = job.get("status")
+        allowed_transitions = {
+            "queued": {"dispatched", "running", "failed", "cancelled"},
+            "dispatched": {"running", "succeeded", "failed", "cancelled"},
+            "running": {"succeeded", "failed", "cancelled"},
+            "succeeded": set(),
+            "failed": set(),
+            "cancelled": set(),
+        }
+
+        # Duplicate callbacks must not reset timestamps, overwrite results,
+        # or increment attempts again.
+        if status == current_status:
+            return dict(job)
+
+        if status not in allowed_transitions.get(current_status, set()):
+            raise ProvisioningJobError(
+                f"Invalid provisioning job transition: "
+                f"{current_status} -> {status}"
+            )
+
         updated = dict(job)
         now = _utcnow()
 

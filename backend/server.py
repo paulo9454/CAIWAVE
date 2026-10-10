@@ -91,6 +91,7 @@ from backend.services.provisioning.repository import (
 )
 
 from backend.services.provisioning.job_service import (
+    ProvisioningJobError,
     job_service,
 )
 from backend.services.mikrotik_control_plane.provisioning import (
@@ -6884,15 +6885,39 @@ async def mikrotik_job_poll(
     )
 
     if not artifact:
-        await provisioning_job_repository.update(
-            job["job_id"],
-            {
-                "status": "failed",
-                "last_error": "Provisioning artifact not found",
-                "completed_at": datetime.now(timezone.utc),
-                "updated_at": datetime.now(timezone.utc),
-            },
+        failure_time = datetime.now(timezone.utc)
+
+        failed_job = (
+            await provisioning_job_repository.update_if_status(
+                job["job_id"],
+                job["status"],
+                {
+                    "status": "failed",
+                    "last_error": "Provisioning artifact not found",
+                    "completed_at": failure_time,
+                    "updated_at": failure_time,
+                },
+            )
         )
+
+        if failed_job is None:
+            current_job = await provisioning_job_repository.get_by_id(
+                job["job_id"]
+            )
+
+            if current_job is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Provisioning job not found",
+                )
+
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Provisioning job changed concurrently; "
+                    "missing-artifact failure was not applied."
+                ),
+            )
 
         raise HTTPException(
             status_code=500,
@@ -7028,17 +7053,59 @@ async def mikrotik_job_result(
             detail="Invalid provisioning job result status",
         )
 
-    updated_job = job_service.transition(
-        job,
-        status=payload.status,
-        result=payload.result,
-        error=payload.error,
-    )
+    try:
+        updated_job = job_service.transition(
+            job,
+            status=payload.status,
+            result=payload.result,
+            error=payload.error,
+        )
+    except ProvisioningJobError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=str(exc),
+        ) from exc
 
-    await provisioning_job_repository.update(
-        payload.job_id,
-        updated_job,
-    )
+    # A duplicate same-status callback is a no-op.
+    # For actual transitions, update atomically against the status we read.
+    if updated_job != job:
+        expected_status = job["status"]
+        changed_fields = {
+            key: value
+            for key, value in updated_job.items()
+            if job.get(key) != value
+        }
+
+        persisted_job = (
+            await provisioning_job_repository.update_if_status(
+                payload.job_id,
+                expected_status,
+                changed_fields,
+            )
+        )
+
+        if persisted_job is None:
+            current_job = await provisioning_job_repository.get_by_id(
+                payload.job_id
+            )
+
+            if current_job is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Provisioning job not found",
+                )
+
+            if current_job.get("status") != payload.status:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Provisioning job changed concurrently; "
+                        "the callback was not applied."
+                    ),
+                )
+
+            # Another callback already reached the requested status.
+            # Keep its stored result and timestamps unchanged.
 
     return MikroTikJobResultResponse(
         success=True,

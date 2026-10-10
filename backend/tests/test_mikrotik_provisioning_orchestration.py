@@ -1,6 +1,7 @@
 import asyncio
 
 from backend.services.mikrotik_control_plane.provisioning import (
+    MikroTikProvisioningOrchestrationError,
     MikroTikProvisioningOrchestrator,
 )
 
@@ -53,6 +54,7 @@ class FakeCollection:
 class FakeRepository:
     def __init__(self):
         self.collection = FakeCollection()
+        self.conflict_on_conditional_update = False
 
     async def get_active_for_router(self, router_id):
         jobs = await self.collection.find(
@@ -83,6 +85,28 @@ class FakeRepository:
                 return updated
 
         raise AssertionError("job not found")
+
+    async def update_if_status(self, job_id, expected_status, updates):
+        for index, existing in enumerate(self.collection.documents):
+            if existing.get("job_id") != job_id:
+                continue
+
+            # Simulate another process changing the job after it was read.
+            if self.conflict_on_conditional_update:
+                changed = dict(existing)
+                changed["status"] = "succeeded"
+                self.collection.documents[index] = changed
+                return None
+
+            if existing.get("status") != expected_status:
+                return None
+
+            updated = dict(existing)
+            updated.update(updates)
+            self.collection.documents[index] = updated
+            return updated
+
+        return None
 
 def test_creates_queued_job_when_no_active_job_exists():
     async def scenario():
@@ -178,5 +202,41 @@ def test_supersedes_active_job_when_artifact_checksum_changes():
         assert old_job["last_error"] == (
             "Superseded by newer provisioning artifact"
         )
+
+    asyncio.run(scenario())
+
+
+def test_does_not_create_replacement_if_active_job_changes_concurrently():
+    async def scenario():
+        repository = FakeRepository()
+        orchestrator = MikroTikProvisioningOrchestrator(repository)
+
+        first_job = await orchestrator.get_or_create_provisioning_job(
+            router_id="router-1",
+            artifact_id="artifact-1",
+            bundle_id="bundle-1",
+            snapshot_id="snapshot-1",
+            artifact_checksum="checksum-1",
+        )
+
+        repository.conflict_on_conditional_update = True
+
+        try:
+            await orchestrator.get_or_create_provisioning_job(
+                router_id="router-1",
+                artifact_id="artifact-2",
+                bundle_id="bundle-2",
+                snapshot_id="snapshot-2",
+                artifact_checksum="checksum-2",
+            )
+        except MikroTikProvisioningOrchestrationError as exc:
+            assert "changed during supersession" in str(exc)
+        else:
+            raise AssertionError("Expected supersession conflict")
+
+        stored_jobs = repository.collection.documents
+        assert len(stored_jobs) == 1
+        assert stored_jobs[0]["job_id"] == first_job["job_id"]
+        assert stored_jobs[0]["status"] == "succeeded"
 
     asyncio.run(scenario())

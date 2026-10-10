@@ -25,8 +25,9 @@ class FakeCursor:
 
 
 class FakeResult:
-    def __init__(self, deleted_count=0):
+    def __init__(self, deleted_count=0, matched_count=0):
         self.deleted_count = deleted_count
+        self.matched_count = matched_count
 
 
 class FakeCollection:
@@ -88,9 +89,9 @@ class FakeCollection:
                 for key, value in query.items()
             ):
                 document.update(update.get("$set", {}))
-                return FakeResult()
+                return FakeResult(matched_count=1)
 
-        return FakeResult()
+        return FakeResult(matched_count=0)
 
 
 def build_repository():
@@ -240,6 +241,48 @@ def test_update_job():
 
         assert updated["status"] == "running"
         assert updated["attempts"] == 1
+
+    asyncio.run(scenario())
+
+
+def test_update_if_status_updates_only_when_expected_status_matches():
+    async def scenario():
+        repository = build_repository()
+        await repository.create(build_job())
+
+        updated = await repository.update_if_status(
+            "job-123",
+            "queued",
+            {"status": "dispatched"},
+        )
+
+        assert updated is not None
+        assert updated["status"] == "dispatched"
+
+        stale_update = await repository.update_if_status(
+            "job-123",
+            "queued",
+            {"status": "failed"},
+        )
+
+        assert stale_update is None
+        stored = await repository.get_by_id("job-123")
+        assert stored["status"] == "dispatched"
+
+    asyncio.run(scenario())
+
+
+def test_update_if_status_returns_none_for_missing_job():
+    async def scenario():
+        repository = build_repository()
+
+        updated = await repository.update_if_status(
+            "missing",
+            "queued",
+            {"status": "failed"},
+        )
+
+        assert updated is None
 
     asyncio.run(scenario())
 

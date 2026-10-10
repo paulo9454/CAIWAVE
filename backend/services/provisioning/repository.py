@@ -195,6 +195,39 @@ class ProvisioningJobRepository:
 
         return updated
 
+    async def update_if_status(
+        self,
+        job_id: str,
+        expected_status: str,
+        updates: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update a job only if its status still matches the caller's snapshot.
+
+        The status predicate and write are one MongoDB operation, preventing
+        a stale callback from overwriting a newer job state.
+        Returns None if the status no longer matches or the job is missing.
+        """
+        result = await self.collection.update_one(
+            {
+                "job_id": job_id,
+                "status": expected_status,
+            },
+            {"$set": dict(updates)},
+        )
+
+        if result.matched_count == 0:
+            return None
+
+        updated = await self.get_by_id(job_id)
+        if updated is None:
+            raise RuntimeError(
+                "Provisioning job matched conditional update but could not "
+                "be read back."
+            )
+
+        return updated
+
     async def list_by_status(
         self,
         status: str,

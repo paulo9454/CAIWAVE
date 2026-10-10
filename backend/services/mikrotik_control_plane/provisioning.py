@@ -77,8 +77,9 @@ class MikroTikProvisioningOrchestrator:
                 status="failed",
                 error="Superseded by newer provisioning artifact",
             )
-            await self.repository.update(
+            updated_job = await self.repository.update_if_status(
                 superseded_job["job_id"],
+                active_job["status"],
                 {
                     "status": superseded_job["status"],
                     "updated_at": superseded_job["updated_at"],
@@ -86,6 +87,11 @@ class MikroTikProvisioningOrchestrator:
                     "last_error": superseded_job["last_error"],
                 },
             )
+            if updated_job is None:
+                raise MikroTikProvisioningOrchestrationError(
+                    "Active provisioning job changed during supersession; "
+                    "no replacement job was created"
+                )
 
         job = job_service.create_job(
             router_id=router_id,
