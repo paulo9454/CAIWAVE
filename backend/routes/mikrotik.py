@@ -1,5 +1,4 @@
-import asyncio
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from backend.schemas.mikrotik import MikroTikProvisionRequest
 from backend.services.mikrotik_provisioning import provision_router
@@ -10,26 +9,21 @@ mikrotik_router = APIRouter(prefix="/mikrotik", tags=["MikroTik"])
 
 @mikrotik_router.post("/generate")
 async def generate_script(payload: MikroTikProvisionRequest):
-
     result = provision_router(payload)
 
     if result["status"] != "success":
         return {
             "status": "error",
             "message": result.get("message", "Provisioning failed"),
-            "script": None
+            "script": None,
         }
 
-    response = dispatch_router_provisioning(
+    response = await dispatch_router_provisioning(
         result["router"],
-        mode="script"
+        mode="script",
     )
 
     return {
         "status": "success",
-        "script": response["script"]
+        "script": response["script"],
     }
-
-
-
-

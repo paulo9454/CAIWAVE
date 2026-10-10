@@ -1,4 +1,4 @@
-from threading import RLock
+import asyncio
 
 from backend.models.provisioning_run import ProvisioningRun
 from backend.services.provisioning_repository import ProvisioningRepository
@@ -9,10 +9,10 @@ class ProvisioningObserver:
 
     def __init__(self):
         self.runs = {}
-        self._lock = RLock()
+        self._lock = asyncio.Lock()
 
-    def start(self, router_id: str):
-        with self._lock:
+    async def start(self, router_id: str):
+        async with self._lock:
             run = ProvisioningRun(router_id)
             run.log("Provisioning started")
             self.runs[router_id] = run
@@ -30,9 +30,15 @@ class ProvisioningObserver:
 
         return candidate
 
-    def _finish(self, router_id: str, status: str, run=None,
-                script: str = "", error: str = ""):
-        with self._lock:
+    async def _finish(
+        self,
+        router_id: str,
+        status: str,
+        run=None,
+        script: str = "",
+        error: str = "",
+    ):
+        async with self._lock:
             current_run = self._get_current_run(router_id, run)
             if current_run is None:
                 return
@@ -62,7 +68,7 @@ class ProvisioningObserver:
                 }
 
             try:
-                ProvisioningRepository.save_sync(record)
+                await ProvisioningRepository.save(record)
             except Exception:
                 current_run.status = previous_status
                 current_run.finished_at = previous_finished_at
@@ -70,11 +76,11 @@ class ProvisioningObserver:
                 current_run.logs[:] = previous_logs
                 raise
 
-    def success(self, router_id: str, script: str = "", run=None):
-        self._finish(router_id, "active", run=run, script=script)
+    async def success(self, router_id: str, script: str = "", run=None):
+        await self._finish(router_id, "active", run=run, script=script)
 
-    def fail(self, router_id: str, error: str, run=None):
-        self._finish(router_id, "failed", run=run, error=error)
+    async def fail(self, router_id: str, error: str, run=None):
+        await self._finish(router_id, "failed", run=run, error=error)
 
 
 observer = ProvisioningObserver()
