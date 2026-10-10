@@ -37,7 +37,23 @@ def dispatch_router_provisioning(router: dict, mode: str = "script"):
             with open(filename, "w") as f:
                 f.write(script)
 
-            getattr(observer, "success", lambda *a, **k: None)(router_id, script=script, run=run)
+            try:
+                getattr(observer, "success", lambda *a, **k: None)(
+                    router_id, script=script, run=run
+                )
+            except Exception as persistence_error:
+                # The file exists; do not misreport a persistence failure as
+                # a provisioning failure by invoking observer.fail().
+                return {
+                    "status": "saved",
+                    "router": router_name,
+                    "file": filename,
+                    "script": str(script),
+                    "warning": (
+                        "Script saved, but provisioning status could not be "
+                        f"recorded: {persistence_error}"
+                    ),
+                }
 
             return {
                 "status": "saved",

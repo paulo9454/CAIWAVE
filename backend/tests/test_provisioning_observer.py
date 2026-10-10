@@ -201,3 +201,45 @@ def test_failed_persistence_restores_run_and_allows_retry(monkeypatch):
     assert run.status == "active"
     assert len(saved) == 1
     assert saved[0]["status"] == "success"
+
+
+def test_file_saved_but_status_persistence_fails(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    from backend.services import router_provisioning_dispatcher as dispatcher
+
+    observer = ProvisioningObserver()
+    monkeypatch.setattr(dispatcher, "observer", observer)
+    monkeypatch.setattr(dispatcher, "normalize_router", lambda router: router)
+    monkeypatch.setattr(
+        dispatcher, "build_mikrotik_script", lambda router: "/system identity print"
+    )
+
+    real_open = open
+
+    def temporary_open(path, *args, **kwargs):
+        if str(path).startswith("/tmp/") and str(path).endswith("_mikrotik.rsc"):
+            path = tmp_path / Path(path).name
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", temporary_open)
+
+    def fail_persistence(record):
+        raise RuntimeError("simulated persistence failure")
+
+    monkeypatch.setattr(ProvisioningRepository, "save_sync", fail_persistence)
+
+    result = dispatcher.dispatch_router_provisioning(
+        {"nas_identifier": "diagnostic-router", "name": "diagnostic-router"},
+        mode="file",
+    )
+
+    run = observer.runs["diagnostic-router"]
+    output_file = tmp_path / "diagnostic-router_mikrotik.rsc"
+
+    assert result["status"] == "saved"
+    assert "status could not be recorded" in result["warning"]
+    assert output_file.exists()
+    assert output_file.read_text() == "/system identity print"
+    assert run.status == "pending"
+    assert run.finished_at is None
