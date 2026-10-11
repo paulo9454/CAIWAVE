@@ -1,4 +1,5 @@
 from backend.core.database import db
+from pymongo.errors import DuplicateKeyError
 
 
 class ProvisioningRepository:
@@ -6,8 +7,18 @@ class ProvisioningRepository:
 
     @staticmethod
     async def save(record: dict):
-        """Persist a provisioning record and wait for MongoDB to acknowledge it."""
-        return await db.provisioning_logs.insert_one(record)
+        """Persist a record idempotently and return the authoritative stored record."""
+        try:
+            await db.provisioning_logs.insert_one(record)
+            return record
+        except DuplicateKeyError:
+            # A prior insert may have succeeded before its caller was cancelled.
+            existing = await db.provisioning_logs.find_one(
+                {"_id": record["_id"]}
+            )
+            if existing is None:
+                raise
+            return existing
 
     @staticmethod
     async def find_one(query: dict):

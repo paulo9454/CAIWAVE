@@ -300,3 +300,105 @@ def test_cancelled_persistence_restores_run_and_allows_retry(monkeypatch):
         assert saved[0]["status"] == "success"
 
     execute(scenario())
+
+
+def test_ambiguous_cancellation_retry_reuses_persisted_record(monkeypatch):
+    stored = {}
+    attempts = {"count": 0}
+
+    async def save_with_ambiguous_cancellation(record):
+        attempts["count"] += 1
+        record_id = record["_id"]
+        if record_id in stored:
+            return stored[record_id]
+
+        # Simulate a successful insert followed by lost confirmation.
+        stored[record_id] = dict(record)
+        if attempts["count"] == 1:
+            raise asyncio.CancelledError()
+        return stored[record_id]
+
+    monkeypatch.setattr(
+        ProvisioningRepository, "save", save_with_ambiguous_cancellation
+    )
+    observer = ProvisioningObserver()
+
+    async def scenario():
+        run = await observer.start("router-ambiguous-cancel")
+
+        try:
+            await observer.success(
+                "router-ambiguous-cancel", script="script", run=run
+            )
+        except asyncio.CancelledError:
+            pass
+        else:
+            raise AssertionError("Expected cancellation")
+
+        assert run.status == "pending"
+        assert len(stored) == 1
+
+        await observer.success(
+            "router-ambiguous-cancel", script="script", run=run
+        )
+
+        persisted = next(iter(stored.values()))
+        assert len(stored) == 1
+        assert persisted["status"] == "success"
+        assert run.status == "active"
+        assert run.error is None
+        assert run.finished_at == persisted["finished_at"]
+        assert run.logs == persisted["logs"]
+        assert attempts["count"] == 2
+
+    execute(scenario())
+
+
+def test_repository_duplicate_id_returns_existing_record(monkeypatch):
+    from pymongo.errors import DuplicateKeyError
+
+    existing = {
+        "_id": "stable-run-id",
+        "router_id": "router-duplicate",
+        "status": "success",
+        "logs": ["already persisted"],
+    }
+
+    class FakeCollection:
+        def __init__(self):
+            self.insert_calls = 0
+            self.find_calls = 0
+
+        async def insert_one(self, record):
+            self.insert_calls += 1
+            raise DuplicateKeyError("duplicate _id")
+
+        async def find_one(self, query):
+            self.find_calls += 1
+            assert query == {"_id": "stable-run-id"}
+            return existing
+
+    fake = FakeCollection()
+    monkeypatch.setattr(
+        ProvisioningRepository, "collection", fake
+    )
+    monkeypatch.setattr(
+        "backend.services.provisioning_repository.db",
+        type("FakeDB", (), {"provisioning_logs": fake})(),
+    )
+
+    async def scenario():
+        result = await ProvisioningRepository.save({
+            "_id": "stable-run-id",
+            "router_id": "router-duplicate",
+            "status": "failed",
+            "error": "late failure",
+            "logs": ["late failure"],
+        })
+
+        assert result is existing
+        assert result["status"] == "success"
+        assert fake.insert_calls == 1
+        assert fake.find_calls == 1
+
+    execute(scenario())

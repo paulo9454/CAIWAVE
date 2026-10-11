@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import uuid4
 from typing import Optional, Dict, Any
 
 
@@ -8,6 +9,7 @@ class ProvisioningRun:
     """
 
     def __init__(self, router_id: str):
+        self.run_id = uuid4().hex
         self.router_id = router_id
         self.status = "pending"
         self.started_at = datetime.utcnow()

@@ -30,6 +30,20 @@ class ProvisioningObserver:
 
         return candidate
 
+    @staticmethod
+    def _apply_persisted_record(run, record):
+        """Reconcile in-memory state with the terminal result stored in MongoDB."""
+        status = record.get("status")
+        if status == "success":
+            run.status = "active"
+            run.error = None
+        elif status == "failed":
+            run.status = "failed"
+            run.error = record.get("error")
+
+        run.finished_at = record.get("finished_at", run.finished_at)
+        run.logs[:] = record.get("logs", run.logs)
+
     async def _finish(
         self,
         router_id: str,
@@ -52,23 +66,32 @@ class ProvisioningObserver:
                 current_run.log("Provisioning successful")
                 current_run.mark_success()
                 record = {
+                    "_id": current_run.run_id,
                     "router_id": router_id,
                     "status": "success",
                     "script": script,
+                    "started_at": current_run.started_at,
+                    "finished_at": current_run.finished_at,
                     "logs": list(current_run.logs),
                 }
             else:
                 current_run.log(f"Provisioning failed: {error}")
                 current_run.mark_failed(error)
                 record = {
+                    "_id": current_run.run_id,
                     "router_id": router_id,
                     "status": "failed",
                     "error": error,
+                    "started_at": current_run.started_at,
+                    "finished_at": current_run.finished_at,
                     "logs": list(current_run.logs),
                 }
 
             try:
-                await ProvisioningRepository.save(record)
+                persisted_record = await ProvisioningRepository.save(record)
+                self._apply_persisted_record(
+                    current_run, persisted_record or record
+                )
             except (Exception, asyncio.CancelledError):
                 current_run.status = previous_status
                 current_run.finished_at = previous_finished_at
