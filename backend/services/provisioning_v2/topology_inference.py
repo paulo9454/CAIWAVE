@@ -13,6 +13,7 @@ It MUST NOT:
 
 from __future__ import annotations
 
+import ipaddress
 from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -127,12 +128,50 @@ def _dhcp_client_interfaces(snapshot: RouterDiscoverySnapshot) -> set[str]:
 
 def _default_route_interfaces(snapshot: RouterDiscoverySnapshot) -> set[str]:
     interfaces: set[str] = set()
+    known_interfaces = set(_interface_names(snapshot))
 
     for route in snapshot.routes:
         if route.destination != "0.0.0.0/0":
             continue
+
+        # An explicitly discovered route interface is direct evidence.
         if route.interface:
             interfaces.add(route.interface)
+
+        gateway = (route.gateway or "").strip()
+        if not gateway:
+            continue
+
+        # RouterOS can encode an interface in the gateway as IP%interface.
+        # Trust the suffix only when that interface was actually discovered.
+        if "%" in gateway:
+            gateway_interface = gateway.rsplit("%", 1)[1].strip()
+            if gateway_interface in known_interfaces:
+                interfaces.add(gateway_interface)
+            continue
+
+        # When the route has no interface, use a gateway address that falls
+        # inside a discovered interface subnet as grounded interface evidence.
+        # Do not override an explicitly provided route interface.
+        if route.interface:
+            continue
+
+        try:
+            gateway_address = ipaddress.ip_address(gateway)
+        except ValueError:
+            continue
+
+        for address in snapshot.addresses:
+            try:
+                discovered_address = ipaddress.ip_interface(address.address)
+            except ValueError:
+                continue
+
+            if (
+                discovered_address.version == gateway_address.version
+                and gateway_address in discovered_address.network
+            ):
+                interfaces.add(address.interface)
 
     return interfaces
 

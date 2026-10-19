@@ -11,6 +11,7 @@ from backend.services.provisioning_v2.portal_planner import plan_portal
 from backend.services.provisioning_v2.provisioning_bundle import build_provisioning_bundle
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.routeros_bridge_renderer import render_bridge_section
+from backend.services.provisioning_v2.routeros_firewall_renderer import render_firewall_section
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSSectionName,
@@ -161,3 +162,16 @@ def test_reuse_skips_existing_members_and_adds_missing_members():
         '/interface bridge port add bridge="bridge-hotspot" '
         'comment="CAIWAVE managed bridge member" interface="wlan1"'
     ) in section.content
+
+
+def test_drop_invalid_firewall_rule_is_scoped_to_invalid_packets():
+    bundle = build_bundle()
+
+    rule = next(
+        rule for rule in bundle.firewall.rules
+        if rule.name == "drop-invalid"
+    )
+    assert rule.connection_state == "invalid"
+
+    section = render_firewall_section(bundle)
+    assert 'connection-state="invalid"' in section.content

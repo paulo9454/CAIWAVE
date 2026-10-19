@@ -56,6 +56,10 @@ def test_adapter_returns_persistable_rendered_artifact():
     assert artifact.status.value == "rendered"
     assert artifact.manifest.model_dump()
     assert artifact.sections
+    assert RouterOSSectionName.SCHEDULERS in artifact.manifest.sections
+    assert "CAIWAVE Heartbeat and Confirmation" in artifact.content
+    assert 'name="caiwave-heartbeat"' in artifact.content
+    assert 'name="caiwave-confirm"' in artifact.content
 
     assert "Authorization: Bearer test-control-secret-123" not in artifact.content
     assert "CAIWAVE managed provisioning control agent" not in artifact.content
@@ -400,3 +404,59 @@ def test_rendered_artifact_uses_discovered_topology_over_stale_persisted_interfa
     )
 
     assert lint_routeros_script(content).valid is True
+
+
+def test_adapter_reuses_existing_bridge_reported_by_discovery():
+    router = sample_router()
+    router["discovery"] = {
+        "snapshot": {
+            "bridges": [
+                {"name": "bridge-hotspot", "running": True},
+            ],
+            "bridge_ports": [
+                {"bridge": "bridge-hotspot", "interface": "ether2"},
+            ],
+        },
+    }
+
+    artifact = build_provisioning_v2_artifact_from_router(
+        router,
+        control_secret="test-control-secret-123",
+    )
+
+    assert artifact.content
+    assert artifact.checksum
+    assert "# Bridge action: reuse" in artifact.content
+    assert "/interface bridge add" not in artifact.content
+    assert lint_routeros_script(
+        artifact.content, require_bridge_add=False
+    ).valid is True
+
+def test_adapter_rejects_existing_client_services_until_reconciled():
+    router = sample_router()
+    router["discovery"] = {
+        "snapshot": {
+            "bridges": [{"name": "bridge-hotspot", "running": True}],
+            "bridge_ports": [
+                {"bridge": "bridge-hotspot", "interface": "ether2"},
+            ],
+            "addresses": [
+                {"interface": "bridge-hotspot", "address": "10.10.0.1/24"},
+            ],
+            "dhcp_servers": [
+                {"name": "existing-dhcp", "interface": "bridge-hotspot"},
+            ],
+            "hotspots": [
+                {"name": "existing-hotspot", "interface": "bridge-hotspot"},
+            ],
+        },
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="require reconciliation before provisioning",
+    ):
+        build_provisioning_v2_artifact_from_router(
+            router,
+            control_secret="test-control-secret-123",
+        )

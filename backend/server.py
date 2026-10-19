@@ -9,7 +9,7 @@ Refactored to use modular architecture:
 - /config.py: Configuration management
 - /database.py: MongoDB connection
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Query, BackgroundTasks, UploadFile, File, Form, Request, Body, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -30,11 +30,26 @@ from enum import Enum
 import httpx
 import base64
 import hashlib
+from pymongo.errors import DuplicateKeyError
 import shutil
 import mimetypes
 import secrets as secrets_module
 import asyncio
 import traceback
+from backend.services.mikrotik_control_plane.credentials import build_control_credential, is_control_credential_active, verify_control_secret
+from backend.services.mikrotik_control_plane.repository import RouterControlCredentialRepository
+from backend.services.mikrotik_control_plane.provisioning import (
+    MikroTikProvisioningOrchestrator,
+)
+from backend.services.provisioning.repository import ProvisioningJobRepository
+from backend.services.provisioning.artifact_repository import (
+    ProvisioningArtifactRepository,
+    artifact_record_matches_expected,
+)
+from backend.services.provisioning.job_service import (
+    ProvisioningJobError,
+    job_service,
+)
 
 
 
@@ -61,6 +76,20 @@ ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm"]
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+router_control_credential_repository = RouterControlCredentialRepository(
+    db.mikrotik_router_control_credentials
+)
+
+provisioning_job_repository = ProvisioningJobRepository(
+    db.provisioning_jobs
+)
+provisioning_artifact_repository = ProvisioningArtifactRepository(
+    db.provisioning_artifacts
+)
+mikrotik_provisioning_orchestrator = MikroTikProvisioningOrchestrator(
+    provisioning_job_repository
+)
 
 # JWT Configuration
 JWT_SECRET = os.environ.get('JWT_SECRET', 'caiwave-secret-key-change-in-production')
@@ -122,8 +151,6 @@ async def startup():
     if getattr(app.state, "startup_initialized", False):
         return
 
-    app.state.startup_initialized = True
-
     # Track running tasks safely
     app.state.tasks = []
 
@@ -137,9 +164,35 @@ async def startup():
     except Exception:
         logger.exception("Failed to create MikroTik indexes")
 
+    # Ensure dedicated router control-credential indexes exist.
+    try:
+        await router_control_credential_repository.ensure_indexes()
+        logger.info("MikroTik control-credential indexes ensured")
+    except Exception:
+        logger.exception("Failed to create MikroTik control-credential indexes")
+        raise RuntimeError(
+            "Required MikroTik control-credential indexes could not be created; "
+            "refusing to start with incomplete credential uniqueness guarantees."
+        )
+
+    # Initialize persistent provisioning job and artifact indexes.
+    try:
+        await provisioning_job_repository.ensure_indexes()
+        logger.info("Provisioning job indexes ensured")
+    except Exception:
+        logger.exception("Failed to create provisioning job indexes")
+
+    try:
+        await provisioning_artifact_repository.ensure_indexes()
+        logger.info("Provisioning artifact indexes ensured")
+    except Exception:
+        logger.exception("Failed to create provisioning artifact indexes")
+
     # Start router monitor only once
     task = asyncio.create_task(monitor_router_health())
     app.state.tasks.append(task)
+
+    app.state.startup_initialized = True
 
 # Mount static files for ad media UNDER /api prefix for proper routing
 # Files will be accessible at /api/uploads/ads/images/filename.png
@@ -171,6 +224,66 @@ invoices_router = APIRouter(prefix="/invoices", tags=["Invoices"])
 subscriptions_router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
 
 security = HTTPBearer()
+
+async def require_mikrotik_control_credential(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+) -> dict:
+    """Authenticate a router with its dedicated control-plane bearer secret."""
+    if credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid MikroTik control credential scheme",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    stored_credentials = (
+        await router_control_credential_repository.get_active_and_pending_credentials()
+    )
+
+    for credential in stored_credentials:
+        if credential.get("status") not in {"active", "pending"}:
+            continue
+
+        try:
+            expires_at = datetime.fromisoformat(credential["expires_at"])
+            revoked_at = (
+                datetime.fromisoformat(credential["revoked_at"])
+                if credential.get("revoked_at")
+                else None
+            )
+        except (KeyError, TypeError, ValueError):
+            # Malformed stored credentials must never authenticate.
+            continue
+
+        if not is_control_credential_active(
+            expires_at=expires_at,
+            revoked_at=revoked_at,
+        ):
+            continue
+
+        if verify_control_secret(
+            credentials.credentials,
+            credential.get("secret_hash", ""),
+        ):
+            return credential
+
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid MikroTik control credential",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def require_mikrotik_control_credential_with_secret(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+) -> dict:
+    """Return the authenticated credential and request-only presented secret."""
+    credential = await require_mikrotik_control_credential(credentials)
+    return {
+        "credential": credential,
+        "secret": credentials.credentials,
+    }
+
 
 # ==================== Enums ====================
 
@@ -4638,65 +4751,42 @@ from pydantic import field_validator
 import ipaddress
 
 class MikroTikRegisterRequest(BaseModel):
-    bootstrap_token: str
+    # Kept optional for legacy clients; user JWT authorization remains required.
+    bootstrap_token: Optional[str] = None
 
     name: str = Field(..., min_length=3, max_length=50)
     hotspot_id: str
     notes: Optional[str] = None
 
-    wan_interface: str
-    lan_interfaces: List[str]
+    # Legacy fields accepted during dashboard migration, but never trusted
+    # as evidence of the physical router topology.
+    wan_interface: Optional[str] = None
+    lan_interfaces: Optional[List[str]] = None
 
     create_bridge: bool = True
     bridge_name: Optional[str] = "bridge-hotspot"
-
     mode: Literal["fresh", "existing"] = "fresh"
-
     hotspot_cidr: str
     dhcp_pool: str
-    dns_name: str
-
-    @field_validator("wan_interface")
-    def validate_wan(cls, v):
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("WAN interface is required")
-        return v
-
-    from pydantic import field_validator
-
-@field_validator("lan_interfaces")
-@classmethod
-def validate_lan(cls, v):
-    if not v:
-        raise ValueError("At least one LAN interface is required")
-
-    cleaned = [i.strip() for i in v if i and i.strip()]
-
-    if not cleaned:
-        raise ValueError("LAN interfaces cannot be empty")
-
-    if len(set(cleaned)) != len(cleaned):
-        raise ValueError("Duplicate LAN interfaces not allowed")
-
-    return cleaned
+    dns_name: str = "login.caiwave.local"
 
     @field_validator("hotspot_cidr")
-    def validate_cidr(cls, v):
-        import ipaddress
+    @classmethod
+    def validate_cidr(cls, value):
         try:
-            ipaddress.ip_interface(v)
-        except Exception:
-            raise ValueError("Invalid hotspot CIDR")
-        return v
+            ipaddress.ip_interface(value)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Invalid hotspot CIDR") from exc
+        return value
 
     @field_validator("dns_name")
-    def validate_dns(cls, v):
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("dns_name is required")
-        return v
-    
+    @classmethod
+    def validate_dns(cls, value):
+        value = (value or "").strip()
+        if value != "login.caiwave.local":
+            raise ValueError("dns_name must be login.caiwave.local")
+        return value
+
 class MikroTikConfirmRequest(BaseModel):
     """Request to confirm router connection"""
     router_id: str
@@ -4705,6 +4795,15 @@ class MikroTikConfirmRequest(BaseModel):
     detected_services: Optional[List[str]] = None
     firmware_version: Optional[str] = None
     model: Optional[str] = None
+
+def _safe_mikrotik_filename(value: str) -> str:
+    """Return a filesystem-safe filename component."""
+    cleaned = "".join(
+        c.lower() if c.isalnum() else "-"
+        for c in str(value)
+    )
+    return cleaned.strip("-") or "router"
+
 
 def generate_secure_secret() -> str:
     """Generate a secure RADIUS secret"""
@@ -4717,162 +4816,187 @@ def generate_nas_id(name: str) -> str:
 
 
 @mikrotik_onboard_router.post("/register")
-
-# ============================
-# ZERO-TOUCH BOOTSTRAP
-# ============================
-
 async def register_mikrotik(
     request: MikroTikRegisterRequest,
-    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER]))
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER])),
 ):
     hotspot = await db.hotspots.find_one({"id": request.hotspot_id}, {"_id": 0})
-    
+
     if not hotspot:
         raise HTTPException(status_code=404, detail="Hotspot not found")
 
-    if user["role"] == UserRole.HOTSPOT_OWNER.value and hotspot["owner_id"] != user["id"]:
+    if (
+        user["role"] == UserRole.HOTSPOT_OWNER.value
+        and hotspot.get("owner_id") != user["id"]
+    ):
         raise HTTPException(status_code=403, detail="Access denied to this hotspot")
-        
-    # Generate secure credentials
+
+    try:
+        ip_interface = ipaddress.ip_interface(request.hotspot_cidr)
+        pool_parts = request.dhcp_pool.split("-", 1)
+        if len(pool_parts) != 2:
+            raise ValueError("DHCP pool must use START-END format")
+        pool_start_ip = ipaddress.ip_address(pool_parts[0].strip())
+        pool_end_ip = ipaddress.ip_address(pool_parts[1].strip())
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid hotspot network or DHCP pool: {exc}",
+        ) from exc
+
+    if (
+        pool_start_ip.version != ip_interface.version
+        or pool_end_ip.version != ip_interface.version
+        or pool_start_ip not in ip_interface.network
+        or pool_end_ip not in ip_interface.network
+        or int(pool_start_ip) > int(pool_end_ip)
+        or pool_start_ip <= ip_interface.ip <= pool_end_ip
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="DHCP pool must be ordered, inside the hotspot network, and exclude the gateway",
+        )
+
     radius_secret = generate_secure_secret()
     nas_id = generate_nas_id(request.name)
-    
-    # Get RADIUS server configuration
-    radius_host = os.environ.get('RADIUS_HOST', 'radius.caiwave.com')
-    callback_url = os.environ.get('MPESA_CALLBACK_URL', '').replace('/mpesa/callback', '/mikrotik-onboard/confirm')
-    
-    if not callback_url:
-        # Construct from frontend URL
-        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://caiwave.com')
-        callback_url = f"{frontend_url}/api/mikrotik-onboard/confirm"
-
-    # ================================
-    # TOPOLOGY DERIVATION LAYER
-    # ================================
-
-    import ipaddress
-    import uuid
-    from datetime import datetime, timezone
-
-    # Normalize interfaces
-    wan_interface = request.wan_interface.strip()
-
-    lan_interfaces = [i.strip() for i in request.lan_interfaces if i and i.strip()]
-
-    # Validate WAN/LAN safety
-    if wan_interface in lan_interfaces:
-        raise HTTPException(status_code=400, detail="WAN interface cannot be in LAN interfaces")
-
-    # Effective LAN interface
-    if request.create_bridge:
-        effective_lan_interface = request.bridge_name.strip()
-    else:
-        if len(lan_interfaces) != 1:
-            raise HTTPException(
-                status_code=400,
-                detail="Existing mode requires exactly one LAN interface"
-            )
-        effective_lan_interface = lan_interfaces[0]
-
-    # Derive network info
-    ip_interface = ipaddress.ip_interface(request.hotspot_cidr)
-    hotspot_network = str(ip_interface.network)
-    hotspot_gateway = str(ip_interface.ip)
-
-    # Validate DHCP pool
-    pool_start, pool_end = request.dhcp_pool.split("-")
-    pool_start_ip = ipaddress.ip_address(pool_start.strip())
-    pool_end_ip = ipaddress.ip_address(pool_end.strip())
-
-    if pool_start_ip not in ip_interface.network or pool_end_ip not in ip_interface.network:
-        raise HTTPException(status_code=400, detail="DHCP pool must be inside hotspot network")
-
-    if ip_interface.ip in [pool_start_ip, pool_end_ip]:
-        raise HTTPException(status_code=400, detail="DHCP pool cannot include gateway IP")
-
-    
-    # Create router record
-    # ================================
-    # PROVISIONING SNAPSHOT (SOURCE OF TRUTH)
-    # ================================
-
     router_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+
+    # The router's physical topology remains unknown until discovery.
+    control_credential = build_control_credential()
+    public_base = os.environ.get(
+        "CAIWAVE_PUBLIC_URL", "https://www.caiwave.com"
+    ).rstrip("/")
+
+    if not public_base.startswith("https://"):
+        raise HTTPException(
+            status_code=500,
+            detail="CAIWAVE_PUBLIC_URL must use HTTPS",
+        )
+
+    api_base = f"{public_base}/api"
+    discovery_url = f"{api_base}/mikrotik-onboard/discovery"
+    heartbeat_url = f"{api_base}/mikrotik-onboard/heartbeat"
+    callback_url = f"{api_base}/mikrotik-onboard/confirm"
+    radius_host = os.environ.get("RADIUS_HOST", "radius.caiwave.com")
+
+    # Render both bootstrap sections before persisting the registration.
+    from backend.services.provisioning_v2.mikrotik_builder_adapter import (
+        build_discovery_bootstrap,
+    )
+    from backend.services.provisioning_v2.routeros_control_renderer import (
+        render_control_bootstrap,
+    )
+    from backend.services.provisioning_v2.routeros_command_builder import (
+        join_script,
+    )
+
+    discovery_section = build_discovery_bootstrap(
+        discovery_url=discovery_url,
+        nas_identifier=nas_id,
+        control_secret=control_credential.secret,
+    )
+    control_section = render_control_bootstrap(
+        heartbeat_url=heartbeat_url,
+        nas_identifier=nas_id,
+        control_secret=control_credential.secret,
+    )
+    bootstrap_content = join_script(
+        [discovery_section.content, control_section.content]
+    )
+
+    def safe_filename_component(value: str) -> str:
+        cleaned = "".join(
+            char.lower() if char.isalnum() else "-"
+            for char in str(value)
+        )
+        return cleaned.strip("-") or "router"
+
+    name_part = safe_filename_component(request.name)
+    nas_part = safe_filename_component(nas_id)
+
+    discovery_rsc = {
+        "filename": f"{name_part}-{nas_part}-discovery.rsc",
+        "content": discovery_section.content,
+        "content_type": "text/plain",
+        "checksum": discovery_section.checksum,
+    }
+    control_bootstrap_rsc = {
+        "filename": f"{name_part}-{nas_part}-control-bootstrap.rsc",
+        "content": control_section.content,
+        "content_type": "text/plain",
+        "checksum": control_section.checksum,
+    }
+    bootstrap_rsc = {
+        "filename": f"{name_part}-{nas_part}-caiwave-bootstrap.rsc",
+        "content": bootstrap_content,
+        "content_type": "text/plain",
+        "checksum": hashlib.sha256(
+            bootstrap_content.encode("utf-8")
+        ).hexdigest(),
+    }
 
     router_record = {
-
-        # Identity
         "id": router_id,
         "name": request.name,
         "hotspot_id": request.hotspot_id,
         "owner_id": user["id"],
         "notes": request.notes,
-
-        # Provisioning metadata
-        "provisioning_version": 1,
+        "provisioning_version": 2,
         "provisioning_source": "owner_dashboard",
-
-        # RADIUS identity
         "radius_secret": radius_secret,
         "nas_identifier": nas_id,
-
-        # Provisioning mode
         "mode": request.mode,
-
-        # Topology (raw)
-        "wan_interface": wan_interface,
-        "lan_interfaces": lan_interfaces,
         "create_bridge": request.create_bridge,
         "bridge_name": request.bridge_name,
-
-        # Derived topology
-        "effective_lan_interface": effective_lan_interface,
-
-        # Network contract
+        "wan_interface": None,
+        "lan_interfaces": None,
+        "effective_lan_interface": None,
+        "topology_status": "pending_discovery",
+        "topology_confidence": "LOW",
+        "topology_evidence": [],
+        "topology_warnings": [],
         "hotspot_cidr": request.hotspot_cidr,
-        "hotspot_network": hotspot_network,
-        "hotspot_gateway": hotspot_gateway,
+        "hotspot_network": str(ip_interface.network),
+        "hotspot_gateway": str(ip_interface.ip),
         "dhcp_pool": request.dhcp_pool,
         "dns_name": request.dns_name,
-
-        # Status
-        "status": "pending_configuration",
+        "radius_host": radius_host,
+        "portal_public_url": public_base,
+        "api_public_url": api_base,
+        "heartbeat_url": heartbeat_url,
+        "status": "pending_discovery",
         "connection_confirmed": False,
-
-        # Detection metadata
         "detected_ports": [],
         "detected_services": [],
         "firmware_version": None,
         "model": None,
-
-        # Lifecycle
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": now,
         "configured_at": None,
         "updated_at": None,
-
-       # Observability
         "last_seen": None,
         "heartbeat_received_at": None,
-
-        # Health monitoring (STEP 9 ADDITION)
         "health_status": "unknown",
         "offline_reason": None,
         "alert_state": "none",
         "last_alert_at": None,
+    }
 
-        # Alerting
-        "alert_state": "none",
-        "last_alert_at": None
+    credential_document = {
+        "credential_id": control_credential.credential_id,
+        "router_id": router_id,
+        "secret_hash": control_credential.secret_hash,
+        "created_at": control_credential.created_at.isoformat(),
+        "expires_at": control_credential.expires_at.isoformat(),
+        "status": "active",
     }
 
     await db.mikrotik_routers.insert_one(router_record)
+    await router_control_credential_repository.create(credential_document)
 
-    # ================================
-    # REGISTER NAS CLIENT
-    # ================================
-
-    nas_client = {
+    await db.nas_clients.insert_one({
         "id": str(uuid.uuid4()),
+        "router_id": router_id,
         "name": request.name,
         "hotspot_id": request.hotspot_id,
         "ip_address": "0.0.0.0",
@@ -4880,72 +5004,1209 @@ async def register_mikrotik(
         "nas_type": "MikroTik",
         "description": f"Auto-configured via CAIWAVE - {nas_id}",
         "is_active": True,
-        "created_at": datetime.now(timezone.utc).isoformat()
-    }
-
-    await db.nas_clients.insert_one(nas_client)
-
-    # ================================
-    # GENERATE PROVISIONING OUTPUTS
-    # ================================
-
-    single_rsc = generate_single_rsc_provisioning_file(
-        router_name=request.name,
-        nas_identifier=nas_id,
-        radius_secret=radius_secret,
-        radius_host=radius_host,
-        hotspot_id=request.hotspot_id,
-        callback_url=callback_url
-    )
+        "created_at": now,
+    })
 
     return {
         "router_id": router_id,
+        "router_control_credential": {
+            "credential_id": control_credential.credential_id,
+            "secret": control_credential.secret,
+            "expires_at": control_credential.expires_at.isoformat(),
+        },
         "router_name": request.name,
         "nas_identifier": nas_id,
         "radius_secret": radius_secret,
         "callback_url": callback_url,
-        "single_rsc_provisioning": single_rsc,
+        "status": "pending_discovery",
+        "topology_status": "pending_discovery",
+        "discovery_rsc": discovery_rsc,
+        "control_bootstrap_rsc": control_bootstrap_rsc,
+        "bootstrap_rsc": bootstrap_rsc,
         "instructions": [
             "1. Log into your MikroTik via Winbox or Terminal",
-            "2. Configure DHCP Client on WAN interface",
-            "3. Open Terminal in MikroTik",
-            "4. Download/import the single .rsc provisioning file",
-            "5. Wait for CONFIGURATION COMPLETE",
-            "6. Return to dashboard and confirm connection",
-            "7. Test hotspot access"
-        ]
+            "2. Open Terminal in MikroTik",
+            "3. Import the CAIWAVE bootstrap .rsc file",
+            "4. CAIWAVE will receive router discovery and establish the control channel",
+            "5. CAIWAVE will determine the WAN and client topology",
+            "6. Final provisioning will be generated only after topology is verified",
+        ],
     }
+
+
+class MikroTikJobPollRequest(BaseModel):
+    nas_identifier: str
+
+
+class MikroTikJobPollResponse(BaseModel):
+    success: bool
+    router_id: str
+    nas_identifier: str
+    job_available: bool
+    job: Optional[dict] = None
+    artifact: Optional[dict] = None
+
+
+class MikroTikJobResultRequest(BaseModel):
+    nas_identifier: str
+    job_id: str
+    status: str
+    result: Optional[dict] = None
+    error: Optional[str] = None
+
+
+class MikroTikJobResultResponse(BaseModel):
+    success: bool
+    router_id: str
+    nas_identifier: str
+    job_id: str
+    status: str
+
+
+@mikrotik_onboard_router.post(
+    "/poll",
+    response_model=MikroTikJobPollResponse,
+)
+async def mikrotik_job_poll(
+    payload: MikroTikJobPollRequest,
+    control_credential: dict = Depends(require_mikrotik_control_credential),
+):
+    """Claim the next queued provisioning job belonging to this router."""
+    router = await db.mikrotik_routers.find_one(
+        {"nas_identifier": payload.nas_identifier},
+        {"_id": 0},
+    )
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not registered")
+
+    if control_credential.get("router_id") != router.get("id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid MikroTik control credential",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    job = await provisioning_job_repository.claim_next_for_router(
+        router["id"],
+        job_type="provisioning",
+    )
+    if not job:
+        return MikroTikJobPollResponse(
+            success=True,
+            router_id=router["id"],
+            nas_identifier=payload.nas_identifier,
+            job_available=False,
+        )
+
+    artifact = await provisioning_artifact_repository.get_by_id(
+        job["artifact_id"]
+    )
+    if not artifact:
+        failure_time = datetime.now(timezone.utc)
+        failed_job = await provisioning_job_repository.update_if_status(
+            job["job_id"],
+            job["status"],
+            {
+                "status": "failed",
+                "last_error": "Provisioning artifact not found",
+                "completed_at": failure_time,
+                "updated_at": failure_time,
+            },
+        )
+
+        if failed_job is None:
+            current_job = await provisioning_job_repository.get_by_id(
+                job["job_id"]
+            )
+            if current_job is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Provisioning job not found",
+                )
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Provisioning job changed concurrently; "
+                    "missing-artifact failure was not applied."
+                ),
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Provisioning artifact not found for claimed job",
+        )
+
+    # Validate ownership, artifact metadata, and the exact script bytes
+    # before returning executable RouterOS content to the device.
+    artifact_content = artifact.get("content")
+    artifact_checksum = artifact.get("checksum")
+    computed_checksum = (
+        hashlib.sha256(artifact_content.encode("utf-8")).hexdigest()
+        if isinstance(artifact_content, str)
+        else None
+    )
+
+    artifact_integrity_ok = (
+        job.get("router_id") == router.get("id")
+        and artifact.get("router_id") == router.get("id")
+        and artifact.get("artifact_id") == job.get("artifact_id")
+        and artifact.get("bundle_id") == job.get("bundle_id")
+        and artifact.get("snapshot_id") == job.get("snapshot_id")
+        and isinstance(artifact_checksum, str)
+        and bool(artifact_checksum)
+        and artifact_checksum == job.get("artifact_checksum")
+        and computed_checksum == artifact_checksum
+    )
+
+    if not artifact_integrity_ok:
+        failure_time = datetime.now(timezone.utc)
+        failed_job = await provisioning_job_repository.update_if_status(
+            job["job_id"],
+            job["status"],
+            {
+                "status": "failed",
+                "last_error": "Provisioning artifact integrity check failed",
+                "completed_at": failure_time,
+                "updated_at": failure_time,
+            },
+        )
+
+        if failed_job is None:
+            current_job = await provisioning_job_repository.get_by_id(
+                job["job_id"]
+            )
+            if current_job is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Provisioning job not found",
+                )
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Provisioning job changed concurrently; "
+                    "artifact integrity failure was not applied."
+                ),
+            )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Provisioning artifact integrity check failed",
+        )
+
+    return MikroTikJobPollResponse(
+        success=True,
+        router_id=router["id"],
+        nas_identifier=payload.nas_identifier,
+        job_available=True,
+        job={
+            "job_id": job["job_id"],
+            "artifact_id": job["artifact_id"],
+            "bundle_id": job["bundle_id"],
+            "snapshot_id": job["snapshot_id"],
+            "artifact_checksum": job["artifact_checksum"],
+            "status": job["status"],
+        },
+        artifact={
+            "artifact_id": artifact["artifact_id"],
+            "filename": artifact["filename"],
+            "content_type": artifact["content_type"],
+            "checksum": artifact["checksum"],
+            "content": artifact["content"],
+        },
+    )
+
+
+@mikrotik_onboard_router.get(
+    "/artifacts/{artifact_id}/download",
+)
+async def mikrotik_artifact_download(
+    artifact_id: str,
+    control_credential: dict = Depends(require_mikrotik_control_credential),
+):
+    """Download an executable artifact only for its owning router."""
+    artifact = await provisioning_artifact_repository.get_by_id(artifact_id)
+    if not artifact:
+        raise HTTPException(
+            status_code=404,
+            detail="Provisioning artifact not found",
+        )
+
+    if control_credential.get("router_id") != artifact.get("router_id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Provisioning artifact does not belong to this router",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    content = artifact.get("content")
+    if not isinstance(content, str) or not content:
+        raise HTTPException(
+            status_code=500,
+            detail="Provisioning artifact content is unavailable",
+        )
+
+    raw_filename = str(artifact.get("filename") or "caiwave.rsc")
+    filename = "".join(
+        character
+        for character in raw_filename
+        if character.isalnum() or character in "._-"
+    ) or "caiwave.rsc"
+
+    return Response(
+        content=content,
+        media_type=artifact.get("content_type", "text/routeros-script"),
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-CAIWAVE-Artifact-ID": str(artifact["artifact_id"]),
+            "X-CAIWAVE-Artifact-Checksum": str(artifact["checksum"]),
+        },
+    )
+
+
+@mikrotik_onboard_router.post(
+    "/job-result",
+    response_model=MikroTikJobResultResponse,
+)
+async def mikrotik_job_result(
+    payload: MikroTikJobResultRequest,
+    control_credential: dict = Depends(require_mikrotik_control_credential),
+):
+    """Apply an authenticated router callback to its own provisioning job."""
+    router = await db.mikrotik_routers.find_one(
+        {"nas_identifier": payload.nas_identifier},
+        {"_id": 0},
+    )
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not registered")
+
+    if control_credential.get("router_id") != router.get("id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid MikroTik control credential",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    job = await provisioning_job_repository.get_by_id(payload.job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail="Provisioning job not found",
+        )
+
+    if job.get("router_id") != router.get("id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Provisioning job does not belong to this router",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if payload.status not in {"running", "succeeded", "failed"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid provisioning job result status",
+        )
+
+    try:
+        updated_job = job_service.transition(
+            job,
+            status=payload.status,
+            result=payload.result,
+            error=payload.error,
+        )
+    except ProvisioningJobError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    # A repeated callback for the same state is intentionally idempotent.
+    if updated_job != job:
+        expected_status = job["status"]
+        changed_fields = {
+            key: value
+            for key, value in updated_job.items()
+            if job.get(key) != value
+        }
+
+        persisted_job = await provisioning_job_repository.update_if_status(
+            payload.job_id,
+            expected_status,
+            changed_fields,
+        )
+
+        if persisted_job is None:
+            current_job = await provisioning_job_repository.get_by_id(
+                payload.job_id
+            )
+            if current_job is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Provisioning job not found",
+                )
+            if current_job.get("status") != payload.status:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Provisioning job changed concurrently; "
+                        "the callback was not applied."
+                    ),
+                )
+
+    return MikroTikJobResultResponse(
+        success=True,
+        router_id=router["id"],
+        nas_identifier=payload.nas_identifier,
+        job_id=payload.job_id,
+        status=payload.status,
+    )
+
+
+class MikroTikDiscoveryRequest(BaseModel):
+    nas_identifier: str = Field(..., min_length=1, max_length=128)
+    router: Dict[str, Any] = Field(default_factory=dict)
+    interfaces: List[Dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    bridges: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
+    bridge_ports: List[Dict[str, Any]] = Field(default_factory=list, max_length=2000)
+    vlans: List[Dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    addresses: List[Dict[str, Any]] = Field(default_factory=list, max_length=2000)
+    routes: List[Dict[str, Any]] = Field(default_factory=list, max_length=2000)
+    dhcp_servers: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
+    dhcp_clients: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
+    hotspots: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
+    packages: List[Dict[str, Any]] = Field(default_factory=list, max_length=300)
+    wireless_interfaces: List[Dict[str, Any]] = Field(default_factory=list, max_length=1000)
+
+
+@mikrotik_onboard_router.post("/discovery")
+async def mikrotik_discovery(
+    payload: MikroTikDiscoveryRequest,
+    authenticated_control: dict = Depends(
+        require_mikrotik_control_credential_with_secret
+    ),
+):
+    """Persist discovery and enqueue provisioning only after safety checks."""
+    control_credential = authenticated_control["credential"]
+
+    router = await db.mikrotik_routers.find_one(
+        {"nas_identifier": payload.nas_identifier},
+        {"_id": 0},
+    )
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not registered")
+
+    if control_credential.get("router_id") != router.get("id"):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid MikroTik control credential",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    from backend.services.provisioning_v2.router_capabilities import (
+        detect_router_capabilities,
+    )
+    from backend.services.provisioning_v2.router_discovery_ingest import (
+        build_discovery_snapshot_from_payload,
+    )
+    from backend.services.provisioning_v2.topology_inference import infer_topology
+
+    try:
+        discovery_snapshot = build_discovery_snapshot_from_payload(
+            payload.model_dump(),
+            router_id=router["id"],
+        )
+        capabilities = detect_router_capabilities(discovery_snapshot)
+        topology = infer_topology(discovery_snapshot)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid router discovery payload: {exc}",
+        ) from exc
+
+    now = datetime.now(timezone.utc).isoformat()
+    snapshot_id = f"snapshot:{router['id']}:{uuid.uuid4()}"
+
+    discovery_record = {
+        "received_at": now,
+        "provisioning_snapshot_id": snapshot_id,
+        "snapshot": discovery_snapshot.model_dump(mode="json"),
+        "capabilities": capabilities.model_dump(mode="json"),
+        "topology": topology.model_dump(mode="json"),
+    }
+
+    await db.mikrotik_routers.update_one(
+        {"id": router["id"]},
+        {
+            "$set": {
+                "discovery": discovery_record,
+                "provisioning_snapshot_id": snapshot_id,
+                "topology_status": topology.status.lower(),
+                "topology_confidence": topology.confidence,
+                "topology_evidence": [
+                    item.model_dump(mode="json") for item in topology.evidence
+                ],
+                "topology_warnings": list(topology.warnings),
+                # Do not mark the router production-ready until the artifact
+                # and provisioning-job lifecycle has been integrated.
+                "status": "pending_discovery",
+                "connection_confirmed": False,
+                "updated_at": now,
+            }
+        },
+    )
+
+    await update_router_diagnostics(
+        router["id"],
+        {
+            "discovery_received": True,
+            "discovery_received_at": now,
+            "wireless_detected": capabilities.supports_wireless,
+            "wireless_interfaces": capabilities.wireless_interfaces,
+            "discovered_interface_count": capabilities.interface_count,
+            "topology_status": topology.status.lower(),
+            "topology_confidence": topology.confidence,
+        },
+    )
+
+    await record_router_event(
+        router["id"],
+        "discovery",
+        "Router discovery received",
+        "success",
+        {
+            "interface_count": capabilities.interface_count,
+            "wireless_interfaces": capabilities.wireless_interfaces,
+            "routeros_version": capabilities.routeros_version,
+            "board_name": capabilities.board_name,
+            "topology_status": topology.status,
+            "topology_confidence": topology.confidence,
+            "topology_warnings": topology.warnings,
+            "provisioning_started": False,
+        },
+    )
+
+    from backend.services.provisioning_v2.provisioning_intent import (
+        build_default_provisioning_intent,
+    )
+
+    control_secret = authenticated_control["secret"]
+
+    # Ambiguous / insufficient topology is never provisioned.
+    # ---------------------------------------------------------------
+    if (
+        topology.status != "INFERRED"
+        or not topology.wan_interface
+        or not topology.client_interfaces
+    ):
+        await db.mikrotik_routers.update_one(
+            {"id": router["id"]},
+            {
+                "$set": {
+                    "status": "pending_discovery",
+                    "connection_confirmed": False,
+                    "updated_at": now,
+                }
+            },
+        )
+
+        return {
+            "success": True,
+            "router_id": router["id"],
+            "nas_identifier": payload.nas_identifier,
+            "discovery_received_at": now,
+            "status": "pending_discovery",
+            "provisioning_ready": False,
+            "topology_status": topology.status,
+            "topology_confidence": topology.confidence,
+            "wan_interface": topology.wan_interface,
+            "lan_interfaces": topology.client_interfaces,
+            "client_bridge_interfaces": topology.client_bridge_interfaces,
+            "warnings": topology.warnings,
+            "capabilities": capabilities.model_dump(mode="json"),
+        }
+
+    # ---------------------------------------------------------------
+    # Existing service bridge vs. fresh-router bridge creation.
+    #
+    # An existing service-bearing bridge is required only when CAIWAVE
+    # is expected to reuse an existing client topology. A fresh router
+    # with create_bridge enabled is intentionally allowed to proceed
+    # without a pre-existing bridge.
+    # ---------------------------------------------------------------
+    existing_service_bridge = (
+        topology.client_bridge_interfaces[0]
+        if len(topology.client_bridge_interfaces) == 1
+        else None
+    )
+
+    if len(topology.client_bridge_interfaces) > 1:
+        warning = (
+            "Multiple service-bearing client bridges were discovered; "
+            "topology is ambiguous."
+        )
+
+        await db.mikrotik_routers.update_one(
+            {"id": router["id"]},
+            {
+                "$set": {
+                    "topology_status": "ambiguous",
+                    "topology_confidence": "LOW",
+                    "topology_warnings": [
+                        *topology.warnings,
+                        warning,
+                    ],
+                    "status": "pending_discovery",
+                    "updated_at": now,
+                }
+            },
+        )
+
+        return {
+            "success": True,
+            "router_id": router["id"],
+            "nas_identifier": payload.nas_identifier,
+            "discovery_received_at": now,
+            "status": "pending_discovery",
+            "provisioning_ready": False,
+            "topology_status": "AMBIGUOUS",
+            "topology_confidence": "LOW",
+            "wan_interface": topology.wan_interface,
+            "lan_interfaces": topology.client_interfaces,
+            "client_bridge_interfaces": topology.client_bridge_interfaces,
+            "warnings": [
+                *topology.warnings,
+                warning,
+            ],
+            "capabilities": capabilities.model_dump(mode="json"),
+        }
+
+    if existing_service_bridge:
+        inferred_bridge = existing_service_bridge
+    elif router.get("create_bridge", True):
+        inferred_bridge = (
+            str(router.get("bridge_name") or "bridge-hotspot").strip()
+        )
+
+        if not inferred_bridge:
+            warning = (
+                "Fresh-router topology was inferred, but no client bridge "
+                "name is configured."
+            )
+
+            await db.mikrotik_routers.update_one(
+                {"id": router["id"]},
+                {
+                    "$set": {
+                        "topology_status": "validation_failed",
+                        "topology_confidence": topology.confidence,
+                        "topology_warnings": [
+                            *topology.warnings,
+                            warning,
+                        ],
+                        "status": "pending_discovery",
+                        "updated_at": now,
+                    }
+                },
+            )
+
+            return {
+                "success": True,
+                "router_id": router["id"],
+                "nas_identifier": payload.nas_identifier,
+                "discovery_received_at": now,
+                "status": "pending_discovery",
+                "provisioning_ready": False,
+                "topology_status": "VALIDATION_FAILED",
+                "topology_confidence": topology.confidence,
+                "wan_interface": topology.wan_interface,
+                "lan_interfaces": topology.client_interfaces,
+                "client_bridge_interfaces": [],
+                "warnings": [
+                    *topology.warnings,
+                    warning,
+                ],
+                "capabilities": capabilities.model_dump(mode="json"),
+            }
+    else:
+        warning = (
+            "No existing service-bearing client bridge was discovered "
+            "and bridge creation is disabled."
+        )
+
+        await db.mikrotik_routers.update_one(
+            {"id": router["id"]},
+            {
+                "$set": {
+                    "topology_status": "ambiguous",
+                    "topology_confidence": "LOW",
+                    "topology_warnings": [
+                        *topology.warnings,
+                        warning,
+                    ],
+                    "status": "pending_discovery",
+                    "updated_at": now,
+                }
+            },
+        )
+
+        return {
+            "success": True,
+            "router_id": router["id"],
+            "nas_identifier": payload.nas_identifier,
+            "discovery_received_at": now,
+            "status": "pending_discovery",
+            "provisioning_ready": False,
+            "topology_status": "AMBIGUOUS",
+            "topology_confidence": "LOW",
+            "wan_interface": topology.wan_interface,
+            "lan_interfaces": topology.client_interfaces,
+            "client_bridge_interfaces": [],
+            "warnings": [
+                *topology.warnings,
+                warning,
+            ],
+            "capabilities": capabilities.model_dump(mode="json"),
+        }
+
+    # ================================================================
+    # BUILD THE PRODUCTION RECORD FROM DISCOVERED TOPOLOGY
+    # ================================================================
+    #
+    # Legacy registration WAN/LAN values are deliberately ignored.
+    # Discovery is now the topology authority.
+    prepared_router = {
+        **router,
+        "discovery": discovery_record,
+        "snapshot_id": snapshot_id,
+        "wan_interface": topology.wan_interface,
+        "lan_interfaces": list(topology.client_interfaces),
+        "bridge_name": inferred_bridge,
+        "effective_lan_interface": topology.client_interfaces[0],
+        "topology_status": "inferred",
+        "topology_confidence": topology.confidence,
+        "topology_evidence": [
+            item.model_dump(mode="json")
+            for item in topology.evidence
+        ],
+        "topology_warnings": list(topology.warnings),
+    }
+
+    # Preserve the explicit production contract as the final safety gate.
+    from backend.services.provisioning_v2.production_input import (
+        build_persisted_production_router_record,
+    )
+
+    try:
+        production_router = build_persisted_production_router_record(
+            prepared_router,
+            radius_host=prepared_router["radius_host"],
+            portal_public_url=prepared_router["portal_public_url"],
+            api_public_url=prepared_router["api_public_url"],
+            heartbeat_url=prepared_router["heartbeat_url"],
+        )
+
+        from backend.services.provisioning_v2.mikrotik_builder_adapter import (
+            build_provisioning_v2_artifact_from_router,
+        )
+
+        intent = build_default_provisioning_intent()
+
+        artifact = build_provisioning_v2_artifact_from_router(
+            production_router,
+            provisioning_intent=intent,
+            control_secret=control_secret,
+        )
+
+    except (ValueError, KeyError) as exc:
+        await db.mikrotik_routers.update_one(
+            {"id": router["id"]},
+            {
+                "$set": {
+                    "topology_status": "validation_failed",
+                    "topology_warnings": [
+                        *topology.warnings,
+                        f"Production validation failed: {exc}",
+                    ],
+                    "status": "pending_discovery",
+                    "updated_at": now,
+                }
+            },
+        )
+
+        await record_router_event(
+            router["id"],
+            "discovery",
+            "Topology inferred but production validation failed",
+            "failure",
+            {
+                "error": str(exc),
+                "wan_interface": topology.wan_interface,
+                "lan_interfaces": topology.client_interfaces,
+                "bridge_name": inferred_bridge,
+            },
+        )
+
+        return {
+            "success": True,
+            "router_id": router["id"],
+            "nas_identifier": payload.nas_identifier,
+            "discovery_received_at": now,
+            "status": "pending_discovery",
+            "provisioning_ready": False,
+            "topology_status": "VALIDATION_FAILED",
+            "topology_confidence": topology.confidence,
+            "wan_interface": topology.wan_interface,
+            "lan_interfaces": topology.client_interfaces,
+            "client_bridge_interfaces": topology.client_bridge_interfaces,
+            "warnings": [
+                *topology.warnings,
+                f"Production validation failed: {exc}",
+            ],
+            "capabilities": capabilities.model_dump(mode="json"),
+        }
+
+    # ================================================================
+    # PERSIST INFERRED TOPOLOGY
+    # ================================================================
+    await db.mikrotik_routers.update_one(
+        {"id": router["id"]},
+        {
+            "$set": {
+                "wan_interface": production_router["wan_interface"],
+                "lan_interfaces": production_router["lan_interfaces"],
+                "bridge_name": production_router["bridge_name"],
+                "effective_lan_interface": production_router[
+                    "effective_lan_interface"
+                ],
+                "topology_status": "inferred",
+                "topology_confidence": topology.confidence,
+                "topology_evidence": [
+                    item.model_dump(mode="json")
+                    for item in topology.evidence
+                ],
+                "topology_warnings": list(topology.warnings),
+                "status": "ready_for_provisioning",
+                "connection_confirmed": False,
+                "updated_at": now,
+            }
+        },
+    )
+
+    # ================================================================
+    # PERSIST IMMUTABLE PROVISIONING ARTIFACT
+    # ================================================================
+    artifact_document = {
+        "artifact_id": artifact.artifact_id,
+        "bundle_id": artifact.bundle_id,
+        "snapshot_id": artifact.manifest.snapshot_id,
+        "router_id": artifact.router_id,
+        "content_type": artifact.content_type,
+        "filename": artifact.filename,
+        "status": artifact.status.value,
+        "manifest": artifact.manifest.model_dump(mode="json"),
+        "sections": [
+            section.model_dump(mode="json")
+            for section in artifact.sections
+        ],
+        "content": artifact.content,
+        "checksum": artifact.checksum,
+    }
+
+    # Verify the generated artifact's exact bytes before persistence or reuse.
+    if not artifact_record_matches_expected(
+        artifact_document, artifact_document
+    ):
+        raise HTTPException(
+            status_code=500,
+            detail="Generated provisioning artifact failed its integrity check",
+        )
+
+    existing_artifact = await provisioning_artifact_repository.get_by_id(
+        artifact.artifact_id
+    )
+
+    if existing_artifact:
+        if not artifact_record_matches_expected(
+            existing_artifact, artifact_document
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Existing immutable provisioning artifact conflicts "
+                    "with the generated artifact"
+                ),
+            )
+        stored_artifact = existing_artifact
+    else:
+        try:
+            stored_artifact = await provisioning_artifact_repository.create(
+                artifact_document
+            )
+        except DuplicateKeyError:
+            # Another discovery request may have inserted the same ID first.
+            existing_artifact = await provisioning_artifact_repository.get_by_id(
+                artifact.artifact_id
+            )
+            if not existing_artifact or not artifact_record_matches_expected(
+                existing_artifact, artifact_document
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Concurrent provisioning artifact creation produced "
+                        "an artifact ID conflict"
+                    ),
+                )
+            stored_artifact = existing_artifact
+
+    # ================================================================
+    # CREATE / REUSE PROVISIONING JOB
+    # ================================================================
+    provisioning_job = (
+        await mikrotik_provisioning_orchestrator
+        .get_or_create_provisioning_job(
+            router_id=router["id"],
+            artifact_id=stored_artifact["artifact_id"],
+            bundle_id=stored_artifact["bundle_id"],
+            snapshot_id=stored_artifact["snapshot_id"],
+            artifact_checksum=stored_artifact["checksum"],
+            payload={
+                "source": "router_discovery",
+                "topology_status": "inferred",
+                "topology_confidence": topology.confidence,
+            },
+        )
+    )
+
+    await record_router_event(
+        router["id"],
+        "provisioning",
+        "Topology verified and provisioning job created",
+        "success",
+        {
+            "artifact_id": stored_artifact["artifact_id"],
+            "artifact_checksum": stored_artifact["checksum"],
+            "job_id": provisioning_job["job_id"],
+            "wan_interface": production_router["wan_interface"],
+            "lan_interfaces": production_router["lan_interfaces"],
+            "bridge_name": production_router["bridge_name"],
+            "topology_confidence": topology.confidence,
+        },
+    )
+
+    return {
+        "success": True,
+        "router_id": router["id"],
+        "nas_identifier": payload.nas_identifier,
+        "discovery_received_at": now,
+        "status": "ready_for_provisioning",
+        "provisioning_ready": True,
+        "topology_status": "INFERRED",
+        "topology_confidence": topology.confidence,
+        "wan_interface": production_router["wan_interface"],
+        "lan_interfaces": production_router["lan_interfaces"],
+        "client_bridge_interfaces": topology.client_bridge_interfaces,
+        "artifact": {
+            "artifact_id": stored_artifact["artifact_id"],
+            "filename": stored_artifact["filename"],
+            "checksum": stored_artifact["checksum"],
+        },
+        "provisioning_job": {
+            "job_id": provisioning_job["job_id"],
+            "status": provisioning_job["status"],
+        },
+        "capabilities": capabilities.model_dump(mode="json"),
+    }
+
+
+async def require_mikrotik_callback_or_owner(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
+) -> dict:
+    """Authenticate a router callback or an owner/admin dashboard request."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Dashboard requests use the normal user JWT.
+    try:
+        token_payload = jwt.decode(
+            credentials.credentials,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
+        )
+        user_id = token_payload.get("user_id")
+        if user_id:
+            user = await db.users.find_one({"id": user_id}, {"_id": 0})
+            if user:
+                return {"kind": "user", "user": user}
+    except jwt.InvalidTokenError:
+        pass
+
+    # Router callbacks use the per-router control-plane bearer secret.
+    control_credential = await require_mikrotik_control_credential(credentials)
+    return {"kind": "control", "credential": control_credential}
+
+
+class MikroTikControlCredentialRotationResponse(BaseModel):
+    """Response containing a newly rotated router control credential."""
+
+    router_id: str
+    router_name: str
+    nas_identifier: str
+    credential_id: str
+    secret: str
+    expires_at: str
+    discovery_rsc: dict
+    control_bootstrap_rsc: dict
+    bootstrap_rsc: dict
+
+
+@mikrotik_onboard_router.post(
+    "/routers/{router_id}/rotate-control-credential",
+    response_model=MikroTikControlCredentialRotationResponse,
+)
+async def rotate_mikrotik_control_credential(
+    router_id: str,
+    user: dict = Depends(
+        require_role([UserRole.SUPER_ADMIN, UserRole.HOTSPOT_OWNER])
+    ),
+):
+    """
+    Rotate the dedicated MikroTik control-plane credential.
+
+    The plaintext secret is returned only in this response so a fresh
+    discovery bootstrap can be installed on the router. It is never
+    persisted.
+    """
+
+    router = await db.mikrotik_routers.find_one(
+        {"id": router_id},
+        {"_id": 0},
+    )
+
+    if not router:
+        raise HTTPException(
+            status_code=404,
+            detail="Router not found",
+        )
+
+    if user["role"] == UserRole.HOTSPOT_OWNER.value:
+        hotspot = await db.hotspots.find_one(
+            {"id": router.get("hotspot_id")},
+            {"_id": 0},
+        )
+
+        if not hotspot or hotspot.get("owner_id") != user["id"]:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied to this router",
+            )
+
+    from backend.services.provisioning_v2.routeros_control_renderer import (
+        render_control_bootstrap,
+    )
+
+    control_credential = build_control_credential()
+
+    from backend.services.provisioning_v2.mikrotik_builder_adapter import (
+        build_discovery_bootstrap,
+    )
+
+    callback_url = router.get(
+        "heartbeat_url",
+        "https://www.caiwave.com/api/mikrotik-onboard/heartbeat",
+    )
+
+    discovery_url = callback_url.replace(
+        "/heartbeat",
+        "/discovery",
+    )
+
+    discovery_section = build_discovery_bootstrap(
+        discovery_url=discovery_url,
+        nas_identifier=router["nas_identifier"],
+        control_secret=control_credential.secret,
+    )
+
+    discovery_rsc = {
+        "filename": (
+            f"{_safe_mikrotik_filename(router.get('name', 'router'))}-"
+            f"{_safe_mikrotik_filename(router['nas_identifier'])}-"
+            "discovery.rsc"
+        ),
+        "content": discovery_section.content,
+        "checksum": discovery_section.checksum,
+    }
+
+    control_bootstrap_section = render_control_bootstrap(
+        heartbeat_url=callback_url,
+        nas_identifier=router["nas_identifier"],
+        control_secret=control_credential.secret,
+    )
+
+    control_bootstrap_rsc = {
+        "filename": (
+            f"{_safe_mikrotik_filename(router.get('name', 'router'))}-"
+            f"{_safe_mikrotik_filename(router['nas_identifier'])}-"
+            "control-bootstrap.rsc"
+        ),
+        "content": control_bootstrap_section.content,
+        "checksum": control_bootstrap_section.checksum,
+    }
+
+    # Single bootstrap for credential rotation.
+    # Discovery runs first, followed by the persistent control agent.
+    from backend.services.provisioning_v2.routeros_command_builder import (
+        join_script,
+    )
+
+    bootstrap_content = join_script([
+        discovery_section.content,
+        control_bootstrap_section.content,
+    ])
+
+    bootstrap_rsc = {
+        "filename": (
+            f"{_safe_mikrotik_filename(router.get('name', 'router'))}-"
+            f"{_safe_mikrotik_filename(router['nas_identifier'])}-"
+            "caiwave-bootstrap.rsc"
+        ),
+        "content": bootstrap_content,
+        "checksum": hashlib.sha256(
+            bootstrap_content.encode("utf-8")
+        ).hexdigest(),
+    }
+
+    control_credential_document = {
+        "credential_id": control_credential.credential_id,
+        "router_id": router["id"],
+        "secret_hash": control_credential.secret_hash,
+        "created_at": control_credential.created_at.isoformat(),
+        "expires_at": control_credential.expires_at.isoformat(),
+        "status": "pending",
+    }
+
+    try:
+        existing_pending = (
+            await router_control_credential_repository.get_pending_by_router_id(
+                router["id"]
+            )
+        )
+
+        if existing_pending:
+            await router_control_credential_repository.replace_pending(
+                router_id=router["id"],
+                document=control_credential_document,
+                replaced_at=control_credential.created_at.isoformat(),
+            )
+        else:
+            await router_control_credential_repository.create_pending(
+                router["id"],
+                control_credential_document,
+            )
+    except (DuplicateKeyError, ValueError) as exc:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "A control credential rotation is already in progress "
+                "for this router. Please retry after checking its status."
+            ),
+        ) from exc
+
+    return MikroTikControlCredentialRotationResponse(
+        router_id=router["id"],
+        router_name=router.get("name", "MikroTik Router"),
+        nas_identifier=router["nas_identifier"],
+        credential_id=control_credential.credential_id,
+        secret=control_credential.secret,
+        expires_at=control_credential.expires_at.isoformat(),
+        discovery_rsc=discovery_rsc,
+        control_bootstrap_rsc=control_bootstrap_rsc,
+        bootstrap_rsc=bootstrap_rsc,
+    )
+
 
 @mikrotik_onboard_router.post("/confirm")
 async def confirm_mikrotik_connection(
     request: MikroTikConfirmRequest,
-    req: Request
+    req: Request,
+    auth: dict = Depends(require_mikrotik_callback_or_owner),
 ):
-    """
-    Confirm router connection after script execution.
-    Can be called by the router itself or manually by the owner.
-    """
-    # Find the router
-    router = await db.mikrotik_routers.find_one({
-        "id": request.router_id,
-        "nas_identifier": request.nas_identifier
-    }, {"_id": 0})
-    
+    """Confirm a router after an authenticated callback or owner action."""
+    router = await db.mikrotik_routers.find_one(
+        {
+            "id": request.router_id,
+            "nas_identifier": request.nas_identifier,
+        },
+        {"_id": 0},
+    )
     if not router:
-        raise HTTPException(status_code=404, detail="Router not found or NAS identifier mismatch")
-    
-    # Get client IP if available
-    client_ip = req.client.host if req.client else "unknown"
-    
-    # Update router record
+        raise HTTPException(
+            status_code=404,
+            detail="Router not found or NAS identifier mismatch",
+        )
+
+    if auth["kind"] == "control":
+        control_credential = auth["credential"]
+        if control_credential.get("router_id") != router.get("id"):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid MikroTik control credential",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    else:
+        user = auth["user"]
+        allowed_roles = {
+            UserRole.SUPER_ADMIN.value,
+            UserRole.HOTSPOT_OWNER.value,
+        }
+        if user.get("role") not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        if (
+            user.get("role") == UserRole.HOTSPOT_OWNER.value
+            and router.get("owner_id") != user.get("id")
+        ):
+            raise HTTPException(status_code=403, detail="Access denied")
+
+    # Require a persisted artifact before changing connection state.
+    artifacts = await provisioning_artifact_repository.list_by_router(
+        request.router_id,
+        limit=1,
+    )
+    if not artifacts:
+        raise HTTPException(
+            status_code=500,
+            detail="Provisioning artifact not found for router",
+        )
+
+    artifact = artifacts[0]
+    required_fields = ("artifact_id", "bundle_id", "snapshot_id", "checksum")
+    if any(not artifact.get(field) for field in required_fields):
+        raise HTTPException(
+            status_code=500,
+            detail="Provisioning artifact metadata is incomplete",
+        )
+
+    # Discovery may already have created this job. Reuse it idempotently.
+    provisioning_job = (
+        await mikrotik_provisioning_orchestrator.get_or_create_provisioning_job(
+            router_id=request.router_id,
+            artifact_id=artifact["artifact_id"],
+            bundle_id=artifact["bundle_id"],
+            snapshot_id=artifact["snapshot_id"],
+            artifact_checksum=artifact["checksum"],
+        )
+    )
+
+    now = datetime.now(timezone.utc).isoformat()
     update_data = {
         "status": "connected",
-        "heartbeat_received_at": datetime.now(timezone.utc).isoformat(),
         "connection_confirmed": True,
-        "configured_at": datetime.now(timezone.utc).isoformat(),
-        "last_seen": datetime.now(timezone.utc).isoformat()
+        "configured_at": router.get("configured_at") or now,
+        "updated_at": now,
     }
-    
+
     if request.detected_ports:
         update_data["detected_ports"] = request.detected_ports
     if request.detected_services:
@@ -4954,36 +6215,60 @@ async def confirm_mikrotik_connection(
         update_data["firmware_version"] = request.firmware_version
     if request.model:
         update_data["model"] = request.model
-    
+
+    # Only a device callback establishes actual device last-seen/IP values.
+    if auth["kind"] == "control":
+        client_ip = req.client.host if req.client else "unknown"
+        update_data.update({
+            "heartbeat_received_at": now,
+            "last_seen": now,
+        })
+        await db.nas_clients.update_one(
+            {"router_id": router["id"]},
+            {"$set": {"ip_address": client_ip, "last_seen": now}},
+        )
+
     await db.mikrotik_routers.update_one(
-        {"id": request.router_id},
-        {"$set": update_data}
+        {"id": router["id"]},
+        {"$set": update_data},
     )
-    
-    # Update NAS client with actual IP
-    await db.nas_clients.update_one(
-        {"hotspot_id": router["hotspot_id"], "nas_type": "MikroTik"},
-        {"$set": {"ip_address": client_ip, "last_seen": datetime.now(timezone.utc).isoformat()}}
-    )
-    
-    # Update hotspot status
+
+    hotspot_updates = {
+        "status": "active",
+        "mikrotik_connected": True,
+    }
+    if auth["kind"] == "control":
+        hotspot_updates["last_seen"] = now
+
     await db.hotspots.update_one(
         {"id": router["hotspot_id"]},
-        {"$set": {
-            "status": "active",
-            "last_seen": datetime.now(timezone.utc).isoformat(),
-            "mikrotik_connected": True
-        }}
+        {"$set": hotspot_updates},
     )
-    
+
+    # A pending rotated credential is promoted only after an authenticated
+    # router callback reaches the artifact/job handoff successfully.
+    if (
+        auth["kind"] == "control"
+        and control_credential.get("status") == "pending"
+    ):
+        await router_control_credential_repository.promote_pending(
+            router_id=router["id"],
+            credential_id=control_credential["credential_id"],
+            promoted_at=now,
+        )
+
     return {
         "success": True,
         "message": "MikroTik router connection confirmed!",
         "router_id": request.router_id,
         "status": "connected",
-        "heartbeat_received_at": datetime.now(timezone.utc).isoformat(),
+        "heartbeat_received_at": update_data.get("heartbeat_received_at"),
         "detected_ports": request.detected_ports or [],
-        "detected_services": request.detected_services or []
+        "detected_services": request.detected_services or [],
+        "provisioning_job": {
+            "job_id": provisioning_job.get("job_id"),
+            "status": provisioning_job.get("status"),
+        },
     }
 
 
@@ -4994,12 +6279,12 @@ async def get_mikrotik_routers(
 ):
     """Get list of registered MikroTik routers"""
     query = {}
-    
+
     if user["role"] == UserRole.HOTSPOT_OWNER.value:
         query["owner_id"] = user["id"]
     elif hotspot_id:
         query["hotspot_id"] = hotspot_id
-    
+
     routers = await db.mikrotik_routers.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     return routers
 
@@ -5022,21 +6307,21 @@ async def delete_mikrotik_router(
 ):
     """Delete a registered router"""
     router = await db.mikrotik_routers.find_one({"id": router_id}, {"_id": 0})
-    
+
     if not router:
         raise HTTPException(status_code=404, detail="Router not found")
-    
+
     if user["role"] == UserRole.HOTSPOT_OWNER.value and router["owner_id"] != user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     await db.mikrotik_routers.delete_one({"id": router_id})
-    
+
     # Also remove the NAS client
     await db.nas_clients.delete_one({
         "hotspot_id": router["hotspot_id"],
         "description": {"$regex": router["nas_identifier"]}
     })
-    
+
     return {"success": True, "message": "Router deleted successfully"}
 
 
@@ -5090,17 +6375,23 @@ class MikroTikHeartbeatRequest(BaseModel):
 
 
 @mikrotik_onboard_router.post("/heartbeat")
-async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
-
+async def mikrotik_heartbeat(
+    payload: MikroTikHeartbeatRequest,
+    control_credential: dict = Depends(require_mikrotik_control_credential),
+):
+    """Record a heartbeat only from the credential registered to this router."""
     router = await db.mikrotik_routers.find_one(
         {"nas_identifier": payload.nas_identifier},
-        {"_id": 0}
+        {"_id": 0},
     )
-
     if not router:
+        raise HTTPException(status_code=404, detail="Router not registered")
+
+    if control_credential.get("router_id") != router.get("id"):
         raise HTTPException(
-            status_code=404,
-            detail="Router not registered"
+            status_code=401,
+            detail="Invalid MikroTik control credential",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     now = datetime.now(timezone.utc).isoformat()
@@ -5116,9 +6407,9 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
                 "offline_reason": None,
                 "connection_confirmed": True,
                 "configured_at": router.get("configured_at") or now,
-                "updated_at": now
+                "updated_at": now,
             }
-        }
+        },
     )
 
     await update_router_diagnostics(router["id"], {
@@ -5128,7 +6419,7 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "last_heartbeat_at": now,
         "heartbeat_ok": True,
         "router_online": True,
-        "connection_confirmed": True
+        "connection_confirmed": True,
     })
 
     await record_router_event(
@@ -5136,10 +6427,7 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "heartbeat",
         "Heartbeat received",
         "success",
-        {
-            "nas_identifier": payload.nas_identifier,
-            "status": "online"
-        }
+        {"nas_identifier": payload.nas_identifier, "status": "online"},
     )
 
     return {
@@ -5147,8 +6435,9 @@ async def mikrotik_heartbeat(payload: MikroTikHeartbeatRequest):
         "router_id": router["id"],
         "nas_identifier": payload.nas_identifier,
         "status": "online",
-        "timestamp": now
+        "timestamp": now,
     }
+
 
 @mikrotik_onboard_router.post("/health/evaluate")
 async def evaluate_router_health():

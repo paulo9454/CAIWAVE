@@ -160,3 +160,28 @@ def test_public_urls_require_https(field):
         match="HTTPS",
     ):
         validate_production_router_input(router)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["portal_public_url", "api_public_url", "heartbeat_url"],
+)
+@pytest.mark.parametrize(
+    "unsafe_url",
+    [
+        'https://portal.example/"; /system reset-configuration; #',
+        'https://portal.example/"; :put "pwned"; #',
+        "https://portal.example/\r\n/system reboot",
+        r'https://portal.example/\\\"; /system reboot; #',
+        "https://portal.example/$[ /system reset-configuration ]",
+        "https://portal.example/\x01path",
+    ],
+)
+def test_rejects_routeros_unsafe_public_url_characters(field, unsafe_url):
+    with pytest.raises(
+        ProductionProvisioningInputError,
+        match="unsafe",
+    ):
+        validate_production_router_input(
+            valid_router(**{field: unsafe_url})
+        )

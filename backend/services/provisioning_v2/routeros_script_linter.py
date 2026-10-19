@@ -13,7 +13,7 @@ or physical-router validation.
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -69,7 +69,9 @@ def _find_unresolved_template_tokens(content: str) -> List[str]:
 
     return found
 
-def lint_routeros_script(content: str) -> RouterOSLintResult:
+def lint_routeros_script(
+    content: str, *, require_bridge_add: bool = True
+) -> RouterOSLintResult:
     errors: List[str] = []
     warnings: List[str] = []
 
@@ -86,7 +88,6 @@ def lint_routeros_script(content: str) -> RouterOSLintResult:
 
     required_prefixes = [
         "/system identity set",
-        "/interface bridge add",
         "/ip address add",
         "/ip pool add",
         "/ip dhcp-server add",
@@ -99,6 +100,9 @@ def lint_routeros_script(content: str) -> RouterOSLintResult:
         "/radius add",
         "/ip firewall filter add",
     ]
+
+    if require_bridge_add:
+        required_prefixes.insert(1, "/interface bridge add")
 
     for prefix in required_prefixes:
         if not any(line.startswith(prefix) for line in command_lines):
@@ -154,6 +158,7 @@ class ProductionRouterOSLintContext(StrictModel):
     captive_dns_name: str
     portal_public_url: str
     radius_host: str
+    bridge_action: Literal["create", "reuse", "none"]
 
 
 def lint_production_routeros_script(
@@ -169,10 +174,27 @@ def lint_production_routeros_script(
     platform-specific requirements.
     """
 
-    base = lint_routeros_script(content)
+    base = lint_routeros_script(
+        content, require_bridge_add=context.bridge_action == "create"
+    )
 
     errors = list(base.errors)
     warnings = list(base.warnings)
+
+    command_lines = [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith('#')
+    ]
+    bridge_add_present = any(
+        line.startswith("/interface bridge add")
+        for line in command_lines
+    )
+    if context.bridge_action in {"reuse", "none"} and bridge_add_present:
+        errors.append(
+            "Unexpected RouterOS bridge creation command for bridge "
+            f"action {context.bridge_action}"
+        )
 
     required_tokens = [
         context.router_id,

@@ -37,6 +37,8 @@ from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RouterOSRenderedArtifact,
     RouterOSRenderedSection,
     RouterOSSectionName,
+    build_render_context,
+    default_routeros_section_order,
 )
 
 from backend.services.provisioning_v2.routeros_discovery_renderer import (
@@ -176,12 +178,46 @@ def _router_interfaces(router: dict) -> list[dict]:
             )
         names.append(item.strip())
 
+    # Include logical bridges explicitly verified by router discovery.
+    # This allows the topology planner to select REUSE rather than CREATE.
+    discovery = router.get("discovery") or {}
+    discovery_snapshot = discovery.get("snapshot") or {}
+    discovered_bridges = discovery_snapshot.get("bridges")
+    bridge_names = []
+
+    if isinstance(discovered_bridges, list):
+        for discovered_bridge in discovered_bridges:
+            if not isinstance(discovered_bridge, dict):
+                raise ValueError("Invalid discovered bridge record")
+
+            discovered_name = str(
+                discovered_bridge.get("name") or ""
+            ).strip()
+            if not discovered_name:
+                raise ValueError("Incomplete discovered bridge record")
+
+            if discovered_name in bridge_names:
+                continue
+            if discovered_name in names:
+                raise ValueError(
+                    "Discovered bridge conflicts with a verified WAN/LAN "
+                    f"interface: {discovered_name}"
+                )
+
+            bridge_names.append(discovered_name)
+            names.append(discovered_name)
+
     unique = []
     for name in names:
         if name not in unique:
             unique.append(name)
 
-    return [{"name": name} for name in unique]
+    return [
+        {"name": name, "type": "bridge"}
+        if name in bridge_names
+        else {"name": name}
+        for name in unique
+    ]
 
 def _apply_wireless_capability(
     router: dict,
@@ -402,7 +438,10 @@ def build_provisioning_v2_artifact_from_router(
     snapshot = build_provisioning_snapshot(router_input, hotspot_input, config)
     inventory = build_interface_inventory(
         router_id=snapshot.router_id,
-        interfaces=_router_interfaces(router_input),
+        interfaces=_router_interfaces({
+            **router_input,
+            "discovery": router.get("discovery") or {},
+        }),
     )
     classified = classify_interface_inventory(inventory)
     topology = plan_topology(
@@ -414,6 +453,43 @@ def build_provisioning_v2_artifact_from_router(
     )
     discovery = router.get("discovery") or {}
     discovery_snapshot = discovery.get("snapshot") or {}
+
+    # Fail closed until existing client services can be reconciled safely.
+    target_service_interface = topology.bridge_name or (
+        topology.client_interfaces[0] if topology.client_interfaces else None
+    )
+    if target_service_interface:
+        existing_resources = []
+        for field, label in (
+            ("addresses", "IP address"),
+            ("dhcp_servers", "DHCP server"),
+            ("hotspots", "hotspot server"),
+        ):
+            records = discovery_snapshot.get(field) or []
+            if not isinstance(records, list):
+                raise ValueError(f"Invalid discovered {field} records")
+
+            for record in records:
+                if not isinstance(record, dict):
+                    raise ValueError(f"Invalid discovered {field} record")
+
+                interface_name = str(
+                    record.get("interface")
+                    or record.get("interface_name")
+                    or ""
+                ).strip()
+
+                if interface_name == target_service_interface:
+                    existing_resources.append(label)
+
+        if existing_resources:
+            resource_list = ", ".join(sorted(set(existing_resources)))
+            raise ValueError(
+                "Existing client resources on target interface "
+                f"{target_service_interface} require reconciliation "
+                f"before provisioning: {resource_list}"
+            )
+
     discovered_bridges = discovery_snapshot.get("bridges")
     discovered_bridge_ports = discovery_snapshot.get("bridge_ports")
 
@@ -499,9 +575,15 @@ def build_provisioning_v2_artifact_from_router(
         wireless=wireless_plan,
     )
 
-    # Discovery is a separate observational bootstrap artifact.
-    # It must never be embedded in the final production provisioning script.
-    render_context = None
+    # Keep discovery and the persistent control agent in the
+    # separate onboarding bootstrap. Include heartbeat and confirmation
+    # callbacks in production without embedding another control agent.
+    section_order = default_routeros_section_order()
+    section_order.insert(
+        section_order.index(RouterOSSectionName.VALIDATION),
+        RouterOSSectionName.SCHEDULERS,
+    )
+    render_context = build_render_context(section_order=section_order)
 
     artifact = render_routeros_bundle(
         bundle=bundle,
@@ -516,6 +598,7 @@ def build_provisioning_v2_artifact_from_router(
             captive_dns_name=validated.captive_dns_name,
             portal_public_url=validated.portal_public_url,
             radius_host=validated.radius_host,
+            bridge_action=bridge.action.value,
         ),
     )
 

@@ -865,7 +865,7 @@ const MikroTikSetupPage = () => {
       );
       
       setGeneratedScript(response.data);
-      toast.success("Provisioning .rsc file generated!");
+      toast.success("CAIWAVE bootstrap .rsc file generated!");
       fetchData();
     } catch (error) {
       toast.error(safeError(error));
@@ -1273,12 +1273,12 @@ const MikroTikSetupPage = () => {
                   <div className="p-4 bg-neutral-900/70 border border-neutral-800 rounded-lg">
                     <div className="flex items-start justify-between gap-4 mb-4">
                       <div>
-                        <h3 className="font-semibold">MikroTik .rsc Provisioning File</h3>
+                        <h3 className="font-semibold">MikroTik .rsc Bootstrap File</h3>
                         <p className="text-sm text-neutral-400 mt-1">
                           Download this file, upload it to MikroTik, then import it from RouterOS terminal.
                         </p>
                         <p className="text-xs text-neutral-500 mt-2 font-mono">
-                          {generatedScript.single_rsc_provisioning?.filename || "caiwave-provisioning.rsc"}
+                          {generatedScript.bootstrap_rsc?.filename || "caiwave-provisioning.rsc"}
                         </p>
                       </div>
                     </div>
@@ -1286,7 +1286,7 @@ const MikroTikSetupPage = () => {
                     <div className="grid md:grid-cols-2 gap-3">
                       <Button
                         onClick={() => {
-                          const file = generatedScript.single_rsc_provisioning;
+                          const file = generatedScript.bootstrap_rsc;
                           const blob = new Blob([file.content], { type: file.content_type || "text/plain" });
                           const url = URL.createObjectURL(blob);
                           const a = document.createElement("a");
@@ -1305,7 +1305,7 @@ const MikroTikSetupPage = () => {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          navigator.clipboard.writeText(generatedScript.single_rsc_provisioning?.content || "");
+                          navigator.clipboard.writeText(generatedScript.bootstrap_rsc?.content || "");
                           toast.success(".rsc content copied to clipboard!");
                         }}
                         className="border-neutral-700"

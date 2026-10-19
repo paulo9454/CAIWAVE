@@ -112,6 +112,39 @@ def test_raw_discovery_payload_becomes_snapshot():
     assert snapshot.routes[0].gateway == "192.168.1.1"
 
 
+def test_connected_route_with_interface_and_no_gateway_is_accepted():
+    payload = _payload()
+    payload["routes"] = [
+        {
+            "dst-address": "192.168.1.0/24",
+            "gateway": "",
+            "interface": "ether1",
+        }
+    ]
+
+    snapshot = build_discovery_snapshot_from_payload(payload)
+
+    assert snapshot.routes[0].destination == "192.168.1.0/24"
+    assert snapshot.routes[0].gateway == ""
+    assert snapshot.routes[0].interface == "ether1"
+
+
+def test_route_without_gateway_or_interface_is_rejected():
+    payload = _payload()
+    payload["routes"] = [
+        {
+            "dst-address": "192.168.1.0/24",
+            "gateway": "",
+        }
+    ]
+
+    with pytest.raises(
+        RouterDiscoveryIngestionError,
+        match="gateway or interface",
+    ):
+        build_discovery_snapshot_from_payload(payload)
+
+
 def test_missing_router_metadata_is_rejected():
     payload = _payload()
     del payload["router"]["routeros_version"]

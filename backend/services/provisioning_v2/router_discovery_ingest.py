@@ -429,9 +429,9 @@ def _normalize_routes(
                 "Discovered route destination is required"
             )
 
-        if not gateway:
+        if not gateway and not interface:
             raise RouterDiscoveryIngestionError(
-                f"Discovered route gateway is required: {destination}"
+                f"Discovered route requires a gateway or interface: {destination}"
             )
 
         result.append(

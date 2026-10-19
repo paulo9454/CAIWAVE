@@ -128,6 +128,7 @@ def plan_firewall(
             chain=FirewallChain.INPUT,
             action=FirewallAction.DROP,
             purpose="Drop invalid packets",
+            connection_state="invalid",
         ),
         FirewallRuleIntent(
             name="allow-client-dns",

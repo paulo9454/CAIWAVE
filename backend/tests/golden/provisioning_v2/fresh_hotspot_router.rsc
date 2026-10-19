@@ -90,7 +90,7 @@
 /ip firewall filter add action="accept" chain="input" comment="CAIWAVE: Allow established and related traffic" connection-state="established,related"
 /ip firewall filter add action="accept" chain="forward" comment="CAIWAVE: Allow established and related forwarding" connection-state="established,related"
 /ip firewall filter add action="accept" chain="forward" comment="CAIWAVE: Allow authenticated hotspot clients to internet" hotspot="auth"
-/ip firewall filter add action="drop" chain="input" comment="CAIWAVE: Drop invalid packets"
+/ip firewall filter add action="drop" chain="input" comment="CAIWAVE: Drop invalid packets" connection-state="invalid"
 /ip firewall filter add action="accept" chain="input" comment="CAIWAVE: Allow hotspot clients to query router DNS" dst-port="53" protocol="udp" src-address="10.10.0.0/24"
 /ip firewall filter add action="accept" chain="input" comment="CAIWAVE: Allow DHCP service for hotspot clients" dst-port="67" protocol="udp" src-address="10.10.0.0/24"
 /ip firewall address-list add address="caiwave.com" comment="CAIWAVE pre-auth host" list="CAIWAVE-PREAUTH"

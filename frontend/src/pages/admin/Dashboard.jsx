@@ -1917,7 +1917,7 @@ const AllHotspotsPage = () => {
               Download this .rsc file, upload it to MikroTik, then import it from RouterOS terminal.
             </p>
             <code className="text-xs text-blue-400">
-              {generatedMikroTik.single_rsc_provisioning?.filename || "caiwave-provisioning.rsc"}
+              {generatedMikroTik.bootstrap_rsc?.filename || "caiwave-provisioning.rsc"}
             </code>
           </div>
 
@@ -1926,7 +1926,7 @@ const AllHotspotsPage = () => {
               size="sm"
               className="bg-green-600 hover:bg-green-700"
               onClick={() => {
-                const file = generatedMikroTik.single_rsc_provisioning;
+                const file = generatedMikroTik.bootstrap_rsc;
                 const blob = new Blob([file.content], { type: file.content_type || "text/plain" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -1945,7 +1945,7 @@ const AllHotspotsPage = () => {
               size="sm"
               variant="outline"
               onClick={() => {
-                navigator.clipboard.writeText(generatedMikroTik.single_rsc_provisioning?.content || "");
+                navigator.clipboard.writeText(generatedMikroTik.bootstrap_rsc?.content || "");
                 toast.success(".rsc content copied to clipboard!");
               }}
             >

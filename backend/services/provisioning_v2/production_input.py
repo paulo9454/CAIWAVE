@@ -74,6 +74,19 @@ def _required_string(data: dict[str, Any], field: str) -> str:
 
 
 def _validate_url(value: str, field: str) -> str:
+    # These values can be embedded in RouterOS quoted strings.
+    # Reject raw control characters, quotes, backslashes, and dollar
+    # expansions before urlparse can normalize or strip characters.
+    if any(
+        ord(character) <= 0x20
+        or 0x7F <= ord(character) <= 0x9F
+        or character in {'"', "\\", "$"}
+        for character in value
+    ):
+        raise ProductionProvisioningInputError(
+            f"{field} contains characters unsafe for RouterOS embedding"
+        )
+
     parsed = urlparse(value)
 
     if parsed.scheme != "https":
@@ -81,7 +94,7 @@ def _validate_url(value: str, field: str) -> str:
             f"{field} must use HTTPS"
         )
 
-    if not parsed.netloc:
+    if not parsed.netloc or not parsed.hostname:
         raise ProductionProvisioningInputError(
             f"{field} must include a hostname"
         )

@@ -23,13 +23,54 @@ from backend.services.provisioning_v2.routeros_renderer_contracts import (
 def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+def _ensure_safe_portal_public_url(value: str) -> None:
+    # This check is intentionally repeated at the rendering boundary:
+    # callers must not be able to bypass production-input validation.
+    if any(
+        ord(character) <= 0x20
+        or 0x7F <= ord(character) <= 0x9F
+        or character in {'"', "\\", "$"}
+        for character in value
+    ):
+        raise ValueError(
+            "portal_public_url contains characters unsafe for RouterOS embedding"
+        )
+
+
 def _quote_routeros_preserving_backslashes(value: str) -> str:
-    if "\n" in value or "\r" in value:
-        raise ValueError("RouterOS values must not contain newlines")
+    # Renderer-generated HTML contains deliberate escapes such as \\" and
+    # \\$ (HotSpot variables). Preserve those, but reject unescaped quotes
+    # or dollar expansions that could change RouterOS command interpretation.
+    if any(
+        ord(character) < 0x20 or 0x7F <= ord(character) <= 0x9F
+        for character in value
+    ):
+        raise ValueError("RouterOS file contents must not contain control characters")
+
+    backslash_count = 0
+    for character in value:
+        if character == "\\":
+            backslash_count += 1
+            continue
+
+        if character == '"' and backslash_count % 2 == 0:
+            raise ValueError("Embedded double quotes must be escaped for RouterOS")
+
+        if character == "$" and backslash_count % 2 == 0:
+            raise ValueError("RouterOS variable references must be escaped")
+
+        backslash_count = 0
+
+    if backslash_count % 2:
+        raise ValueError(
+            "RouterOS file contents must not end with an unescaped backslash"
+        )
+
     return f'"{value}"'
 
 def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection:
     portal = bundle.portal
+    _ensure_safe_portal_public_url(portal.portal_public_url)
 
     login_redirect_url = (
         f"{portal.portal_public_url.rstrip('/')}/portal/{bundle.hotspot_id}"

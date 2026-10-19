@@ -91,6 +91,49 @@ def make_ns_jdoo_snapshot() -> RouterDiscoverySnapshot:
     )
 
 
+def test_static_default_route_uses_gateway_subnet_without_dhcp_client():
+    snapshot = make_ns_jdoo_snapshot().model_copy(
+        update={
+            "dhcp_clients": [],
+            "routes": [
+                DiscoveredRoute(
+                    destination="0.0.0.0/0",
+                    gateway="192.168.150.1",
+                    interface=None,
+                )
+            ],
+        }
+    )
+
+    result = infer_topology(snapshot)
+
+    assert result.status == "INFERRED"
+    assert result.wan_interface == "ether1"
+    assert result.confidence == "MEDIUM"
+
+
+def test_static_default_route_uses_discovered_routeros_gateway_interface():
+    snapshot = make_ns_jdoo_snapshot().model_copy(
+        update={
+            "addresses": [],
+            "dhcp_clients": [],
+            "routes": [
+                DiscoveredRoute(
+                    destination="0.0.0.0/0",
+                    gateway="203.0.113.1%ether1",
+                    interface=None,
+                )
+            ],
+        }
+    )
+
+    result = infer_topology(snapshot)
+
+    assert result.status == "INFERRED"
+    assert result.wan_interface == "ether1"
+    assert result.confidence == "MEDIUM"
+
+
 def test_ns_jdoo_topology_is_high_confidence():
     result = infer_topology(make_ns_jdoo_snapshot())
 
