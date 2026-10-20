@@ -87,16 +87,14 @@ def _fetch_source(
     url: str,
     json_body: str,
     failure_log: str,
-    control_secret: str | None = None,
 ) -> str:
-    headers = "Content-Type: application/json"
-
-    if control_secret:
-        headers += (
-            f",Authorization: Bearer {control_secret}"
-        )
+    headers = (
+        "Content-Type: application/json,"
+        "Authorization: Bearer $caiwaveControlSecret"
+    )
 
     return (
+        ':global caiwaveControlSecret; '
         ':do {'
         f' /tool fetch url="{url}"'
         ' http-method=post'
@@ -153,7 +151,6 @@ def render_scheduler_section(
         failure_log=(
             "CAIWAVE heartbeat failed; scheduler will retry"
         ),
-        control_secret=control_secret,
     )
 
     confirm_source = _fetch_source(
@@ -162,7 +159,6 @@ def render_scheduler_section(
         failure_log=(
             "CAIWAVE provisioning confirmation failed"
         ),
-        control_secret=control_secret,
     )
 
     commands = [

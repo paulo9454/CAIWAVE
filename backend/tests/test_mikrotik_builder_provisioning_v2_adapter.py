@@ -62,6 +62,8 @@ def test_adapter_returns_persistable_rendered_artifact():
     assert 'name="caiwave-confirm"' in artifact.content
 
     assert "Authorization: Bearer test-control-secret-123" not in artifact.content
+    assert r"Authorization: Bearer \$caiwaveControlSecret" in artifact.content
+    assert ":global caiwaveControlSecret" in artifact.content
     assert "CAIWAVE managed provisioning control agent" not in artifact.content
     assert 'name="caiwave-control"' not in artifact.content
 

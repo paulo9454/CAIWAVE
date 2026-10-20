@@ -270,6 +270,7 @@ def test_register_mikrotik_runs_v2_provisioning(monkeypatch):
 
     assert "CAIWAVE Control Agent Bootstrap" in control_bootstrap
     assert 'name="caiwave-control"' in control_bootstrap
+    assert ":set caiwaveControlSecret" in control_bootstrap
     assert "/system scheduler add" in control_bootstrap
     assert "/system script run" in control_bootstrap
 
@@ -831,7 +832,7 @@ def test_confirm_promotes_pending_control_credential(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(old_secret),
         "created_at": "2026-09-01T00:00:00+00:00",
-        "expires_at": "2026-10-01T00:00:00+00:00",
+        "expires_at": "2099-10-01T00:00:00+00:00",
         "status": "active",
     }
 
@@ -840,7 +841,7 @@ def test_confirm_promotes_pending_control_credential(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(new_secret),
         "created_at": "2026-09-20T00:00:00+00:00",
-        "expires_at": "2026-10-20T00:00:00+00:00",
+        "expires_at": "2099-10-20T00:00:00+00:00",
         "status": "pending",
     }
 
@@ -974,7 +975,7 @@ def test_confirm_does_not_promote_pending_when_artifact_missing(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(old_secret),
         "created_at": "2026-09-01T00:00:00+00:00",
-        "expires_at": "2026-10-01T00:00:00+00:00",
+        "expires_at": "2099-10-01T00:00:00+00:00",
         "status": "active",
     }
 
@@ -983,7 +984,7 @@ def test_confirm_does_not_promote_pending_when_artifact_missing(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(new_secret),
         "created_at": "2026-09-20T00:00:00+00:00",
-        "expires_at": "2026-10-20T00:00:00+00:00",
+        "expires_at": "2099-10-20T00:00:00+00:00",
         "status": "pending",
     }
 

@@ -585,6 +585,9 @@ def build_provisioning_v2_artifact_from_router(
     )
     render_context = build_render_context(section_order=section_order)
 
+    # The immutable production artifact must not contain the plaintext
+    # control secret. Scheduler callbacks use the router-local global
+    # initialized by the separate control bootstrap.
     artifact = render_routeros_bundle(
         bundle=bundle,
         context=render_context,

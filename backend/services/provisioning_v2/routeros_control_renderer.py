@@ -118,6 +118,8 @@ def _control_source(
     )
 
     return (
+        ':global caiwaveControlSecret; '
+        f':set caiwaveControlSecret {quote_routeros_value(control_secret)}; '
         ':if ([/system script job print count-only as-value '
         'where script=[:jobname]] > 1) do={ :exit; }; '
 
