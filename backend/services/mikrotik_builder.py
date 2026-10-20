@@ -1,61 +1,44 @@
-from backend.services.single_rsc_provisioning_generator import generate_single_rsc_provisioning_file as v1
-from backend.services.single_rsc_provisioning_generator_v2 import generate_single_rsc_provisioning_file as v2
-import os
+"""
+CAIWAVE MikroTik Provisioning Builder.
+
+This is the single compatibility entry point for MikroTik provisioning.
+
+All provisioning decisions and RouterOS generation are owned by
+Provisioning Engine v2.
+
+Do not add alternate provisioning generators here.
+"""
+
+from __future__ import annotations
+
+from backend.services.provisioning_v2.mikrotik_builder_adapter import (
+    build_provisioning_v2_rsc_from_router,
+)
 
 
-def build_mikrotik_script(router: dict):
+def build_mikrotik_script(router: dict) -> str:
     """
-    CAIWAVE SAFE MIGRATION BUILDER
+    Build the single authoritative CAIWAVE MikroTik provisioning script.
 
-    - Uses V2 if enabled
-    - Falls back to V1 if anything fails
+    Compatibility API:
+        Existing callers continue using build_mikrotik_script(router).
+
+    Implementation:
+        Provisioning Engine v2 only.
+
+    There is intentionally no legacy fallback.
     """
 
-    use_v2 = os.getenv("CAIWAVE_MIKROTIK_V2", "false").lower() == "true"
+    result = build_provisioning_v2_rsc_from_router(router)
 
-    try:
-        if use_v2:
-            single_rsc = v2(
-                router_name=router.get("name", "unknown"),
-                nas_identifier=router.get("nas_identifier", ""),
-                radius_secret=router.get("radius_secret", ""),
-                radius_host=router.get(
-                    "radius_host",
-                    os.environ.get("RADIUS_HOST", "radius.caiwave.com")
-                ),
-                wan_interface=router.get("wan_interface", "ether1"),
-                lan_interfaces=router.get("lan_interfaces", ["ether2"]),
-                bridge_name=router.get("bridge_name", "bridge-hotspot"),
-                hotspot_cidr=router.get("hotspot_cidr", "10.10.0.0/24"),
-                hotspot_gateway=router.get("hotspot_gateway", "10.10.0.1"),
-                dhcp_pool=router.get("dhcp_pool", "10.10.0.10-10.10.0.254"),
-                dns_name=router.get("dns_name", "wifi.caiwave.com"),
-            )
-        else:
-            single_rsc = v1(
-                router_name=router.get("name", "unknown"),
-                nas_identifier=router.get("nas_identifier", ""),
-                radius_secret=router.get("radius_secret", ""),
-                radius_host=router.get(
-                    "radius_host",
-                    os.environ.get("RADIUS_HOST", "radius.caiwave.com")
-                )
-            )
+    if not isinstance(result.content, str):
+        raise TypeError(
+            "Provisioning Engine v2 must return RouterOS script content as str"
+        )
 
-        return single_rsc.content
+    if not result.content.strip():
+        raise RuntimeError(
+            "Provisioning Engine v2 returned an empty provisioning script"
+        )
 
-    except Exception as e:
-        # HARD FALLBACK (never break provisioning)
-        try:
-            single_rsc = v1(
-                router_name=router.get("name", "unknown"),
-                nas_identifier=router.get("nas_identifier", ""),
-                radius_secret=router.get("radius_secret", ""),
-                radius_host=router.get(
-                    "radius_host",
-                    os.environ.get("RADIUS_HOST", "radius.caiwave.com")
-                )
-            )
-            return single_rsc.content + f"\n# FALLBACK USED: {str(e)}\n"
-        except Exception as e2:
-            return f"# CRITICAL PROVISIONING FAILURE\n# {str(e2)}\n"
+    return result.content
