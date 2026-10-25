@@ -162,18 +162,11 @@ def test_control_source_reports_failure():
     assert "CAIWAVE control agent failed" in content
 
 
-def test_control_source_dry_run_precedes_real_import():
+def test_control_source_uses_single_normal_import_without_runtime_dry_run():
     content = _source()
 
-    dry_run = content.index(
-        "/import file-name=$artifactFile verbose=yes dry-run"
-    )
-
-    real_import = content.index(
-        "/import file-name=$artifactFile;"
-    )
-
-    assert dry_run < real_import
+    assert "/import file-name=$artifactFile verbose=yes dry-run" not in content
+    assert content.count("/import file-name=$artifactFile;") == 1
 
 
 def test_control_source_cleans_up_artifact():
@@ -349,3 +342,49 @@ def test_control_bootstrap_is_deterministic():
 
     assert first.content == second.content
     assert first.checksum == second.checksum
+
+
+def test_control_fetch_commands_end_before_following_commands():
+    content = _source()
+
+    # Every fetch must terminate before the next RouterOS statement.
+    assert "check-certificate=yes; } on-error={" in content
+    assert (
+        'check-certificate=yes; :log warning '
+        '"CAIWAVE control: failure callback completed";'
+    ) in content
+    assert (
+        'check-certificate=yes; :log warning '
+        '"CAIWAVE control: success callback completed";'
+    ) in content
+
+
+def test_control_bootstrap_requires_successful_discovery_confirmation():
+    section = render_control_bootstrap(
+        heartbeat_url="https://www.caiwave.com/api/mikrotik-onboard/heartbeat",
+        nas_identifier="CAIWAVE-TEST",
+        control_secret="TEST-CONTROL-SECRET",
+    )
+    content = section.content
+
+    assert ":global caiwaveDiscoveryReady;" in content
+    assert ":if ($caiwaveDiscoveryReady = true) do={" in content
+    assert "CAIWAVE control bootstrap skipped: discovery/confirmation not ready" in content
+    assert '/system script run "caiwave-control"' in content
+
+
+def test_control_source_advertises_safe_dispatched_replay():
+    content = _source()
+    assert "supports_safe_dispatched_replay" in content
+
+
+def test_control_source_aborts_before_import_when_running_callback_fails():
+    content = _source()
+    failure_marker = (
+        ':log warning "CAIWAVE failed to acknowledge running job"; :exit; '
+    )
+    assert failure_marker in content
+    assert content.index(failure_marker) < content.index(
+        "/import file-name=$artifactFile;"
+    )
+    assert content.count("/import file-name=$artifactFile;") == 1

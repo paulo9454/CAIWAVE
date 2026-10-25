@@ -96,3 +96,7 @@ def test_renders_address_section():
     assert "# CAIWAVE Addressing" in section.content
     assert "# Client network: 10.10.0.0/24" in section.content
     assert '/ip address add address="10.10.0.1/24" comment="CAIWAVE managed hotspot gateway" interface="bridge-hotspot"' in section.content
+    assert (
+        ':if ([:len [/ip address find where address="10.10.0.1/24" '
+        'and interface="bridge-hotspot"]] = 0) do={'
+    ) in section.content

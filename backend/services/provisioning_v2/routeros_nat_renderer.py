@@ -8,7 +8,7 @@ import hashlib
 
 from backend.services.provisioning_v2.nat_planner import NATStrategy
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
-from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_section
+from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_guarded_add, build_section
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedSection,
@@ -32,7 +32,7 @@ def render_nat_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection:
     elif nat.strategy == NATStrategy.MASQUERADE:
         for source_network in nat.source_networks:
             commands.append(
-                build_command(
+                build_guarded_add(
                     "/ip firewall nat",
                     "add",
                     {

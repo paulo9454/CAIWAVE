@@ -120,6 +120,19 @@ def test_renders_bridge_members():
     assert '/interface bridge port add bridge="bridge-hotspot" comment="CAIWAVE managed bridge member" interface="wlan1"' in section.content
 
 
+def test_create_bridge_and_ports_are_guarded_against_repeat_import():
+    section = render_bridge_section(build_bundle())
+
+    assert (
+        ':if ([:len [/interface bridge find where name="bridge-hotspot"]] = 0) '
+        'do={'
+    ) in section.content
+    assert (
+        ':if ([:len [/interface bridge port find where bridge="bridge-hotspot" '
+        'and interface="ether2"]] = 0) do={'
+    ) in section.content
+
+
 def test_renders_no_bridge_comment_for_none_action():
     bundle = build_bundle(lan_interfaces=["ether2"], create_bridge=False)
 
@@ -129,3 +142,35 @@ def test_renders_no_bridge_comment_for_none_action():
 
     assert "# No bridge required by topology plan" in section.content
     assert "/interface bridge add" not in section.content
+
+
+def test_reuse_does_not_create_duplicate_bridge():
+    bundle = build_bundle()
+    reuse_bridge = bundle.bridge.model_copy(
+        update={"action": BridgeAction.REUSE}
+    )
+    bundle = bundle.model_copy(update={"bridge": reuse_bridge})
+
+    section = render_bridge_section(bundle)
+
+    assert "/interface bridge add" not in section.content
+
+
+def test_reuse_skips_existing_members_and_adds_missing_members():
+    bundle = build_bundle()
+    reuse_bridge = bundle.bridge.model_copy(
+        update={
+            "action": BridgeAction.REUSE,
+            "existing_members": ["ether2"],
+        }
+    )
+    bundle = bundle.model_copy(update={"bridge": reuse_bridge})
+
+    section = render_bridge_section(bundle)
+
+    assert "/interface bridge add" not in section.content
+    assert 'interface="ether2"' not in section.content
+    assert (
+        '/interface bridge port add bridge="bridge-hotspot" '
+        'comment="CAIWAVE managed bridge member" interface="wlan1"'
+    ) in section.content

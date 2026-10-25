@@ -99,7 +99,6 @@ class RouterOSRenderedArtifact(StrictModel):
 def default_routeros_section_order() -> List[RouterOSSectionName]:
     return [
         RouterOSSectionName.HEADER,
-        RouterOSSectionName.IDENTITY,
         RouterOSSectionName.INTERFACES,
         RouterOSSectionName.WIRELESS,
         RouterOSSectionName.BRIDGE,
@@ -112,6 +111,7 @@ def default_routeros_section_order() -> List[RouterOSSectionName]:
         RouterOSSectionName.RADIUS,
         RouterOSSectionName.FIREWALL,
         RouterOSSectionName.VALIDATION,
+        RouterOSSectionName.IDENTITY,
         RouterOSSectionName.FOOTER,
     ]
 

@@ -91,6 +91,18 @@ def build_router_discovery_snapshot(
                 f"{dhcp_client.interface}"
             )
 
+    # A RouterOS interface must not be assigned to multiple bridges.
+    # Reject ambiguous membership rather than allowing unsafe provisioning.
+    bridge_by_interface = {}
+    for port in snapshot.bridge_ports:
+        previous_bridge = bridge_by_interface.get(port.interface_name)
+        if previous_bridge is not None and previous_bridge != port.bridge_name:
+            raise RouterDiscoveryError(
+                f"Interface {port.interface_name} is assigned to multiple "
+                f"bridges: {previous_bridge}, {port.bridge_name}"
+            )
+        bridge_by_interface[port.interface_name] = port.bridge_name
+
     known_bridges = set(bridge_names)
 
     for port in snapshot.bridge_ports:

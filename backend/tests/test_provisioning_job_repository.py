@@ -498,3 +498,119 @@ def test_claim_provisioning_job_does_not_claim_rotation_job():
         assert claimed is None
 
     asyncio.run(run())
+
+
+def test_get_active_for_router_includes_legacy_provisioning_job():
+    async def scenario():
+        repository = build_repository()
+        repository.collection.documents.extend([
+            {
+                "job_id": "rotation-job",
+                "router_id": "router-legacy",
+                "job_type": "control_credential_rotation",
+                "status": "running",
+                "created_at": 300,
+            },
+            {
+                "job_id": "legacy-provisioning-job",
+                "router_id": "router-legacy",
+                "status": "dispatched",
+                "created_at": 200,
+            },
+        ])
+
+        active = await repository.get_active_for_router(
+            "router-legacy",
+            job_type="provisioning",
+        )
+        assert active is not None
+        assert active["job_id"] == "legacy-provisioning-job"
+
+    asyncio.run(scenario())
+
+
+def test_get_manual_verification_for_router_returns_flagged_job():
+    async def scenario():
+        repository = build_repository()
+        repository.collection.documents.extend([
+            {
+                "job_id": "job-needs-check",
+                "router_id": "router-check",
+                "status": "failed",
+                "requires_manual_verification": True,
+                "created_at": 100,
+            },
+        ])
+
+        flagged = await repository.get_manual_verification_for_router(
+            "router-check"
+        )
+        assert flagged is not None
+        assert flagged["job_id"] == "job-needs-check"
+
+        assert await repository.get_manual_verification_for_router(
+            "router-other"
+        ) is None
+
+    asyncio.run(scenario())
+
+
+def test_claim_queued_job_for_router_claims_exact_legacy_job():
+    import asyncio
+    from datetime import datetime, timezone
+
+    class ClaimCollection:
+        def __init__(self):
+            self.documents = [
+                {
+                    "job_id": "older-job",
+                    "router_id": "router-claim",
+                    "job_type": "provisioning",
+                    "status": "queued",
+                    "created_at": 100,
+                },
+                {
+                    "job_id": "target-legacy-job",
+                    "router_id": "router-claim",
+                    "status": "queued",
+                    "created_at": 200,
+                },
+            ]
+
+        async def find_one_and_update(
+            self, query, update, projection=None, return_document=None
+        ):
+            for document in self.documents:
+                matches = True
+                for key, expected in query.items():
+                    if isinstance(expected, dict) and "$exists" in expected:
+                        if ((key in document) != expected["$exists"]):
+                            matches = False
+                            break
+                    elif document.get(key) != expected:
+                        matches = False
+                        break
+                if matches:
+                    document.update(update["$set"])
+                    return dict(document)
+            return None
+
+    async def scenario():
+        repository = ProvisioningJobRepository(ClaimCollection())
+        claimed = await repository.claim_queued_job_for_router(
+            "router-claim",
+            "target-legacy-job",
+            job_type="provisioning",
+        )
+        assert claimed is not None
+        assert claimed["job_id"] == "target-legacy-job"
+        assert claimed["status"] == "dispatched"
+        assert claimed["job_type"] == "provisioning"
+
+        other = next(
+            item for item in repository.collection.documents
+            if item["job_id"] == "older-job"
+        )
+        assert other["status"] == "queued"
+
+    asyncio.run(scenario())

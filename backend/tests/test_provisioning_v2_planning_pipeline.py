@@ -113,9 +113,16 @@ def test_planning_pipeline_reuses_existing_bridge():
         bridge_name=snapshot.topology.bridge_name,
     )
 
-    bridge = plan_bridge(topology)
+    # The reuse path requires explicit evidence of existing bridge membership.
+    bridge = plan_bridge(
+        topology,
+        existing_bridge_members={
+            "bridge-hotspot": ["ether2", "ether3"],
+        },
+    )
 
     assert topology.bridge_strategy == BridgeStrategy.REUSE
     assert bridge.action == BridgeAction.REUSE
     assert bridge.bridge_name == "bridge-hotspot"
     assert bridge.members == ["ether2", "ether3"]
+    assert bridge.existing_members == ["ether2", "ether3"]

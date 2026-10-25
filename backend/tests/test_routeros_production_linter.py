@@ -238,7 +238,7 @@ def test_linter_rejects_preauth_allowance_after_final_drop():
         index
         for index, line in enumerate(lines)
         if 'dst-address-list="CAIWAVE-PREAUTH"' in line
-        and line.startswith("/ip firewall filter add")
+        and "/ip firewall filter add" in line
     )
 
     drop_index = next(
@@ -304,7 +304,7 @@ def test_linter_rejects_established_forwarding_after_final_drop():
     established_index = next(
         index
         for index, line in enumerate(lines)
-        if line.startswith("/ip firewall filter add")
+        if "/ip firewall filter add" in line
         and 'chain="forward"' in line
         and 'connection-state="established,related"' in line
     )
@@ -337,11 +337,30 @@ def test_linter_rejects_established_forwarding_after_final_drop():
 
 
 def test_linter_rejects_missing_authenticated_hotspot_forwarding():
-    content = production_script().replace(
+    content = production_script()
+    lines = content.splitlines()
+
+    authenticated_index = next(
+        index
+        for index, line in enumerate(lines)
+        if "do={ /ip firewall filter add" in line
+        and 'chain="forward"' in line
+        and 'hotspot="auth"' in line
+    )
+
+    guard, body = lines[authenticated_index].split("do={", 1)
+    if 'hotspot="auth"' not in body:
+        raise RuntimeError(
+            "Authenticated rule body does not contain the expected selector"
+        )
+
+    body = body.replace(
         'hotspot="auth"',
         'hotspot="from-client,!auth"',
         1,
     )
+    lines[authenticated_index] = guard + "do={" + body
+    content = "\n".join(lines) + "\n"
 
     result = lint_production_routeros_script(
         content,
@@ -363,7 +382,7 @@ def test_linter_rejects_authenticated_hotspot_after_final_drop():
     authenticated_index = next(
         index
         for index, line in enumerate(lines)
-        if line.startswith("/ip firewall filter add")
+        if "/ip firewall filter add" in line
         and 'chain="forward"' in line
         and 'hotspot="auth"' in line
     )

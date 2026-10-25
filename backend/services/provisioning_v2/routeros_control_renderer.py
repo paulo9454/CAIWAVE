@@ -5,7 +5,7 @@ The control agent:
 - polls CAIWAVE for a queued provisioning job;
 - reports the claimed job as running;
 - downloads the router-owned immutable artifact;
-- validates the artifact with RouterOS dry-run import;
+- relies on backend validation of the immutable artifact before download;
 - imports the validated artifact;
 - reports succeeded/failed;
 - removes the temporary artifact.
@@ -86,7 +86,8 @@ def _control_source(
 
     poll_json = (
         '{\\"nas_identifier\\":'
-        f'\\"{nas_identifier}\\"'
+        f'\\"{nas_identifier}\\",'
+        '\\"supports_safe_dispatched_replay\\":true'
         '}'
     )
 
@@ -118,6 +119,8 @@ def _control_source(
     )
 
     return (
+        ':global caiwaveControlSecret; '
+        f':set caiwaveControlSecret {quote_routeros_value(control_secret)}; '
         ':if ([/system script job print count-only as-value '
         'where script=[:jobname]] > 1) do={ :exit; }; '
 
@@ -175,11 +178,12 @@ def _control_source(
         f'http-header-field="Content-Type: application/json,Authorization: Bearer {control_secret}" '
         'http-data=$runningBody '
         'output=none '
-        'check-certificate=yes '
+        'check-certificate=yes; '
 
         '} on-error={ '
 
         ':log warning "CAIWAVE failed to acknowledge running job"; '
+        ':exit; '
 
         '}; '
 
@@ -203,10 +207,7 @@ def _control_source(
         'dst-path=$artifactFile '
         'check-certificate=yes; '
 
-        # First validate the complete RouterOS file without applying it.
-        '/import file-name=$artifactFile verbose=yes dry-run; '
-
-        # Only execute after dry-run validation succeeds.
+        # The backend validates the immutable artifact before it is queued.
         ':log warning "CAIWAVE control: before provisioning import"; '
         '/import file-name=$artifactFile; '
         ':log warning "CAIWAVE control: provisioning import completed"; '
@@ -232,7 +233,7 @@ def _control_source(
         f'http-header-field="Content-Type: application/json,Authorization: Bearer {control_secret}" '
         'http-data=$failureBody '
         'output=none '
-        'check-certificate=yes '
+        'check-certificate=yes; '
 
         ':log warning "CAIWAVE control: failure callback completed"; '
 
@@ -266,7 +267,7 @@ def _control_source(
         f'http-header-field="Content-Type: application/json,Authorization: Bearer {control_secret}" '
         'http-data=$successBody '
         'output=none '
-        'check-certificate=yes '
+        'check-certificate=yes; '
 
         ':log warning "CAIWAVE control: success callback completed"; '
 
@@ -383,6 +384,58 @@ def render_control_section(
         warnings=[],
     )
 
+
+def render_control_credential_initializer(
+    *,
+    control_secret: str,
+) -> RouterOSRenderedSection:
+    """
+    Render a standalone initializer for the router-local control credential.
+
+    This installs only the named helper script. It creates no scheduler and
+    does not install or start the persistent CAIWAVE control agent.
+    """
+    if not control_secret:
+        raise RouterOSControlRendererError(
+            "control_secret is required for credential initialization"
+        )
+
+    script_name = "caiwave-control-credential-init"
+    source = (
+        ':global caiwaveControlSecret; '
+        f':set caiwaveControlSecret {quote_routeros_value(control_secret)}; '
+    )
+
+    commands = [
+        build_comment(
+            "CAIWAVE control credential initializer; no control scheduler"
+        ),
+        f'/system script remove [find where name="{script_name}"]',
+        build_command(
+            "/system script",
+            "add",
+            {
+                "name": script_name,
+                "policy": "read,write,test",
+                "source": source,
+            },
+        ),
+    ]
+
+    content = build_section(
+        "CAIWAVE Control Credential Initializer",
+        commands,
+    )
+
+    return RouterOSRenderedSection(
+        name=RouterOSSectionName.SCHEDULERS,
+        status=RenderStatus.RENDERED,
+        content=content,
+        checksum=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        warnings=[],
+    )
+
+
 def render_control_bootstrap(
     *,
     heartbeat_url: str,
@@ -458,6 +511,14 @@ def render_control_bootstrap(
         "CAIWAVE Control Agent Bootstrap",
         commands,
     ) + "\n"
+
+    # Only install and run the agent after discovery and /confirm succeeded.
+    content = (
+        ":global caiwaveDiscoveryReady;\n"
+        ":if ($caiwaveDiscoveryReady = true) do={\n"
+        + content
+        + '\n} else={ :log warning "CAIWAVE control bootstrap skipped: discovery/confirmation not ready"; }\n'
+    )
 
     return RouterOSRenderedSection(
         name=RouterOSSectionName.SCHEDULERS,

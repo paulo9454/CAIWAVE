@@ -13,7 +13,7 @@ This planner converts a TopologyPlan into bridge intent only.
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,15 +41,20 @@ class BridgePlan(StrictModel):
     action: BridgeAction
     bridge_name: Optional[str] = None
     members: List[str] = Field(default_factory=list)
+    existing_members: List[str] = Field(default_factory=list)
     excluded_interfaces: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
 
-def plan_bridge(topology: TopologyPlan) -> BridgePlan:
+def plan_bridge(
+    topology: TopologyPlan,
+    existing_bridge_members: Optional[Dict[str, List[str]]] = None,
+) -> BridgePlan:
     """
     Convert topology intent into bridge intent.
 
-    Does not generate RouterOS and does not validate physical router state.
+    REUSE requires an explicit snapshot of existing bridge membership.
+    This function does not generate RouterOS commands.
     """
 
     if not topology.upstream_interface:
@@ -75,10 +80,48 @@ def plan_bridge(topology: TopologyPlan) -> BridgePlan:
             else BridgeAction.REUSE
         )
 
+        existing_members: List[str] = []
+        if action == BridgeAction.REUSE:
+            if existing_bridge_members is None:
+                raise BridgePlannerError(
+                    "verified existing bridge membership is required for REUSE"
+                )
+
+            normalized_membership = {
+                str(bridge): list(interfaces)
+                for bridge, interfaces in existing_bridge_members.items()
+            }
+            target_members = normalized_membership.get(topology.bridge_name)
+            if target_members is None:
+                raise BridgePlannerError(
+                    f"target bridge membership was not discovered: {topology.bridge_name}"
+                )
+
+            for member in members:
+                owners = [
+                    bridge
+                    for bridge, interfaces in normalized_membership.items()
+                    if member in interfaces
+                ]
+                if owners and topology.bridge_name not in owners:
+                    raise BridgePlannerError(
+                        f"interface {member} belongs to another bridge: "
+                        f"{', '.join(owners)}"
+                    )
+                if len(owners) > 1:
+                    raise BridgePlannerError(
+                        f"interface {member} belongs to multiple bridges"
+                    )
+
+            existing_members = [
+                member for member in members if member in target_members
+            ]
+
         return BridgePlan(
             action=action,
             bridge_name=topology.bridge_name,
             members=members,
+            existing_members=existing_members,
             excluded_interfaces=[topology.upstream_interface],
             warnings=list(topology.warnings),
         )

@@ -9,6 +9,7 @@ import hashlib
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
 from backend.services.provisioning_v2.routeros_command_builder import (
     build_command,
+    build_guarded_add,
     build_comment,
     build_section,
     quote_routeros_value,
@@ -73,7 +74,7 @@ def render_portal_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
 
         for host in portal.walled_garden_hosts:
             commands.append(
-                build_command(
+                build_guarded_add(
                     "/ip hotspot walled-garden",
                     "add",
                     {

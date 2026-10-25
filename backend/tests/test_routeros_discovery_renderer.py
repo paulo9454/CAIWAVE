@@ -49,7 +49,14 @@ def test_discovery_renderer_generates_read_only_collection_script():
     assert '"board_name"=$boardname;' in section.content
     assert '"routeros_version"=$rosver;' in section.content
     assert '"architecture"=$arch };' in section.content
-    assert section.content.count("/tool fetch url=") == 1
+    assert section.content.count("/tool fetch url=") == 2
+    assert "/api/mikrotik-onboard/confirm" in section.content
+    assert '"provisioning_ready"' in section.content
+    assert '"success"' in section.content
+    assert ":set caiwaveDiscoveryReady false;" in section.content
+    assert ":set caiwaveDiscoveryReady true;" in section.content
+    assert "output=user as-value" in section.content
+    assert "check-certificate=yes" in section.content
     assert ":onerror discoveryError in={" in section.content
     assert "} do={" in section.content
     assert 'CAIWAVE discovery execution failed: " . [:tostr $discoveryError]' in section.content

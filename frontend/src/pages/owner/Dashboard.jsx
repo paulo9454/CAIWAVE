@@ -254,6 +254,17 @@ const PaymentModal = ({ invoice, onClose, onSuccess }) => {
 };
 
 // Dashboard Overview Component
+// Normalize hotspot API responses before storing them in React state.
+const normalizeHotspotList = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.hotspots)) return value.hotspots;
+
+  console.error(
+    "Hotspots API returned an unexpected response shape; expected an array."
+  );
+  return [];
+};
+
 const DashboardOverview = () => {
   const [stats, setStats] = useState(null);
   const [hotspots, setHotspots] = useState([]);
@@ -274,7 +285,7 @@ const DashboardOverview = () => {
         axios.get(`${API_URL}/subscriptions/status`, { headers }),
       ]);
       setStats(statsRes.data);
-      setHotspots(hotspotsRes.data);
+      setHotspots(normalizeHotspotList(hotspotsRes.data));
       setSubscription(subscriptionRes.data);
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -559,7 +570,7 @@ const HotspotsPage = () => {
       const response = await axios.get(`${API_URL}/hotspots/`, {
         headers: { Authorization: `Bearer ${getAuthToken()}` },
       });
-      setHotspots(response.data);
+      setHotspots(normalizeHotspotList(response.data));
     } catch (error) {
       console.error("Failed to fetch hotspots:", error);
     } finally {
@@ -961,7 +972,7 @@ const getProvisioningProgress = (diagnostic) => {
         axios.get(`${API_URL}/mikrotik-onboard/routers`, { headers }),
       ]);
 
-      setHotspots(hotspotsRes.data);
+      setHotspots(normalizeHotspotList(hotspotsRes.data));
       setRouters(routersRes.data);
       fetchDiagnostics(routersRes.data);
     } catch (error) {
@@ -1009,7 +1020,6 @@ const getProvisioningProgress = (diagnostic) => {
         `${API_URL}/mikrotik-onboard/register`,
 
         {
-          bootstrap_token: "owner-dashboard",
           name: routerName.trim(),
           hotspot_id: selectedHotspot,
           mode: provisioningMode,
@@ -1090,6 +1100,7 @@ const rotateControlCredential = async (router) => {
       ...prev,
       [router.id]: {
         discovery_rsc: response.data.discovery_rsc,
+        credential_initializer_rsc: response.data.credential_initializer_rsc,
         bootstrap_rsc: response.data.bootstrap_rsc,
       },
     }));
@@ -1321,6 +1332,25 @@ const downloadRouterFile = (file, fallbackName) => {
                           </div>
                         </div>
 
+                      {diagnostics[router.id].manual_verification?.required && (
+                        <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4 text-red-300" />
+                            <p className="text-sm font-semibold text-red-200">
+                              Provisioning paused: manual verification required
+                            </p>
+                          </div>
+                          <p className="mt-2 text-sm text-neutral-300">
+                            {diagnostics[router.id].manual_verification.reason ||
+                              diagnostics[router.id].provisioning_job?.last_error ||
+                              "The router must be inspected before provisioning can resume."}
+                          </p>
+                          <p className="mt-2 text-xs text-neutral-400">
+                            A Super Admin must review the router and record a verification note before another provisioning job can be sent.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="grid md:grid-cols-2 gap-3">
                         {renderDiagnosticItem("Heartbeat received", diagnostics[router.id].checks?.heartbeat_received)}
                         {renderDiagnosticItem("Heartbeat recent", diagnostics[router.id].checks?.heartbeat_recent)}
@@ -1422,6 +1452,22 @@ const downloadRouterFile = (file, fallbackName) => {
                             </Button>
                           )}
 
+                          {rotatedRouterFiles[router.id]?.credential_initializer_rsc?.content && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-neutral-700"
+                              onClick={() =>
+                                downloadRouterFile(
+                                  rotatedRouterFiles[router.id].credential_initializer_rsc,
+                                  "caiwave-control-credential-init.rsc"
+                                )
+                              }
+                            >
+                              Download Control Credential Initializer
+                            </Button>
+                          )}
+
                           {rotatedRouterFiles[router.id]?.bootstrap_rsc?.content && (
                             <Button
                               size="sm"
@@ -1440,10 +1486,16 @@ const downloadRouterFile = (file, fallbackName) => {
                         </div>
 
                         {rotatedRouterFiles[router.id]?.discovery_rsc?.content && (
-                          <p className="text-xs text-green-400 mt-3">
-                            Fresh discovery bootstrap ready. Import the Discovery Bootstrap
-                            once on the router to refresh topology.
-                          </p>
+                          <div className="mt-3 space-y-1">
+                            <p className="text-xs text-green-400">
+                              Fresh discovery bootstrap ready. Import the Control Credential
+                              Initializer first, then import the Discovery Bootstrap.
+                            </p>
+                            <p className="text-xs text-neutral-400">
+                              The credential initializer does not enable caiwave-control.
+                              Do not use the combined CAIWAVE Bootstrap for this recovery.
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>

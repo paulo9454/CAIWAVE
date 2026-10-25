@@ -86,3 +86,29 @@ def test_join_script_trailing_newline():
     assert script.endswith("\n")
     assert "cmd-one" in script
     assert "cmd-two" in script
+
+
+
+def test_build_guarded_add_checks_managed_identity():
+    from backend.services.provisioning_v2.routeros_command_builder import (
+        build_guarded_add,
+    )
+
+    command = build_guarded_add(
+        "/ip dns static",
+        "add",
+        {
+            "name": "portal.caiwave.com",
+            "address": "10.20.0.1",
+            "comment": "CAIWAVE managed captive portal DNS record",
+        },
+    )
+
+    assert command.startswith(
+        ':if ([:len [/ip dns static find where '
+        'name="portal.caiwave.com" and '
+        'comment="CAIWAVE managed captive portal DNS record"]] = 0) '
+        'do={ /ip dns static add'
+    )
+    assert 'address="10.20.0.1"' in command
+    assert command.endswith("; }")

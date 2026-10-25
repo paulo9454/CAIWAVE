@@ -95,16 +95,21 @@ def test_rejects_unexpected_heartbeat_path():
     ):
         render_scheduler_section(bad_bundle)
 
-def test_scheduler_includes_control_authorization_header():
-    bundle = build_bundle()
+def test_scheduler_uses_router_local_control_authorization_global():
+    section = render_scheduler_section(build_bundle())
 
-    section = render_scheduler_section(
-        bundle,
-        control_secret="test-control-secret-123",
-    )
+    assert r"Authorization: Bearer \$caiwaveControlSecret" in section.content
+    assert ":global caiwaveControlSecret" in section.content
+    assert "Authorization: Bearer test-control-secret-123" not in section.content
+    assert "Content-Type: application/json" in section.content
+
+
+def test_callbacks_run_credential_initializer_before_fetch():
+    section = render_scheduler_section(build_bundle())
 
     assert (
-        'Authorization: Bearer test-control-secret-123'
-        in section.content
+        section.content.count(
+            "/system script run caiwave-control-credential-init"
+        )
+        == 2
     )
-    assert "Content-Type: application/json" in section.content

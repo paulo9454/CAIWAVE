@@ -7,6 +7,16 @@ from backend.services.provisioning_v2.routeros_script_linter import lint_routero
 def test_lints_rendered_fresh_hotspot_script():
     artifact = render_routeros_bundle(bundle=build_bundle())
 
+    # The bridge and gateway address are safely guarded against duplicate adds.
+    assert any(
+        line.startswith(":if") and "do={ /interface bridge add " in line
+        for line in artifact.content.splitlines()
+    )
+    assert any(
+        line.startswith(":if") and "do={ /ip address add " in line
+        for line in artifact.content.splitlines()
+    )
+
     result = lint_routeros_script(artifact.content)
 
     assert result.valid is True

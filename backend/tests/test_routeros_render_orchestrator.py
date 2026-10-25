@@ -224,3 +224,13 @@ def test_default_routeros_section_order_includes_wireless():
         context.section_order.index(RouterOSSectionName.WIRELESS)
         < context.section_order.index(RouterOSSectionName.BRIDGE)
     )
+
+def test_default_render_order_places_identity_last():
+    context = build_render_context()
+
+    assert context.section_order[-2] == RouterOSSectionName.IDENTITY
+    assert context.section_order[-1] == RouterOSSectionName.FOOTER
+    assert (
+        context.section_order.index(RouterOSSectionName.IDENTITY)
+        > context.section_order.index(RouterOSSectionName.FIREWALL)
+    )

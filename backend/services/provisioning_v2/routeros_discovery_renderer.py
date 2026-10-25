@@ -56,6 +56,11 @@ def render_discovery_script(
 ) -> RouterOSRenderedSection:
 
     discovery_url = _validate_url(discovery_url)
+    if not discovery_url.endswith("/discovery"):
+        raise RouterOSDiscoveryRendererError(
+            "discovery_url must end with /discovery"
+        )
+    confirm_url = discovery_url[: -len("/discovery")] + "/confirm"
 
     nas_identifier = nas_identifier.strip()
     if not nas_identifier:
@@ -69,6 +74,8 @@ def render_discovery_script(
         )
 
     script_body = (
+        ':global caiwaveDiscoveryReady; '
+        ':set caiwaveDiscoveryReady false; '
         ':onerror discoveryError in={ '
         f':local nasid "{nas_identifier}"; '
         ':local interfaces [/interface print as-value]; '
@@ -104,11 +111,46 @@ def render_discovery_script(
         '}; '
         ':local json [:serialize to=json value=$payload]; '
         ':if ([:len $json] <= 60000) do={ '
-        f'/tool fetch url="{discovery_url}" '
+        f':local discoveryResponse [/tool fetch url="{discovery_url}" '
         'http-method=post '
         f'http-header-field="Content-Type: application/json,Authorization: Bearer {control_secret}" '
         'http-data=$json '
-        'keep-result=no; '
+        'output=user as-value '
+        'check-certificate=yes]; '
+        ':if (($discoveryResponse->"status") != "finished") do={ '
+        ':log warning "CAIWAVE discovery request did not finish"; '
+        ':exit; '
+        '}; '
+        ':local discoveryResponseText ($discoveryResponse->"data"); '
+        ':local discoveryResult [:deserialize from=json value=$discoveryResponseText]; '
+        ':if (($discoveryResult->"provisioning_ready") != true) do={ '
+        ':log warning "CAIWAVE discovery did not reach provisioning_ready"; '
+        ':exit; '
+        '}; '
+        ':local routerId ($discoveryResult->"router_id"); '
+        ':if ([:len $routerId] = 0) do={ '
+        ':log warning "CAIWAVE discovery response has no router ID"; '
+        ':exit; '
+        '}; '
+        ':local confirmPayload { "router_id"=$routerId; "nas_identifier"=$nasid }; '
+        ':local confirmJson [:serialize to=json value=$confirmPayload]; '
+        f':local confirmResponse [/tool fetch url="{confirm_url}" '
+        'http-method=post '
+        f'http-header-field="Content-Type: application/json,Authorization: Bearer {control_secret}" '
+        'http-data=$confirmJson '
+        'output=user as-value '
+        'check-certificate=yes]; '
+        ':if (($confirmResponse->"status") != "finished") do={ '
+        ':log warning "CAIWAVE confirmation request did not finish"; '
+        ':exit; '
+        '}; '
+        ':local confirmResponseText ($confirmResponse->"data"); '
+        ':local confirmResult [:deserialize from=json value=$confirmResponseText]; '
+        ':if (($confirmResult->"success") != true) do={ '
+        ':log warning "CAIWAVE confirmation was not successful"; '
+        ':exit; '
+        '}; '
+        ':set caiwaveDiscoveryReady true; '
         '}; '
         '} do={ '
         ':log warning ("CAIWAVE discovery execution failed: " . [:tostr $discoveryError]); '

@@ -87,18 +87,17 @@ def _fetch_source(
     url: str,
     json_body: str,
     failure_log: str,
-    control_secret: str | None = None,
 ) -> str:
-    headers = "Content-Type: application/json"
-
-    if control_secret:
-        headers += (
-            f",Authorization: Bearer {control_secret}"
-        )
+    headers = (
+        "Content-Type: application/json,"
+        "Authorization: Bearer $caiwaveControlSecret"
+    )
 
     return (
-        ':do {'
-        f' /tool fetch url="{url}"'
+        ':global caiwaveControlSecret; '
+        ':do { '
+        '/system script run caiwave-control-credential-init; '
+        f'/tool fetch url="{url}"'
         ' http-method=post'
         f' http-header-field="{headers}"'
         f' http-data="{json_body}"'
@@ -109,7 +108,6 @@ def _fetch_source(
 
 def render_scheduler_section(
     bundle: ProvisioningBundle,
-    control_secret: str | None = None,
 ) -> RouterOSRenderedSection:
     heartbeat = bundle.snapshot.heartbeat
     identity = bundle.snapshot.identity
@@ -153,7 +151,6 @@ def render_scheduler_section(
         failure_log=(
             "CAIWAVE heartbeat failed; scheduler will retry"
         ),
-        control_secret=control_secret,
     )
 
     confirm_source = _fetch_source(
@@ -162,7 +159,6 @@ def render_scheduler_section(
         failure_log=(
             "CAIWAVE provisioning confirmation failed"
         ),
-        control_secret=control_secret,
     )
 
     commands = [
@@ -229,20 +225,7 @@ def render_scheduler_section(
         commands,
     )
 
-    rendered_parts = [heartbeat_content]
-
-    # The control agent requires a credential. Existing callers that
-    # intentionally render without a control secret retain the previous
-    # heartbeat/confirmation-only behavior.
-    if control_secret:
-        control_section = render_control_section(
-            bundle,
-            control_secret=control_secret,
-        )
-
-        rendered_parts.append(control_section.content)
-
-    content = join_script(rendered_parts)
+    content = join_script([heartbeat_content])
 
     return RouterOSRenderedSection(
         name=RouterOSSectionName.SCHEDULERS,

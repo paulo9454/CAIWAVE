@@ -102,6 +102,8 @@ def test_renders_hotspot_section():
     assert section.status == RenderStatus.RENDERED
     assert section.checksum
     assert "# CAIWAVE Hotspot" in section.content
+    assert ':if ([:len [/ip hotspot profile find where name="caiwave-profile"]] = 0) do={' in section.content
+    assert ':if ([:len [/ip hotspot find where name="caiwave-hotspot"]] = 0) do={' in section.content
     assert "# Hotspot auth mode: radius" in section.content
     assert "/ip hotspot profile add" in section.content
     assert 'dns-name="login.caiwave.local"' in section.content

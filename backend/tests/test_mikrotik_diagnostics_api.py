@@ -258,4 +258,5 @@ def test_diagnostics_surfaces_latest_provisioning_job(monkeypatch):
         "started_at": None,
         "completed_at": None,
         "last_error": None,
+        "requires_manual_verification": False,
     }

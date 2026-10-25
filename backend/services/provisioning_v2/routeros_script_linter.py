@@ -101,7 +101,18 @@ def lint_routeros_script(content: str) -> RouterOSLintResult:
     ]
 
     for prefix in required_prefixes:
-        if not any(line.startswith(prefix) for line in command_lines):
+        # Commands may be emitted directly or as the first command inside a
+        # RouterOS :if ... do={ ... } guard. Only accept the guarded form
+        # when the required command immediately follows the do={ block.
+        found = any(
+            line.startswith(prefix)
+            or (
+                line.startswith(":")
+                and f"do={{ {prefix} " in line
+            )
+            for line in command_lines
+        )
+        if not found:
             errors.append(f"Missing required RouterOS command: {prefix}")
 
     for token in _find_unresolved_template_tokens(content):
@@ -154,6 +165,23 @@ class ProductionRouterOSLintContext(StrictModel):
     captive_dns_name: str
     portal_public_url: str
     radius_host: str
+
+
+def _effective_command_line(line: str) -> str:
+    """Expose the command inside a one-line guarded add for static validation."""
+    if not line.startswith(":") or "do={" not in line:
+        return line
+
+    body = line.split("do={", 1)[1].strip()
+
+    if body.endswith("}"):
+        body = body[:-1].rstrip()
+
+    if body.endswith(";"):
+        body = body[:-1].rstrip()
+
+    # Only normalize guards whose body is one RouterOS path command.
+    return body if body.startswith("/") else line
 
 
 def lint_production_routeros_script(
@@ -233,7 +261,7 @@ def lint_production_routeros_script(
     ]
 
     command_lines = [
-        line.strip()
+        _effective_command_line(line.strip())
         for line in content.splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]

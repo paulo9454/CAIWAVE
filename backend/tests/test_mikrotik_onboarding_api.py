@@ -107,7 +107,6 @@ def hotspot():
 
 def register_payload():
     return {
-        "bootstrap_token": "test-token",
         "name": "Test Router",
         "hotspot_id": "373bdbc6-88e9-47a6-9d8e-5ef9d0e6aaaf",
         "wan_interface": "ether1",
@@ -269,6 +268,7 @@ def test_register_mikrotik_runs_v2_provisioning(monkeypatch):
 
     assert "CAIWAVE Control Agent Bootstrap" in control_bootstrap
     assert 'name="caiwave-control"' in control_bootstrap
+    assert ":set caiwaveControlSecret" in control_bootstrap
     assert "/system scheduler add" in control_bootstrap
     assert "/system script run" in control_bootstrap
 
@@ -839,7 +839,7 @@ def test_confirm_promotes_pending_control_credential(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(new_secret),
         "created_at": "2026-09-20T00:00:00+00:00",
-        "expires_at": "2026-10-20T00:00:00+00:00",
+        "expires_at": "2099-10-20T00:00:00+00:00",
         "status": "pending",
     }
 
@@ -982,7 +982,7 @@ def test_confirm_does_not_promote_pending_when_artifact_missing(monkeypatch):
         "router_id": router_id,
         "secret_hash": hash_control_secret(new_secret),
         "created_at": "2026-09-20T00:00:00+00:00",
-        "expires_at": "2026-10-20T00:00:00+00:00",
+        "expires_at": "2099-10-20T00:00:00+00:00",
         "status": "pending",
     }
 
@@ -1129,18 +1129,85 @@ def test_mikrotik_job_poll_claims_and_returns_artifact():
         class FakeJobRepository:
             def __init__(self):
                 self.claimed = False
+                self.stored_job = dict(job)
+
+            async def get_active_for_router(self, router_id, job_type=None):
+                current = self.stored_job
+                if current.get("router_id") != router_id:
+                    return None
+                if current.get("status") not in {"queued", "dispatched", "running"}:
+                    return None
+                if job_type and current.get("job_type", "provisioning") != job_type:
+                    return None
+                return dict(current)
+
+            async def get_manual_verification_for_router(self, router_id):
+                current = self.stored_job
+                if (
+                    current.get("router_id") == router_id
+                    and current.get("requires_manual_verification") is True
+                ):
+                    return dict(current)
+                return None
+
+            async def claim_queued_job_for_router(
+                self, router_id, job_id, job_type=None
+            ):
+                current = self.stored_job
+                if (
+                    self.claimed
+                    or current.get("job_id") != job_id
+                    or current.get("status") != "queued"
+                    or current.get("router_id") != router_id
+                ):
+                    return None
+                if job_type and current.get("job_type", "provisioning") != job_type:
+                    return None
+
+                self.claimed = True
+                current.update({
+                    "status": "dispatched",
+                    "job_type": current.get("job_type") or "provisioning",
+                    "dispatched_at": now,
+                    "updated_at": now,
+                })
+                return dict(current)
 
             async def claim_next_for_router(self, router_id, job_type=None):
-                if self.claimed:
+                if (
+                    self.claimed
+                    or self.stored_job.get("status") != "queued"
+                    or self.stored_job.get("router_id") != router_id
+                ):
                     return None
                 self.claimed = True
-                claimed = dict(job)
-                claimed["status"] = "dispatched"
-                claimed["dispatched_at"] = now
-                return claimed
+                self.stored_job.update({
+                    "status": "dispatched",
+                    "job_type": "provisioning",
+                    "dispatched_at": now,
+                    "updated_at": now,
+                })
+                return dict(self.stored_job)
+
+            async def update_if_status(self, job_id, expected_status, updates):
+                if (
+                    self.stored_job.get("job_id") != job_id
+                    or self.stored_job.get("status") != expected_status
+                ):
+                    return None
+                self.stored_job.update(updates)
+                return dict(self.stored_job)
+
+            async def get_by_id(self, job_id):
+                if self.stored_job.get("job_id") == job_id:
+                    return dict(self.stored_job)
+                return None
 
             async def update(self, job_id, updates):
-                return dict(job, **updates)
+                if self.stored_job.get("job_id") == job_id:
+                    self.stored_job.update(updates)
+                    return dict(self.stored_job)
+                return None
 
         class FakeArtifactRepository:
             async def get_by_id(self, artifact_id):
@@ -1161,6 +1228,7 @@ def test_mikrotik_job_poll_claims_and_returns_artifact():
             server.db = FakeDB()
             server.router_control_credential_repository = FakeCredentialRepository()
             server.provisioning_job_repository = FakeJobRepository()
+            job_repository = server.provisioning_job_repository
             server.provisioning_artifact_repository = FakeArtifactRepository()
             server.mikrotik_provisioning_orchestrator = FakeOrchestrator()
 
@@ -1205,6 +1273,64 @@ def test_mikrotik_job_poll_claims_and_returns_artifact():
 
                 assert response.status_code == 200
                 assert response.json()["job_available"] is False
+                response = client.post(
+                    "/api/mikrotik-onboard/poll",
+                    json={
+                        "nas_identifier": router["nas_identifier"],
+                        "supports_safe_dispatched_replay": True,
+                    },
+                    headers={"Authorization": "Bearer poll-secret"},
+                )
+                assert response.status_code == 200
+                assert response.json()["job_available"] is True
+                assert response.json()["job"]["job_id"] == job["job_id"]
+
+                # A running job must not be imported again.
+                job_repository.stored_job["status"] = "running"
+                job_repository.stored_job["updated_at"] = now
+                response = client.post(
+                    "/api/mikrotik-onboard/poll",
+                    json={
+                        "nas_identifier": router["nas_identifier"],
+                        "supports_safe_dispatched_replay": True,
+                    },
+                    headers={"Authorization": "Bearer poll-secret"},
+                )
+                assert response.status_code == 200
+                assert response.json()["job_available"] is False
+
+                # An unresolved running job is failed for manual verification.
+                job_repository.stored_job["updated_at"] = datetime.fromtimestamp(
+                    now.timestamp() - 31 * 60,
+                    tz=timezone.utc,
+                )
+                response = client.post(
+                    "/api/mikrotik-onboard/poll",
+                    json={
+                        "nas_identifier": router["nas_identifier"],
+                        "supports_safe_dispatched_replay": True,
+                    },
+                    headers={"Authorization": "Bearer poll-secret"},
+                )
+                assert response.status_code == 200
+                assert response.json()["job_available"] is False
+                assert job_repository.stored_job["status"] == "failed"
+                assert job_repository.stored_job["requires_manual_verification"] is True
+                assert "Verify the router" in job_repository.stored_job["last_error"]
+                assert response.json()["requires_manual_verification"] is True
+                assert response.json()["blocked_reason"]
+
+                # A subsequent poll remains blocked until a Super Admin resolves the gate.
+                response = client.post(
+                    "/api/mikrotik-onboard/poll",
+                    json={"nas_identifier": router["nas_identifier"]},
+                    headers={"Authorization": "Bearer poll-secret"},
+                )
+                assert response.status_code == 200
+                assert response.json()["job_available"] is False
+                assert response.json()["requires_manual_verification"] is True
+                assert "Super Admin" in response.json()["blocked_reason"]
+                assert job_repository.stored_job["status"] == "failed"
 
         finally:
             server.db = original_db
@@ -1666,6 +1792,9 @@ def test_mikrotik_job_poll_fails_when_artifact_is_missing():
                 return [credential]
 
         class FakeJobRepository:
+            async def get_active_for_router(self, router_id, job_type=None):
+                return None
+
             async def claim_next_for_router(self, router_id, job_type=None):
                 claimed = dict(job)
                 claimed["status"] = "dispatched"
@@ -2245,3 +2374,120 @@ def test_mikrotik_job_result_rejects_job_from_different_router(monkeypatch):
     stored_job = fake_db.provisioning_jobs.documents[0]
 
     assert stored_job["status"] == "dispatched"
+def _build_manual_verification_test_app(monkeypatch, role):
+    router_id = "router-manual-review-test"
+    router = {
+        "id": router_id,
+        "nas_identifier": "CAIWAVE-MANUAL-REVIEW",
+        "hotspot_id": "hotspot-manual-review",
+    }
+    job = {
+        "job_id": "job-manual-review-test",
+        "router_id": router_id,
+        "status": "failed",
+        "requires_manual_verification": True,
+        "last_error": "Provisioning timed out; verify router before retrying.",
+    }
+
+    class FakeManualVerificationRepository:
+        def __init__(self):
+            self.stored_job = dict(job)
+
+        async def get_manual_verification_for_router(self, requested_router_id):
+            if (
+                requested_router_id == router_id
+                and self.stored_job.get("requires_manual_verification") is True
+            ):
+                return dict(self.stored_job)
+            return None
+
+        async def update_if_status(self, job_id, expected_status, updates):
+            if (
+                job_id != self.stored_job["job_id"]
+                or expected_status != self.stored_job.get("status")
+            ):
+                return None
+            self.stored_job.update(updates)
+            return dict(self.stored_job)
+
+    fake_db = SimpleNamespace(
+        mikrotik_routers=FakeCollection([router], collection_name="mikrotik_routers"),
+        router_events=FakeCollection(collection_name="router_events"),
+    )
+    fake_repo = FakeManualVerificationRepository()
+
+    monkeypatch.setattr(server, "db", fake_db)
+    monkeypatch.setattr(server, "provisioning_job_repository", fake_repo)
+
+    app = FastAPI()
+    app.include_router(server.mikrotik_onboard_router, prefix="/api")
+
+    async def fake_current_user():
+        return {"id": "test-reviewer", "role": role}
+
+    app.dependency_overrides[server.get_current_user] = fake_current_user
+    return app, fake_db, fake_repo, router_id
+
+
+def test_resolve_manual_verification_denies_hotspot_owner(monkeypatch):
+    app, fake_db, fake_repo, router_id = _build_manual_verification_test_app(
+        monkeypatch, server.UserRole.HOTSPOT_OWNER.value
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/mikrotik-onboard/routers/{router_id}/resolve-manual-verification",
+            json={"verification_note": "Router checked and appears healthy."},
+        )
+
+    assert response.status_code == 403
+    assert fake_repo.stored_job["requires_manual_verification"] is True
+    assert fake_db.router_events.documents == []
+
+
+def test_resolve_manual_verification_rejects_blank_note(monkeypatch):
+    app, fake_db, fake_repo, router_id = _build_manual_verification_test_app(
+        monkeypatch, server.UserRole.SUPER_ADMIN.value
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/mikrotik-onboard/routers/{router_id}/resolve-manual-verification",
+            json={"verification_note": "          "},
+        )
+
+    assert response.status_code == 422
+    assert fake_repo.stored_job["requires_manual_verification"] is True
+    assert fake_db.router_events.documents == []
+
+
+def test_resolve_manual_verification_records_super_admin_audit(monkeypatch):
+    app, fake_db, fake_repo, router_id = _build_manual_verification_test_app(
+        monkeypatch, server.UserRole.SUPER_ADMIN.value
+    )
+    note = "Inspected the router and verified its configuration."
+
+    with TestClient(app) as client:
+        response = client.post(
+            f"/api/mikrotik-onboard/routers/{router_id}/resolve-manual-verification",
+            json={"verification_note": note},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["router_id"] == router_id
+    assert body["requires_manual_verification"] is False
+
+    stored_job = fake_repo.stored_job
+    assert stored_job["requires_manual_verification"] is False
+    assert stored_job["manual_verification_resolved_by"] == "test-reviewer"
+    assert stored_job["manual_verification_note"] == note
+    assert stored_job["manual_verification_resolved_at"]
+
+    events = fake_db.router_events.documents
+    assert len(events) == 1
+    assert events[0]["event_type"] == "provisioning_manual_verification_resolved"
+    assert events[0]["details"]["job_id"] == stored_job["job_id"]
+    assert events[0]["details"]["resolved_by"] == "test-reviewer"
+    assert events[0]["details"]["verification_note"] == note

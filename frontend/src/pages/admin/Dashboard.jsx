@@ -1820,7 +1820,6 @@ const AllHotspotsPage = () => {
       const response = await axios.post(
         `${API_URL}/mikrotik-onboard/register`,
         {
-          bootstrap_token: "admin-dashboard",
           name: `${hotspot.name} MikroTik`,
           hotspot_id: hotspot.id,
           notes: `Admin lifetime hotspot MikroTik setup for ${hotspot.name}`,
@@ -1873,6 +1872,64 @@ const AllHotspotsPage = () => {
       toast.error(safeError(error));
     }
   };
+  const handleResolveManualVerification = async () => {
+    const routerId = generatedMikroTik?.router_id;
+    if (!routerId) {
+      toast.error("MikroTik router ID is not available.");
+      return;
+    }
+
+    // Keep the UI consistent with the server-side SUPER_ADMIN restriction.
+    if (String(getUser()?.role || "").toLowerCase() !== "super_admin") {
+      toast.error("Only a Super Admin can resolve manual verification.");
+      return;
+    }
+
+    const enteredNote = window.prompt(
+      "Inspect the physical router and its configuration first. " +
+      "Enter the verification note to record in the audit trail " +
+      "(at least 10 characters):"
+    );
+    if (enteredNote === null) return;
+
+    const verificationNote = enteredNote.trim();
+    if (verificationNote.length < 10) {
+      toast.error("Enter a verification note of at least 10 characters.");
+      return;
+    }
+
+    try {
+      await axios.post(
+        `${API_URL}/mikrotik-onboard/routers/${routerId}/resolve-manual-verification`,
+        { verification_note: verificationNote },
+        {
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+        }
+      );
+
+      setAdminMikrotikDiagnostic((current) => current ? {
+        ...current,
+        manual_verification: {
+          required: false,
+          job_id: null,
+          reason: null,
+        },
+        provisioning_job: current.provisioning_job
+          ? {
+              ...current.provisioning_job,
+              requires_manual_verification: false,
+            }
+          : current.provisioning_job,
+      } : current);
+
+      toast.success("Manual verification resolved and recorded.");
+    } catch (error) {
+      toast.error(safeError(error));
+    }
+  };
+
   const handleCreateHotspot = async (e) => {
     e.preventDefault();
     setCreating(true);
@@ -2017,6 +2074,35 @@ const AllHotspotsPage = () => {
                     "pending_discovery"}
                 </span>
               </div>
+
+              {adminMikrotikDiagnostic.manual_verification?.required && (
+                <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 p-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-red-300" />
+                    <p className="text-sm font-semibold text-red-200">
+                      Provisioning blocked: manual verification required
+                    </p>
+                  </div>
+                  <p className="mt-2 text-sm text-neutral-300">
+                    {adminMikrotikDiagnostic.manual_verification.reason ||
+                      adminMikrotikDiagnostic.provisioning_job?.last_error ||
+                      "Inspect the router before allowing provisioning to resume."}
+                  </p>
+                  {String(getUser()?.role || "").toLowerCase() === "super_admin" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 border-red-500/40 text-red-200"
+                      onClick={handleResolveManualVerification}
+                    >
+                      Resolve after inspection
+                    </Button>
+                  )}
+                  <p className="mt-2 text-xs text-neutral-500">
+                    Resolution requires a verification note and is recorded in the router audit timeline.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between gap-4">

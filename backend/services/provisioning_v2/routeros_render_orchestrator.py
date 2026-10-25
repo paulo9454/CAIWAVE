@@ -107,10 +107,7 @@ def _render_section(
         RouterOSSectionName.FIREWALL: render_firewall_section,
     }
     if section_name == RouterOSSectionName.SCHEDULERS:
-        return render_scheduler_section(
-            bundle,
-            control_secret=control_secret,
-        )
+        return render_scheduler_section(bundle)
 
     renderer = renderers.get(section_name)
     if renderer is None:

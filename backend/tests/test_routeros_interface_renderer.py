@@ -22,9 +22,12 @@ def test_renders_wan_dhcp_client():
     assert "# WAN interface: ether1" in section.content
 
     assert (
-        '/ip dhcp-client remove '
-        '[find where interface="ether1"]'
+        ':local wanDhcpClients [/ip dhcp-client find where interface="ether1"]'
     ) in section.content
+    assert ':if ([:len $wanDhcpClients] = 0) do={' in section.content
+    assert '/ip dhcp-client set' not in section.content
+    assert '/ip dhcp-client remove' not in section.content
+    assert "else={" not in section.content
 
     assert "/ip dhcp-client add" in section.content
     assert 'interface="ether1"' in section.content

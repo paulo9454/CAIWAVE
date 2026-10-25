@@ -66,6 +66,17 @@ class MikroTikProvisioningOrchestrator:
                 "router_id is required"
             )
 
+        manual_verification_job = (
+            await self.repository.get_manual_verification_for_router(router_id)
+        )
+        if manual_verification_job:
+            raise MikroTikProvisioningOrchestrationError(
+                "Provisioning is blocked because job "
+                f"{manual_verification_job.get('job_id', 'unknown')} requires "
+                "manual router verification. A Super Admin must record a "
+                "verification note before provisioning can resume."
+            )
+
         active_job = await self.repository.get_active_for_router(router_id)
 
         if active_job:

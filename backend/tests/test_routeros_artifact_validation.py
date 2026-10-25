@@ -27,7 +27,6 @@ def test_rendered_artifact_section_order_is_stable():
 
     expected_order = [
         "header",
-        "identity",
         "interfaces",
         "wireless",
         "bridge",
@@ -40,6 +39,7 @@ def test_rendered_artifact_section_order_is_stable():
         "radius",
         "firewall",
         "validation",
+        "identity",
         "footer",
     ]
 
@@ -71,7 +71,6 @@ def test_rendered_artifact_has_no_empty_required_sections():
 
 def test_rendered_artifact_has_no_duplicate_critical_commands():
     artifact = render_routeros_bundle(bundle=build_bundle())
-    lines = [line.strip() for line in artifact.content.splitlines() if line.strip()]
 
     critical_prefixes = [
         '/system identity set name="GOODlife"',
@@ -85,8 +84,10 @@ def test_rendered_artifact_has_no_duplicate_critical_commands():
     ]
 
     for prefix in critical_prefixes:
-        matches = [line for line in lines if line.startswith(prefix)]
-        assert len(matches) == 1, f"Expected exactly one command for {prefix}, got {matches}"
+        count = artifact.content.count(prefix)
+        assert count == 1, (
+            f"Expected exactly one occurrence of {prefix}, got {count}"
+        )
 
 
 def test_rendered_artifact_contains_no_unresolved_template_markers():

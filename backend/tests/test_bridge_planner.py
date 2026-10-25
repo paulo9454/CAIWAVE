@@ -27,11 +27,31 @@ def test_plans_bridge_creation():
     assert plan.excluded_interfaces == ["ether1"]
 
 
-def test_plans_bridge_reuse():
-    plan = plan_bridge(topology(BridgeStrategy.REUSE))
+def test_plans_bridge_reuse_with_verified_membership():
+    plan = plan_bridge(
+        topology(BridgeStrategy.REUSE),
+        existing_bridge_members={"bridge-hotspot": ["ether2"]},
+    )
 
     assert plan.action == BridgeAction.REUSE
     assert plan.bridge_name == "bridge-hotspot"
+    assert plan.existing_members == ["ether2"]
+
+
+def test_reuse_requires_verified_membership():
+    with pytest.raises(BridgePlannerError, match="verified existing bridge membership"):
+        plan_bridge(topology(BridgeStrategy.REUSE))
+
+
+def test_reuse_rejects_interface_assigned_to_another_bridge():
+    with pytest.raises(BridgePlannerError, match="belongs to another bridge"):
+        plan_bridge(
+            topology(BridgeStrategy.REUSE),
+            existing_bridge_members={
+                "bridge-hotspot": ["ether2"],
+                "bridge-other": ["wlan1"],
+            },
+        )
 
 
 def test_plans_no_bridge_for_single_member():

@@ -12,6 +12,7 @@ from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBun
 from backend.services.provisioning_v2.routeros_command_builder import (
     RawRouterOSValue,
     build_command,
+    build_guarded_add,
     build_comment,
     build_section,
 )
@@ -85,7 +86,7 @@ def render_radius_section(bundle: ProvisioningBundle) -> RouterOSRenderedSection
         )
 
         commands.append(
-            build_command(
+            build_guarded_add(
                 "/radius",
                 "add",
                 {

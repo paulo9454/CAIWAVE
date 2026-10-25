@@ -8,7 +8,7 @@ import hashlib
 
 from backend.services.provisioning_v2.firewall_planner import FirewallAction
 from backend.services.provisioning_v2.provisioning_bundle import ProvisioningBundle
-from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_section
+from backend.services.provisioning_v2.routeros_command_builder import build_command, build_comment, build_guarded_add, build_section
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
     RenderStatus,
     RouterOSRenderedSection,
@@ -44,7 +44,7 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
                 "connection-state": rule.connection_state,
                 "hotspot": rule.hotspot_state,
             }
-            commands.append(build_command("/ip firewall filter", "add", args))
+            commands.append(build_guarded_add("/ip firewall filter", "add", args))
 
     # Resolve portal and payment hostnames through RouterOS firewall
     # address lists. The forward rule is limited to unauthenticated
@@ -53,7 +53,7 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
 
     for host in preauth_hosts:
         commands.append(
-            build_command(
+            build_guarded_add(
                 "/ip firewall address-list",
                 "add",
                 {
@@ -66,7 +66,7 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
 
     if preauth_hosts:
         commands.append(
-            build_command(
+            build_guarded_add(
                 "/ip firewall filter",
                 "add",
                 {
@@ -86,7 +86,7 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
 
     if firewall.default_input_policy == FirewallAction.DROP:
         commands.append(
-            build_command(
+            build_guarded_add(
                 "/ip firewall filter",
                 "add",
                 {
@@ -100,7 +100,7 @@ def render_firewall_section(bundle: ProvisioningBundle) -> RouterOSRenderedSecti
 
     if firewall.default_forward_policy == FirewallAction.DROP:
         commands.append(
-            build_command(
+            build_guarded_add(
                 "/ip firewall filter",
                 "add",
                 {

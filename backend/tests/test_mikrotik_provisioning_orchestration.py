@@ -56,6 +56,15 @@ class FakeRepository:
         self.collection = FakeCollection()
         self.conflict_on_conditional_update = False
 
+    async def get_manual_verification_for_router(self, router_id):
+        jobs = await self.collection.find(
+            {
+                "router_id": router_id,
+                "requires_manual_verification": True,
+            }
+        ).to_list(1)
+        return jobs[0] if jobs else None
+
     async def get_active_for_router(self, router_id):
         jobs = await self.collection.find(
             {
@@ -238,5 +247,36 @@ def test_does_not_create_replacement_if_active_job_changes_concurrently():
         assert len(stored_jobs) == 1
         assert stored_jobs[0]["job_id"] == first_job["job_id"]
         assert stored_jobs[0]["status"] == "succeeded"
+
+    asyncio.run(scenario())
+
+
+def test_manual_verification_gate_blocks_new_provisioning_jobs():
+    async def scenario():
+        repository = FakeRepository()
+        repository.collection.documents.append({
+            "job_id": "job-needs-check",
+            "router_id": "router-1",
+            "status": "failed",
+            "requires_manual_verification": True,
+            "created_at": 100,
+        })
+        orchestrator = MikroTikProvisioningOrchestrator(repository)
+
+        try:
+            await orchestrator.get_or_create_provisioning_job(
+                router_id="router-1",
+                artifact_id="new-artifact",
+                bundle_id="new-bundle",
+                snapshot_id="new-snapshot",
+                artifact_checksum="new-checksum",
+            )
+        except MikroTikProvisioningOrchestrationError as exc:
+            assert "manual router verification" in str(exc).lower()
+        else:
+            raise AssertionError("Expected manual verification to block creation")
+
+        assert len(repository.collection.documents) == 1
+        assert repository.collection.documents[0]["requires_manual_verification"] is True
 
     asyncio.run(scenario())

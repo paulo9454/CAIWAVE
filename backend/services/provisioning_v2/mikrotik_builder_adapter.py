@@ -33,6 +33,8 @@ from backend.services.provisioning_v2.provisioning_bundle import build_provision
 from backend.services.provisioning_v2.radius_planner import plan_radius
 from backend.services.provisioning_v2.routeros_render_orchestrator import render_routeros_bundle
 from backend.services.provisioning_v2.routeros_renderer_contracts import (
+    build_render_context,
+    default_routeros_section_order,
     RenderStatus,
     RouterOSRenderedArtifact,
     RouterOSRenderedSection,
@@ -412,7 +414,35 @@ def build_provisioning_v2_artifact_from_router(
         create_bridge=snapshot.topology.create_bridge,
         bridge_name=snapshot.topology.bridge_name,
     )
-    bridge = plan_bridge(topology)
+    discovery = router.get("discovery") or {}
+    discovery_snapshot = discovery.get("snapshot") or {}
+    discovered_bridge_ports = discovery_snapshot.get("bridge_ports")
+
+    existing_bridge_members = None
+    if isinstance(discovered_bridge_ports, list):
+        membership = {}
+        for port in discovered_bridge_ports:
+            if not isinstance(port, dict):
+                raise ValueError("Invalid discovered bridge-port record")
+
+            bridge_name = str(
+                port.get("bridge_name") or port.get("bridge") or ""
+            ).strip()
+            interface_name = str(
+                port.get("interface_name") or port.get("interface") or ""
+            ).strip()
+
+            if not bridge_name or not interface_name:
+                raise ValueError("Incomplete discovered bridge-port record")
+
+            membership.setdefault(bridge_name, []).append(interface_name)
+
+        existing_bridge_members = membership
+
+    bridge = plan_bridge(
+        topology,
+        existing_bridge_members=existing_bridge_members,
+    )
     address = plan_addressing(snapshot=snapshot, bridge_plan=bridge)
     dhcp = plan_dhcp(address_plan=address, dns_servers=snapshot.networking.client_dns_servers)
     dns = plan_dns(snapshot=snapshot, address_plan=address, dhcp_plan=dhcp)
@@ -459,8 +489,17 @@ def build_provisioning_v2_artifact_from_router(
 
     # Discovery is a separate observational bootstrap artifact.
     # It must never be embedded in the final production provisioning script.
-    render_context = None
+    # Include heartbeat and confirmation scripts, which use the router-local
+    # credential initialized by the separate control bootstrap.
+    section_order = default_routeros_section_order()
+    section_order.insert(
+        section_order.index(RouterOSSectionName.VALIDATION),
+        RouterOSSectionName.SCHEDULERS,
+    )
+    render_context = build_render_context(section_order=section_order)
 
+    # The immutable production artifact must not contain the plaintext
+    # control secret.
     artifact = render_routeros_bundle(
         bundle=bundle,
         context=render_context,

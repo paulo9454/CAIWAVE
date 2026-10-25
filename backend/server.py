@@ -68,6 +68,7 @@ from backend.services.provisioning_v2.mikrotik_builder_adapter import (
 )
 from backend.services.provisioning_v2.routeros_control_renderer import (
     render_control_bootstrap,
+    render_control_credential_initializer,
 )
 from backend.services.mikrotik_control_plane.credentials import (
     build_control_credential,
@@ -5953,8 +5954,6 @@ from pydantic import field_validator
 import ipaddress
 
 class MikroTikRegisterRequest(BaseModel):
-    bootstrap_token: str
-
     name: str = Field(..., min_length=3, max_length=50)
     hotspot_id: str
     notes: Optional[str] = None
@@ -6373,6 +6372,7 @@ class MikroTikControlCredentialRotationResponse(BaseModel):
     secret: str
     expires_at: str
     discovery_rsc: dict
+    credential_initializer_rsc: dict
     control_bootstrap_rsc: dict
     bootstrap_rsc: dict
 
@@ -6450,6 +6450,20 @@ async def rotate_mikrotik_control_credential(
         "checksum": discovery_section.checksum,
     }
 
+    credential_initializer_section = render_control_credential_initializer(
+        control_secret=control_credential.secret,
+    )
+
+    credential_initializer_rsc = {
+        "filename": (
+            f"{_safe_mikrotik_filename(router.get('name', 'router'))}-"
+            f"{_safe_mikrotik_filename(router['nas_identifier'])}-"
+            "control-credential-init.rsc"
+        ),
+        "content": credential_initializer_section.content,
+        "checksum": credential_initializer_section.checksum,
+    }
+
     control_bootstrap_section = render_control_bootstrap(
         heartbeat_url=callback_url,
         nas_identifier=router["nas_identifier"],
@@ -6524,6 +6538,7 @@ async def rotate_mikrotik_control_credential(
         secret=control_credential.secret,
         expires_at=control_credential.expires_at.isoformat(),
         discovery_rsc=discovery_rsc,
+        credential_initializer_rsc=credential_initializer_rsc,
         control_bootstrap_rsc=control_bootstrap_rsc,
         bootstrap_rsc=bootstrap_rsc,
     )
@@ -6609,16 +6624,22 @@ async def confirm_mikrotik_connection(
 
     artifact = artifacts[0]
 
-    provisioning_job = (
-        await mikrotik_provisioning_orchestrator
-        .get_or_create_provisioning_job(
-            router_id=request.router_id,
-            artifact_id=artifact["artifact_id"],
-            bundle_id=artifact["bundle_id"],
-            snapshot_id=artifact["snapshot_id"],
-            artifact_checksum=artifact["checksum"],
-        )
+    from backend.services.mikrotik_control_plane.provisioning import (
+        MikroTikProvisioningOrchestrationError,
     )
+    try:
+        provisioning_job = (
+            await mikrotik_provisioning_orchestrator
+            .get_or_create_provisioning_job(
+                router_id=request.router_id,
+                artifact_id=artifact["artifact_id"],
+                bundle_id=artifact["bundle_id"],
+                snapshot_id=artifact["snapshot_id"],
+                artifact_checksum=artifact["checksum"],
+            )
+        )
+    except MikroTikProvisioningOrchestrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # A pending control credential becomes active only after the router
     # has successfully authenticated, identified itself, and reached the
@@ -6745,6 +6766,7 @@ class MikroTikHeartbeatRequest(BaseModel):
     nas_identifier: str
 class MikroTikJobPollRequest(BaseModel):
     nas_identifier: str
+    supports_safe_dispatched_replay: bool = False
 
 @mikrotik_onboard_router.post("/heartbeat")
 async def mikrotik_heartbeat(
@@ -6822,6 +6844,8 @@ class MikroTikJobPollResponse(BaseModel):
     job_available: bool
     job: Optional[dict] = None
     artifact: Optional[dict] = None
+    requires_manual_verification: bool = False
+    blocked_reason: Optional[str] = None
 
 class MikroTikJobResultRequest(BaseModel):
     nas_identifier: str
@@ -6837,6 +6861,89 @@ class MikroTikJobResultResponse(BaseModel):
     nas_identifier: str
     job_id: str
     status: str
+
+class MikroTikManualVerificationResolutionRequest(BaseModel):
+    verification_note: str = Field(..., min_length=10, max_length=2000)
+
+
+@mikrotik_onboard_router.post(
+    "/routers/{router_id}/resolve-manual-verification"
+)
+async def resolve_mikrotik_manual_verification(
+    router_id: str,
+    payload: MikroTikManualVerificationResolutionRequest,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN])),
+):
+    """Clear a provisioning safety gate after an audited Super Admin review."""
+    router = await db.mikrotik_routers.find_one(
+        {"id": router_id},
+        {"_id": 0},
+    )
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not found")
+
+    note = payload.verification_note.strip()
+    if len(note) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a verification note of at least 10 non-space characters.",
+        )
+
+    flagged_job = (
+        await provisioning_job_repository
+        .get_manual_verification_for_router(router_id)
+    )
+    if not flagged_job:
+        raise HTTPException(
+            status_code=409,
+            detail="This router has no unresolved provisioning verification gate.",
+        )
+
+    expected_status = flagged_job.get("status")
+    if not expected_status:
+        raise HTTPException(
+            status_code=409,
+            detail="The flagged job has no status; manual review is required.",
+        )
+
+    resolved_at = datetime.now(timezone.utc)
+    updated_job = await provisioning_job_repository.update_if_status(
+        flagged_job["job_id"],
+        expected_status,
+        {
+            "requires_manual_verification": False,
+            "manual_verification_resolved_at": resolved_at,
+            "manual_verification_resolved_by": user["id"],
+            "manual_verification_note": note,
+            "updated_at": resolved_at,
+        },
+    )
+    if updated_job is None:
+        raise HTTPException(
+            status_code=409,
+            detail="The job changed while resolving verification. Refresh and review it again.",
+        )
+
+    await record_router_event(
+        router_id,
+        "provisioning_manual_verification_resolved",
+        "Provisioning manual verification resolved by Super Admin",
+        "success",
+        {
+            "job_id": flagged_job["job_id"],
+            "resolved_by": user["id"],
+            "verification_note": note,
+        },
+    )
+
+    return {
+        "success": True,
+        "router_id": router_id,
+        "job_id": flagged_job["job_id"],
+        "requires_manual_verification": False,
+        "resolved_at": resolved_at.isoformat(),
+    }
+
 
 @mikrotik_onboard_router.post("/poll", response_model=MikroTikJobPollResponse)
 async def mikrotik_job_poll(
@@ -6867,18 +6974,131 @@ async def mikrotik_job_poll(
             detail="Invalid MikroTik control credential",
         )
 
-    job = await provisioning_job_repository.claim_next_for_router(
-        router["id"],
-        job_type="provisioning",
-    )
-
-    if not job:
+    def no_job_response(
+        *,
+        requires_manual_verification=False,
+        blocked_reason=None,
+    ):
         return MikroTikJobPollResponse(
             success=True,
             router_id=router["id"],
             nas_identifier=payload.nas_identifier,
             job_available=False,
+            requires_manual_verification=requires_manual_verification,
+            blocked_reason=blocked_reason,
         )
+
+    manual_lookup = getattr(
+        provisioning_job_repository,
+        "get_manual_verification_for_router",
+        None,
+    )
+    manual_verification_job = (
+        await manual_lookup(router["id"]) if callable(manual_lookup) else None
+    )
+    if manual_verification_job:
+        return no_job_response(
+            requires_manual_verification=True,
+            blocked_reason=(
+                "A previous provisioning job requires Super Admin verification. "
+                "No new provisioning job will be dispatched until the router is reviewed."
+            ),
+        )
+
+    active_job = await provisioning_job_repository.get_active_for_router(
+        router["id"],
+        job_type="provisioning",
+    )
+    now = datetime.now(timezone.utc)
+    job = None
+
+    if active_job:
+        active_status = active_job.get("status")
+
+        if active_status in {"dispatched", "running"}:
+            active_at = (
+                active_job.get("updated_at")
+                or active_job.get("dispatched_at")
+                or active_job.get("created_at")
+            )
+
+            if isinstance(active_at, str):
+                try:
+                    active_at = datetime.fromisoformat(
+                        active_at.replace("Z", "+00:00")
+                    )
+                except (TypeError, ValueError):
+                    active_at = None
+
+            if isinstance(active_at, datetime):
+                if active_at.tzinfo is None:
+                    active_at = active_at.replace(tzinfo=timezone.utc)
+
+                if (now - active_at).total_seconds() >= 30 * 60:
+                    error = (
+                        "Provisioning result callback timed out after 30 minutes; "
+                        "router configuration may already have changed. "
+                        "Verify the router before retrying provisioning."
+                    )
+                    timed_out_job = (
+                        await provisioning_job_repository.update_if_status(
+                            active_job["job_id"],
+                            active_status,
+                            {
+                                "status": "failed",
+                                "last_error": error,
+                                "requires_manual_verification": True,
+                                "completed_at": now,
+                                "updated_at": now,
+                            },
+                        )
+                    )
+                    # Never dispatch another job during this timeout poll.
+                    if timed_out_job is not None:
+                        return no_job_response(
+                            requires_manual_verification=True,
+                            blocked_reason=(
+                                "Provisioning timed out. Verify the router before "
+                                "a Super Admin clears the safety gate."
+                            ),
+                        )
+                    return no_job_response()
+
+        if active_status == "running":
+            # An import may already have completed. Never replay it automatically.
+            return no_job_response()
+
+        if active_status == "dispatched":
+            if not payload.supports_safe_dispatched_replay:
+                return no_job_response()
+            job = active_job
+
+        elif active_status == "queued":
+            claim_exact = getattr(
+                provisioning_job_repository,
+                "claim_queued_job_for_router",
+                None,
+            )
+            if not callable(claim_exact):
+                # Fail closed: do not substitute a different queued job.
+                return no_job_response()
+            job = await claim_exact(
+                router["id"],
+                active_job["job_id"],
+                job_type="provisioning",
+            )
+
+        elif active_status != "dispatched":
+            return no_job_response()
+
+    else:
+        job = await provisioning_job_repository.claim_next_for_router(
+            router["id"],
+            job_type="provisioning",
+        )
+
+    if not job:
+        return no_job_response()
 
     artifact = await provisioning_artifact_repository.get_by_id(
         job["artifact_id"]
@@ -7590,21 +7810,27 @@ async def mikrotik_discovery(
     # ================================================================
     # CREATE / REUSE PROVISIONING JOB
     # ================================================================
-    provisioning_job = (
-        await mikrotik_provisioning_orchestrator
-        .get_or_create_provisioning_job(
-            router_id=router["id"],
-            artifact_id=stored_artifact["artifact_id"],
-            bundle_id=stored_artifact["bundle_id"],
-            snapshot_id=stored_artifact["snapshot_id"],
-            artifact_checksum=stored_artifact["checksum"],
-            payload={
-                "source": "router_discovery",
-                "topology_status": "inferred",
-                "topology_confidence": topology.confidence,
-            },
-        )
+    from backend.services.mikrotik_control_plane.provisioning import (
+        MikroTikProvisioningOrchestrationError,
     )
+    try:
+        provisioning_job = (
+            await mikrotik_provisioning_orchestrator
+            .get_or_create_provisioning_job(
+                router_id=router["id"],
+                artifact_id=stored_artifact["artifact_id"],
+                bundle_id=stored_artifact["bundle_id"],
+                snapshot_id=stored_artifact["snapshot_id"],
+                artifact_checksum=stored_artifact["checksum"],
+                payload={
+                    "source": "router_discovery",
+                    "topology_status": "inferred",
+                    "topology_confidence": topology.confidence,
+                },
+            )
+        )
+    except MikroTikProvisioningOrchestrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     await record_router_event(
         router["id"],
@@ -7772,6 +7998,17 @@ async def get_mikrotik_router_diagnostics(
         )
     )
 
+    # Surface the router-wide gate separately from the latest job so both
+    # dashboards can reliably display a blocked provisioning state.
+    manual_verification_job = None
+    manual_lookup = getattr(
+        provisioning_job_repository,
+        "get_manual_verification_for_router",
+        None,
+    )
+    if callable(manual_lookup):
+        manual_verification_job = await manual_lookup(router_id)
+
     provisioning_job = None
 
     if latest_provisioning_job:
@@ -7795,6 +8032,10 @@ async def get_mikrotik_router_diagnostics(
                 else None
             ),
             "last_error": latest_provisioning_job.get("last_error"),
+            "requires_manual_verification": (
+                latest_provisioning_job.get("requires_manual_verification")
+                is True
+            ),
         }
 
     diag = await db.router_diagnostics.find_one(
@@ -7954,6 +8195,18 @@ async def get_mikrotik_router_diagnostics(
         "checks": checks,
         "diagnostics": diag,
         "provisioning_job": provisioning_job,
+        "manual_verification": {
+            "required": bool(manual_verification_job),
+            "job_id": (
+                manual_verification_job.get("job_id")
+                if manual_verification_job else None
+            ),
+            "reason": (
+                manual_verification_job.get("last_error")
+                or "A previous provisioning job requires router inspection."
+                if manual_verification_job else None
+            ),
+        },
         "discovery": router.get("discovery") or {
             "received_at": None,
             "snapshot": None,

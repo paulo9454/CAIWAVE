@@ -46,25 +46,29 @@ def render_interface_section(
             "WAN interface cannot also be a client interface"
         )
 
+    add_command = build_command(
+        "/ip dhcp-client",
+        "add",
+        {
+            "interface": wan_interface,
+            "add-default-route": True,
+            "default-route-distance": 1,
+            "use-peer-dns": True,
+            "use-peer-ntp": True,
+            "disabled": False,
+            "comment": "CAIWAVE managed WAN DHCP client",
+        },
+    )
+    # Preserve an existing WAN DHCP client and its default route.
+    # Only create one when this interface has no DHCP client.
+    conditional_command = (
+        f':if ([:len $wanDhcpClients] = 0) do={{ {add_command}; }}'
+    )
+
     commands = [
         build_comment(f"WAN interface: {wan_interface}"),
-        (
-            "/ip dhcp-client remove "
-            f'[find where interface="{wan_interface}"]'
-        ),
-        build_command(
-            "/ip dhcp-client",
-            "add",
-            {
-                "interface": wan_interface,
-                "add-default-route": True,
-                "default-route-distance": 1,
-                "use-peer-dns": True,
-                "use-peer-ntp": True,
-                "disabled": False,
-                "comment": "CAIWAVE managed WAN DHCP client",
-            },
-        ),
+        f':local wanDhcpClients [/ip dhcp-client find where interface="{wan_interface}"]',
+        conditional_command,
     ]
 
     content = build_section("CAIWAVE Interfaces", commands)

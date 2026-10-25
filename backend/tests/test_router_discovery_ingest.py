@@ -164,3 +164,16 @@ def test_hotspot_with_unknown_interface_is_rejected():
 
     with pytest.raises(RouterDiscoveryError):
         build_discovery_snapshot_from_payload(payload)
+
+
+def test_interface_assigned_to_multiple_bridges_is_rejected():
+    payload = _payload()
+    payload["bridges"].append(
+        {"name": "bridge-other", "running": True}
+    )
+    payload["bridge_ports"].append(
+        {"bridge": "bridge-other", "interface": "ether2"}
+    )
+
+    with pytest.raises(RouterDiscoveryError):
+        build_discovery_snapshot_from_payload(payload)
