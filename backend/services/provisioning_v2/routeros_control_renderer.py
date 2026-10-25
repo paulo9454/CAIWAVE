@@ -86,7 +86,8 @@ def _control_source(
 
     poll_json = (
         '{\\"nas_identifier\\":'
-        f'\\"{nas_identifier}\\"'
+        f'\\"{nas_identifier}\\",'
+        '\\"supports_safe_dispatched_replay\\":true'
         '}'
     )
 
@@ -182,6 +183,7 @@ def _control_source(
         '} on-error={ '
 
         ':log warning "CAIWAVE failed to acknowledge running job"; '
+        ':exit; '
 
         '}; '
 

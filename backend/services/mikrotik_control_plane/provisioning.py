@@ -66,31 +66,83 @@ class MikroTikProvisioningOrchestrator:
                 "router_id is required"
             )
 
-        active_job = await self.repository.get_active_for_router(router_id)
+        manual_lookup = getattr(
+            self.repository,
+            "get_manual_verification_for_router",
+            None,
+        )
+        if not callable(manual_lookup):
+            raise MikroTikProvisioningOrchestrationError(
+                "Manual-verification safety check is unavailable; "
+                "provisioning is blocked."
+            )
+
+        manual_verification_job = await manual_lookup(router_id)
+        if manual_verification_job:
+            raise MikroTikProvisioningOrchestrationError(
+                "Provisioning is blocked because job "
+                f"{manual_verification_job.get('job_id', 'unknown')} requires "
+                "manual router verification. A Super Admin must record a "
+                "verification note before provisioning can resume."
+            )
+
+        active_job = await self.repository.get_active_for_router(
+            router_id,
+            job_type="provisioning",
+        )
 
         if active_job:
             if active_job.get("artifact_checksum") == artifact_checksum:
                 return active_job
+
+            active_status = active_job.get("status")
+            if active_status not in {"queued", "dispatched", "running"}:
+                raise MikroTikProvisioningOrchestrationError(
+                    "The active provisioning job has an unexpected status; "
+                    "no replacement job was created."
+                )
 
             superseded_job = job_service.transition(
                 active_job,
                 status="failed",
                 error="Superseded by newer provisioning artifact",
             )
+            updates = {
+                "status": superseded_job["status"],
+                "updated_at": superseded_job["updated_at"],
+                "completed_at": superseded_job["completed_at"],
+                "last_error": superseded_job["last_error"],
+            }
+
+            # A dispatched/running job may already have changed the router.
+            # Fail it conditionally and require an explicit manual review.
+            needs_manual_verification = active_status in {
+                "dispatched",
+                "running",
+            }
+            if needs_manual_verification:
+                updates["requires_manual_verification"] = True
+                updates["last_error"] = (
+                    "A newer artifact arrived while this job was already "
+                    "dispatched or running. Verify the router before retrying."
+                )
+
             updated_job = await self.repository.update_if_status(
-                superseded_job["job_id"],
-                active_job["status"],
-                {
-                    "status": superseded_job["status"],
-                    "updated_at": superseded_job["updated_at"],
-                    "completed_at": superseded_job["completed_at"],
-                    "last_error": superseded_job["last_error"],
-                },
+                active_job["job_id"],
+                active_status,
+                updates,
             )
             if updated_job is None:
                 raise MikroTikProvisioningOrchestrationError(
-                    "Active provisioning job changed during supersession; "
-                    "no replacement job was created"
+                    "Active provisioning job changed concurrently; "
+                    "no replacement job was created."
+                )
+
+            if needs_manual_verification:
+                raise MikroTikProvisioningOrchestrationError(
+                    "The previous provisioning job may already have changed "
+                    "the router. Manual verification is required before "
+                    "a replacement job can be created."
                 )
 
         job = job_service.create_job(

@@ -5036,6 +5036,7 @@ async def register_mikrotik(
 
 class MikroTikJobPollRequest(BaseModel):
     nas_identifier: str
+    supports_safe_dispatched_replay: bool = False
 
 
 class MikroTikJobPollResponse(BaseModel):
@@ -5045,6 +5046,8 @@ class MikroTikJobPollResponse(BaseModel):
     job_available: bool
     job: Optional[dict] = None
     artifact: Optional[dict] = None
+    requires_manual_verification: bool = False
+    blocked_reason: Optional[str] = None
 
 
 class MikroTikJobResultRequest(BaseModel):
@@ -5053,6 +5056,12 @@ class MikroTikJobResultRequest(BaseModel):
     status: str
     result: Optional[dict] = None
     error: Optional[str] = None
+
+
+class MikroTikManualVerificationResolutionRequest(BaseModel):
+    verification_note: str = Field(..., min_length=10, max_length=2000)
+
+
 
 
 class MikroTikJobResultResponse(BaseModel):
@@ -5086,17 +5095,166 @@ async def mikrotik_job_poll(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    job = await provisioning_job_repository.claim_next_for_router(
-        router["id"],
-        job_type="provisioning",
-    )
-    if not job:
+    def no_job_response(
+        *,
+        requires_manual_verification: bool = False,
+        blocked_reason: Optional[str] = None,
+    ):
         return MikroTikJobPollResponse(
             success=True,
             router_id=router["id"],
             nas_identifier=payload.nas_identifier,
             job_available=False,
+            requires_manual_verification=requires_manual_verification,
+            blocked_reason=blocked_reason,
         )
+
+    manual_lookup = getattr(
+        provisioning_job_repository,
+        "get_manual_verification_for_router",
+        None,
+    )
+    if not callable(manual_lookup):
+        return no_job_response(
+            blocked_reason=(
+                "Manual-verification safety check is unavailable; "
+                "provisioning dispatch is blocked."
+            )
+        )
+
+    manual_verification_job = await manual_lookup(router["id"])
+    if manual_verification_job:
+        return no_job_response(
+            requires_manual_verification=True,
+            blocked_reason=(
+                "A previous provisioning job requires router verification "
+                "by a Super Admin before provisioning can resume."
+            ),
+        )
+
+    active_lookup = getattr(
+        provisioning_job_repository,
+        "get_active_for_router",
+        None,
+    )
+    if not callable(active_lookup):
+        return no_job_response(
+            blocked_reason=(
+                "Active-job safety check is unavailable; "
+                "provisioning dispatch is blocked."
+            )
+        )
+
+    active_job = await active_lookup(
+        router["id"],
+        job_type="provisioning",
+    )
+    now = datetime.now(timezone.utc)
+    job = None
+
+    if active_job:
+        active_status = active_job.get("status")
+
+        if active_status in {"dispatched", "running"}:
+            active_at = (
+                active_job.get("updated_at")
+                or active_job.get("dispatched_at")
+                or active_job.get("created_at")
+            )
+
+            if isinstance(active_at, str):
+                try:
+                    active_at = datetime.fromisoformat(
+                        active_at.replace("Z", "+00:00")
+                    )
+                except (TypeError, ValueError):
+                    active_at = None
+
+            if isinstance(active_at, datetime):
+                if active_at.tzinfo is None:
+                    active_at = active_at.replace(tzinfo=timezone.utc)
+                timed_out = (now - active_at).total_seconds() >= 30 * 60
+            else:
+                # Unknown age is handled conservatively: configuration may
+                # already have been applied, so require a manual review.
+                timed_out = True
+
+            if timed_out:
+                error = (
+                    "Provisioning job timed out or has no usable activity "
+                    "timestamp. Router configuration may already have "
+                    "changed; verify the router before retrying."
+                )
+                timed_out_job = await provisioning_job_repository.update_if_status(
+                    active_job["job_id"],
+                    active_status,
+                    {
+                        "status": "failed",
+                        "last_error": error,
+                        "requires_manual_verification": True,
+                        "completed_at": now,
+                        "updated_at": now,
+                    },
+                )
+
+                if timed_out_job is not None:
+                    return no_job_response(
+                        requires_manual_verification=True,
+                        blocked_reason=(
+                            "Provisioning timed out. Verify the router "
+                            "before a Super Admin clears the safety gate."
+                        ),
+                    )
+
+                # A concurrent callback may have changed the state.
+                # Never claim another job during this poll.
+                return no_job_response(
+                    blocked_reason=(
+                        "The active job changed while its timeout was "
+                        "being checked. Poll again after reviewing its state."
+                    )
+                )
+
+        if active_status == "running":
+            # It may already have changed the router. Never replay automatically.
+            return no_job_response()
+
+        if active_status == "dispatched":
+            if not payload.supports_safe_dispatched_replay:
+                return no_job_response()
+            job = active_job
+
+        elif active_status == "queued":
+            claim_exact = getattr(
+                provisioning_job_repository,
+                "claim_queued_job_for_router",
+                None,
+            )
+            if not callable(claim_exact):
+                return no_job_response(
+                    blocked_reason=(
+                        "Exact queued-job claiming is unavailable; "
+                        "provisioning dispatch is blocked."
+                    )
+                )
+
+            job = await claim_exact(
+                router["id"],
+                active_job["job_id"],
+                job_type="provisioning",
+            )
+
+        else:
+            return no_job_response()
+
+    else:
+        job = await provisioning_job_repository.claim_next_for_router(
+            router["id"],
+            job_type="provisioning",
+        )
+
+    if not job:
+        return no_job_response()
 
     artifact = await provisioning_artifact_repository.get_by_id(
         job["artifact_id"]
@@ -5356,6 +5514,94 @@ async def mikrotik_job_result(
         job_id=payload.job_id,
         status=payload.status,
     )
+
+
+@mikrotik_onboard_router.post(
+    "/routers/{router_id}/resolve-manual-verification"
+)
+async def resolve_mikrotik_manual_verification(
+    router_id: str,
+    payload: MikroTikManualVerificationResolutionRequest,
+    user: dict = Depends(require_role([UserRole.SUPER_ADMIN])),
+):
+    """Clear a provisioning safety gate after an audited Super Admin review."""
+    router = await db.mikrotik_routers.find_one(
+        {"id": router_id},
+        {"_id": 0},
+    )
+    if not router:
+        raise HTTPException(status_code=404, detail="Router not found")
+
+    note = payload.verification_note.strip()
+    if len(note) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide a verification note of at least 10 non-space characters.",
+        )
+
+    manual_lookup = getattr(
+        provisioning_job_repository,
+        "get_manual_verification_for_router",
+        None,
+    )
+    if not callable(manual_lookup):
+        raise HTTPException(
+            status_code=503,
+            detail="Manual-verification repository operation is unavailable.",
+        )
+
+    flagged_job = await manual_lookup(router_id)
+    if not flagged_job:
+        raise HTTPException(
+            status_code=409,
+            detail="This router has no unresolved provisioning verification gate.",
+        )
+
+    job_id = flagged_job.get("job_id")
+    expected_status = flagged_job.get("status")
+    if not job_id or not expected_status:
+        raise HTTPException(
+            status_code=409,
+            detail="The flagged job lacks required identifiers or status; manual review is still required.",
+        )
+
+    resolved_at = datetime.now(timezone.utc)
+    updated_job = await provisioning_job_repository.update_if_status(
+        job_id,
+        expected_status,
+        {
+            "requires_manual_verification": False,
+            "manual_verification_resolved_at": resolved_at,
+            "manual_verification_resolved_by": user["id"],
+            "manual_verification_note": note,
+            "updated_at": resolved_at,
+        },
+    )
+    if updated_job is None:
+        raise HTTPException(
+            status_code=409,
+            detail="The job changed while resolving verification. Refresh and review it again.",
+        )
+
+    await record_router_event(
+        router_id,
+        "provisioning_manual_verification_resolved",
+        "Provisioning manual verification resolved by Super Admin",
+        "success",
+        {
+            "job_id": job_id,
+            "resolved_by": user["id"],
+            "verification_note": note,
+        },
+    )
+
+    return {
+        "success": True,
+        "router_id": router_id,
+        "job_id": job_id,
+        "requires_manual_verification": False,
+        "resolved_at": resolved_at.isoformat(),
+    }
 
 
 class MikroTikDiscoveryRequest(BaseModel):
@@ -6286,7 +6532,51 @@ async def get_mikrotik_routers(
         query["hotspot_id"] = hotspot_id
 
     routers = await db.mikrotik_routers.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
-    return routers
+
+    manual_lookup = getattr(
+        provisioning_job_repository,
+        "get_manual_verification_for_router",
+        None,
+    )
+    enriched_routers = []
+
+    for router in routers:
+        enriched = dict(router)
+
+        if not callable(manual_lookup):
+            enriched["manual_verification_status_available"] = False
+            enriched["requires_manual_verification"] = None
+            enriched["manual_verification"] = None
+            enriched_routers.append(enriched)
+            continue
+
+        try:
+            flagged_job = await manual_lookup(router.get("id"))
+        except Exception:
+            # Unknown must remain visibly different from a confirmed-clear gate.
+            enriched["manual_verification_status_available"] = False
+            enriched["requires_manual_verification"] = None
+            enriched["manual_verification"] = None
+            enriched_routers.append(enriched)
+            continue
+
+        enriched["manual_verification_status_available"] = True
+        enriched["requires_manual_verification"] = bool(flagged_job)
+
+        if flagged_job:
+            enriched["manual_verification"] = {
+                "job_id": flagged_job.get("job_id"),
+                "status": flagged_job.get("status"),
+                "reason": flagged_job.get("last_error")
+                or "Router state must be checked before provisioning can resume.",
+                "created_at": flagged_job.get("created_at"),
+            }
+        else:
+            enriched["manual_verification"] = None
+
+        enriched_routers.append(enriched)
+
+    return enriched_routers
 
 
 @mikrotik_onboard_router.get("/routers/{router_id}/script", status_code=410)

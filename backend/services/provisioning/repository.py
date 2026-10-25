@@ -69,22 +69,35 @@ class ProvisioningJobRepository:
         router_id: str,
         job_type: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
+        """Find the newest active job, including legacy untyped jobs."""
         query = {
             "router_id": router_id,
-            "status": {
-                "$in": [
-                    "queued",
-                    "dispatched",
-                    "running",
-                ],
-            },
+            "status": {"$in": ["queued", "dispatched", "running"]},
         }
-
-        if job_type is not None:
-            query["job_type"] = job_type
 
         jobs = await self.collection.find(
             query,
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(1000)
+
+        for job in jobs:
+            if job_type is None or job.get("job_type") == job_type:
+                return job
+            if job_type == "provisioning" and "job_type" not in job:
+                return job
+
+        return None
+
+    async def get_manual_verification_for_router(
+        self,
+        router_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the newest job that still blocks provisioning."""
+        jobs = await self.collection.find(
+            {
+                "router_id": router_id,
+                "requires_manual_verification": True,
+            },
             {"_id": 0},
         ).sort("created_at", -1).to_list(1)
 
@@ -169,6 +182,51 @@ class ProvisioningJobRepository:
             projection={"_id": 0},
             return_document=ReturnDocument.AFTER,
         )
+    async def claim_queued_job_for_router(
+        self,
+        router_id: str,
+        job_id: str,
+        job_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically claim one specific queued job, preserving legacy support."""
+        now = datetime.now(timezone.utc)
+        base_query = {
+            "router_id": router_id,
+            "job_id": job_id,
+            "status": "queued",
+        }
+
+        async def claim(query, *, mark_provisioning: bool = False):
+            updates = {
+                "status": "dispatched",
+                "updated_at": now,
+                "dispatched_at": now,
+            }
+            if mark_provisioning:
+                updates["job_type"] = "provisioning"
+
+            return await self.collection.find_one_and_update(
+                query,
+                {"$set": updates},
+                projection={"_id": 0},
+                return_document=ReturnDocument.AFTER,
+            )
+
+        if job_type is None:
+            return await claim(base_query)
+
+        typed_query = {**base_query, "job_type": job_type}
+        claimed = await claim(typed_query)
+        if claimed is not None or job_type != "provisioning":
+            return claimed
+
+        # A legacy fallback is limited to the same router, job and queued state.
+        legacy_query = {
+            **base_query,
+            "job_type": {"$exists": False},
+        }
+        return await claim(legacy_query, mark_provisioning=True)
+
     async def update(
         self,
         job_id: str,

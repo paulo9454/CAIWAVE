@@ -1,5 +1,5 @@
 import { safeError } from "../../utils/safeError";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { getUser, logout, getAuthToken, ROLES } from "../../lib/auth";
@@ -746,37 +746,33 @@ const MikroTikSetupPage = () => {
   const [diagnostics, setDiagnostics] = useState({});
   const [timelines, setTimelines] = useState({});
 
-  useEffect(() => {
-    fetchData();
-
-    const interval = setInterval(() => {
-      fetchData();
-    }, 15000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchData = async () => {
+  const fetchTimelines = useCallback(async (routerList) => {
     try {
       const token = getAuthToken();
       const headers = { Authorization: `Bearer ${token}` };
-      
-      const [hotspotsRes, routersRes] = await Promise.all([
-        axios.get(`${API_URL}/hotspots/`, { headers }),
-        axios.get(`${API_URL}/mikrotik-onboard/routers`, { headers }),
-      ]);
-      
-      setHotspots(hotspotsRes.data);
-      setRouters(routersRes.data);
-      fetchDiagnostics(routersRes.data);
-    } catch (error) {
-      console.error("Failed to fetch data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const fetchDiagnostics = async (routerList = routers) => {
+      const results = await Promise.all(
+        routerList.map(async (router) => {
+          try {
+            const res = await axios.get(
+              `${API_URL}/mikrotik-onboard/routers/${router.id}/timeline?limit=5`,
+              { headers }
+            );
+            return [router.id, res.data.events || []];
+          } catch (err) {
+            console.error("Failed to fetch router timeline:", router.id, err);
+            return [router.id, []];
+          }
+        })
+      );
+
+      setTimelines(Object.fromEntries(results));
+    } catch (error) {
+      console.error("Failed to fetch timelines:", error);
+    }
+  }, []);
+
+  const fetchDiagnostics = useCallback(async (routerList) => {
     try {
       const token = getAuthToken();
       const headers = { Authorization: `Bearer ${token}` };
@@ -801,33 +797,33 @@ const MikroTikSetupPage = () => {
     } catch (error) {
       console.error("Failed to fetch diagnostics:", error);
     }
-  };
+  }, [fetchTimelines]);
 
-  const fetchTimelines = async (routerList = routers) => {
+  const fetchData = useCallback(async () => {
     try {
       const token = getAuthToken();
       const headers = { Authorization: `Bearer ${token}` };
 
-      const results = await Promise.all(
-        routerList.map(async (router) => {
-          try {
-            const res = await axios.get(
-              `${API_URL}/mikrotik-onboard/routers/${router.id}/timeline?limit=5`,
-              { headers }
-            );
-            return [router.id, res.data.events || []];
-          } catch (err) {
-            console.error("Failed to fetch router timeline:", router.id, err);
-            return [router.id, []];
-          }
-        })
-      );
+      const [hotspotsRes, routersRes] = await Promise.all([
+        axios.get(`${API_URL}/hotspots/`, { headers }),
+        axios.get(`${API_URL}/mikrotik-onboard/routers`, { headers }),
+      ]);
 
-      setTimelines(Object.fromEntries(results));
+      setHotspots(hotspotsRes.data);
+      setRouters(routersRes.data);
+      fetchDiagnostics(routersRes.data);
     } catch (error) {
-      console.error("Failed to fetch timelines:", error);
+      console.error("Failed to fetch data:", error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [fetchDiagnostics]);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 15000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const formatAge = (seconds) => {
     if (seconds === null || seconds === undefined) return "unknown";
@@ -1045,6 +1041,39 @@ const MikroTikSetupPage = () => {
                     </div>
                   </div>
                   
+                  {router.manual_verification_status_available === false && (
+                    <div role="alert" className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+                      <AlertTriangle className="mr-2 inline h-5 w-5 text-yellow-400" />
+                      <span className="font-semibold text-yellow-300">
+                        Provisioning safety status unavailable.
+                      </span>
+                      <p className="mt-1 text-sm text-neutral-300">
+                        Ask an administrator to verify this router before retrying provisioning.
+                      </p>
+                    </div>
+                  )}
+
+                  {router.requires_manual_verification === true && (
+                    <div
+                      role="alert"
+                      data-testid={`manual-verification-${router.id}`}
+                      className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4"
+                    >
+                      <AlertTriangle className="mr-2 inline h-5 w-5 text-red-400" />
+                      <span className="font-semibold text-red-300">
+                        Provisioning paused — manual verification required.
+                      </span>
+                      <p className="mt-1 text-sm text-neutral-300">
+                        Ask a CAIWAVE Super Admin to inspect this router before provisioning resumes.
+                      </p>
+                      {router.manual_verification?.reason && (
+                        <p className="mt-2 text-sm text-neutral-400">
+                          Reason: {router.manual_verification.reason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
                       <p className="text-neutral-500">Hotspot</p>

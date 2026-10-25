@@ -498,3 +498,155 @@ def test_claim_provisioning_job_does_not_claim_rotation_job():
         assert claimed is None
 
     asyncio.run(run())
+
+
+def test_get_active_for_router_includes_legacy_provisioning_jobs():
+    async def scenario():
+        repository = build_repository()
+
+        await repository.create({
+            "job_id": "rotation-job",
+            "router_id": "router-legacy-check",
+            "job_type": "control_credential_rotation",
+            "status": "running",
+            "created_at": 300,
+        })
+        await repository.create({
+            "job_id": "legacy-provisioning",
+            "router_id": "router-legacy-check",
+            "status": "dispatched",
+            "created_at": 200,
+        })
+        await repository.create({
+            "job_id": "typed-provisioning",
+            "router_id": "router-legacy-check",
+            "job_type": "provisioning",
+            "status": "queued",
+            "created_at": 100,
+        })
+
+        active = await repository.get_active_for_router(
+            "router-legacy-check",
+            job_type="provisioning",
+        )
+
+        assert active is not None
+        assert active["job_id"] == "legacy-provisioning"
+
+    asyncio.run(scenario())
+
+
+def test_get_manual_verification_for_router_returns_flagged_job():
+    async def scenario():
+        repository = build_repository()
+
+        await repository.create({
+            "job_id": "normal-job",
+            "router_id": "router-review-check",
+            "status": "failed",
+            "requires_manual_verification": False,
+            "created_at": 300,
+        })
+        await repository.create({
+            "job_id": "flagged-job",
+            "router_id": "router-review-check",
+            "status": "failed",
+            "requires_manual_verification": True,
+            "created_at": 200,
+        })
+        await repository.create({
+            "job_id": "other-router-flagged",
+            "router_id": "another-router",
+            "status": "failed",
+            "requires_manual_verification": True,
+            "created_at": 400,
+        })
+
+        flagged = await repository.get_manual_verification_for_router(
+            "router-review-check"
+        )
+
+        assert flagged is not None
+        assert flagged["job_id"] == "flagged-job"
+        assert flagged["requires_manual_verification"] is True
+
+    asyncio.run(scenario())
+
+
+def test_claim_queued_job_for_router_claims_only_the_requested_legacy_job():
+    from datetime import datetime, timezone
+
+    class ClaimCollection:
+        def __init__(self):
+            self.jobs = [
+                {
+                    "job_id": "another-queued-job",
+                    "router_id": "router-exact-claim",
+                    "job_type": "provisioning",
+                    "status": "queued",
+                    "created_at": 100,
+                },
+                {
+                    "job_id": "requested-legacy-job",
+                    "router_id": "router-exact-claim",
+                    "status": "queued",
+                    "created_at": 200,
+                },
+            ]
+
+        async def find_one_and_update(
+            self,
+            query,
+            update,
+            sort=None,
+            projection=None,
+            return_document=None,
+        ):
+            for job in self.jobs:
+                matches = True
+
+                for key, expected in query.items():
+                    if isinstance(expected, dict) and "$exists" in expected:
+                        if (key in job) != expected["$exists"]:
+                            matches = False
+                            break
+                    elif job.get(key) != expected:
+                        matches = False
+                        break
+
+                if matches:
+                    job.update(update["$set"])
+                    return dict(job)
+
+            return None
+
+    async def scenario():
+        repository = ProvisioningJobRepository(ClaimCollection())
+
+        claimed = await repository.claim_queued_job_for_router(
+            "router-exact-claim",
+            "requested-legacy-job",
+            job_type="provisioning",
+        )
+
+        assert claimed is not None
+        assert claimed["job_id"] == "requested-legacy-job"
+        assert claimed["job_type"] == "provisioning"
+        assert claimed["status"] == "dispatched"
+
+        jobs = repository.collection.jobs
+        other_job = next(
+            job for job in jobs
+            if job["job_id"] == "another-queued-job"
+        )
+        assert other_job["status"] == "queued"
+
+        # The same job cannot be claimed again after it has been dispatched.
+        second_claim = await repository.claim_queued_job_for_router(
+            "router-exact-claim",
+            "requested-legacy-job",
+            job_type="provisioning",
+        )
+        assert second_claim is None
+
+    asyncio.run(scenario())

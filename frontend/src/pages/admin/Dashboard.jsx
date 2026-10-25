@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -3244,6 +3244,218 @@ const InvoiceManagementPage = () => {
   );
 };
 
+// Super Admin provisioning safety review
+const ProvisioningSafetyPage = () => {
+  const [routers, setRouters] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [notes, setNotes] = useState({});
+  const [resolvingRouterId, setResolvingRouterId] = useState(null);
+
+  const fetchRouters = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+
+    try {
+      const token = getAuthToken();
+      const response = await axios.get(`${API_URL}/mikrotik-onboard/routers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      setRouters(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      const message =
+        error?.response?.data?.detail || "Failed to load MikroTik router safety status.";
+      setLoadError(String(message));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRouters();
+  }, [fetchRouters]);
+
+  const blockedRouters = routers.filter(
+    (router) => router.requires_manual_verification === true
+  );
+  const unknownRouters = routers.filter(
+    (router) => router.manual_verification_status_available === false
+  );
+
+  const resolveVerification = async (router) => {
+    const note = (notes[router.id] || "").trim();
+
+    if (note.length < 10) {
+      toast.error("Enter a verification note of at least 10 characters.");
+      return;
+    }
+
+    setResolvingRouterId(router.id);
+
+    try {
+      const token = getAuthToken();
+      await axios.post(
+        `${API_URL}/mikrotik-onboard/routers/${router.id}/resolve-manual-verification`,
+        { verification_note: note },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast.success(`Manual verification cleared for ${router.name || router.id}.`);
+      setNotes((current) => ({ ...current, [router.id]: "" }));
+      await fetchRouters();
+    } catch (error) {
+      const message =
+        error?.response?.data?.detail || "Could not resolve manual verification.";
+      toast.error(String(message));
+    } finally {
+      setResolvingRouterId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6" data-testid="provisioning-safety-page">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Provisioning Safety</h1>
+          <p className="mt-1 text-neutral-400">
+            Review router state before clearing a provisioning safety gate.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          className="border-neutral-700"
+          onClick={fetchRouters}
+          disabled={loading}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Refresh status
+        </Button>
+      </div>
+
+      <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-neutral-300">
+        Only clear a gate after inspecting the actual router configuration and
+        confirming it is safe to resume provisioning. Every resolution requires
+        a verification note and is recorded in the router audit timeline.
+      </div>
+
+      {loadError && (
+        <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-300">
+          {loadError}
+        </div>
+      )}
+
+      {unknownRouters.length > 0 && (
+        <div role="alert" className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+          <p className="font-semibold text-yellow-300">
+            Some router safety statuses could not be checked
+          </p>
+          <p className="mt-1 text-sm text-neutral-300">
+            Do not treat these routers as cleared. Refresh the list and investigate
+            the status-check failure before provisioning.
+          </p>
+          <p className="mt-2 text-sm text-neutral-400">
+            Affected routers: {unknownRouters.map((router) => router.name || router.id).join(", ")}
+          </p>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+        </div>
+      ) : blockedRouters.length === 0 ? (
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900/50 p-8 text-center">
+          <CheckCircle className="mx-auto mb-3 h-10 w-10 text-green-400" />
+          <h2 className="font-semibold">No confirmed manual-verification gates</h2>
+          <p className="mt-2 text-sm text-neutral-400">
+            {unknownRouters.length > 0
+              ? "Some router statuses remain unknown; see the warning above."
+              : "No registered router currently reports an unresolved provisioning safety gate."}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <h2 className="font-semibold">
+            Routers requiring verification ({blockedRouters.length})
+          </h2>
+
+          {blockedRouters.map((router) => (
+            <section
+              key={router.id}
+              className="space-y-4 rounded-lg border border-red-500/30 bg-red-500/5 p-5"
+              data-testid={`blocked-router-${router.id}`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold">{router.name || router.id}</h3>
+                  <p className="mt-1 font-mono text-xs text-neutral-400">
+                    NAS: {router.nas_identifier || "Unknown"}
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Job: {router.manual_verification?.job_id || "Not available"}
+                    {" · "}
+                    Status: {router.manual_verification?.status || "Unknown"}
+                  </p>
+                </div>
+                <span className="rounded bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300">
+                  Verification required
+                </span>
+              </div>
+
+              <div className="rounded border border-neutral-800 bg-neutral-950/50 p-3">
+                <p className="text-sm font-medium text-neutral-300">Recorded reason</p>
+                <p className="mt-1 text-sm text-neutral-400">
+                  {router.manual_verification?.reason ||
+                    "The previous provisioning attempt may have changed router configuration."}
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor={`verification-note-${router.id}`}
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Verification note (required)
+                </label>
+                <textarea
+                  id={`verification-note-${router.id}`}
+                  rows={3}
+                  value={notes[router.id] || ""}
+                  onChange={(event) =>
+                    setNotes((current) => ({
+                      ...current,
+                      [router.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="Record what you inspected and why the router is safe for provisioning to resume."
+                  className="w-full rounded-lg border border-neutral-700 bg-neutral-950 p-3 text-sm text-white placeholder:text-neutral-500 focus:border-blue-500 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-neutral-500">
+                  Use at least 10 characters. This note is saved in the resolution audit event.
+                </p>
+              </div>
+
+              <Button
+                onClick={() => resolveVerification(router)}
+                disabled={
+                  (notes[router.id] || "").trim().length < 10 ||
+                  resolvingRouterId === router.id
+                }
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {resolvingRouterId === router.id
+                  ? "Recording verification..."
+                  : "Confirm inspected and resume provisioning"}
+              </Button>
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Main Admin Dashboard Layout
 const AdminDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -3258,6 +3470,7 @@ const AdminDashboard = () => {
     { name: "Ad Approval", href: "/admin/ads", icon: Megaphone, badge: true },
     { name: "Invoices", href: "/admin/invoices", icon: FileText },
     { name: "Hotspots", href: "/admin/hotspots", icon: Radio },
+    { name: "Provisioning Safety", href: "/admin/provisioning-safety", icon: AlertCircle },
     { name: "Packages", href: "/admin/packages", icon: Package },
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Revenue Settings", href: "/admin/revenue", icon: Sliders },
@@ -3377,6 +3590,7 @@ const AdminDashboard = () => {
             <Route path="ads" element={<AdApprovalPage />} />
             <Route path="invoices" element={<InvoiceManagementPage />} />
             <Route path="hotspots" element={<AllHotspotsPage />} />
+            <Route path="provisioning-safety" element={<ProvisioningSafetyPage />} />
             <Route path="packages" element={<PackagesPage />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="revenue" element={<RevenueSettingsPage />} />

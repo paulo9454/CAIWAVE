@@ -1141,6 +1141,33 @@ def test_mikrotik_job_poll_claims_and_returns_artifact(artifact_tamper):
                 self.claimed = False
                 self.current_job = None
 
+            async def get_manual_verification_for_router(self, router_id):
+                if (
+                    self.current_job is not None
+                    and self.current_job.get("router_id") == router_id
+                    and self.current_job.get("requires_manual_verification") is True
+                ):
+                    return dict(self.current_job)
+                return None
+
+            async def get_active_for_router(self, router_id, job_type=None):
+                current = self.current_job
+                if (
+                    current is None
+                    or current.get("router_id") != router_id
+                    or current.get("status") not in {"queued", "dispatched", "running"}
+                ):
+                    return None
+
+                current_type = current.get("job_type")
+                if (
+                    job_type is None
+                    or current_type == job_type
+                    or (job_type == "provisioning" and "job_type" not in current)
+                ):
+                    return dict(current)
+                return None
+
             async def claim_next_for_router(self, router_id, job_type=None):
                 if self.claimed:
                     return None
@@ -1706,6 +1733,12 @@ def test_mikrotik_job_poll_fails_when_artifact_is_missing():
                 return [credential]
 
         class FakeJobRepository:
+            async def get_manual_verification_for_router(self, router_id):
+                return None
+
+            async def get_active_for_router(self, router_id, job_type=None):
+                return None
+
             async def claim_next_for_router(self, router_id, job_type=None):
                 claimed = dict(job)
                 claimed["status"] = "dispatched"
