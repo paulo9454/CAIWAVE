@@ -39,6 +39,7 @@ import traceback
 from backend.services.mikrotik_control_plane.credentials import build_control_credential, is_control_credential_active, verify_control_secret
 from backend.services.mikrotik_control_plane.repository import RouterControlCredentialRepository
 from backend.services.mikrotik_control_plane.provisioning import (
+    MikroTikProvisioningOrchestrationError,
     MikroTikProvisioningOrchestrator,
 )
 from backend.services.provisioning.repository import ProvisioningJobRepository
@@ -178,9 +179,13 @@ async def startup():
     # Initialize persistent provisioning job and artifact indexes.
     try:
         await provisioning_job_repository.ensure_indexes()
-        logger.info("Provisioning job indexes ensured")
-    except Exception:
-        logger.exception("Failed to create provisioning job indexes")
+        logger.info("Provisioning job safety indexes ensured")
+    except Exception as exc:
+        logger.exception("Failed to create required provisioning job indexes")
+        raise RuntimeError(
+            "Required provisioning job safety indexes could not be created; "
+            "refusing to start."
+        ) from exc
 
     try:
         await provisioning_artifact_repository.ensure_indexes()
@@ -6104,21 +6109,24 @@ async def mikrotik_discovery(
     # ================================================================
     # CREATE / REUSE PROVISIONING JOB
     # ================================================================
-    provisioning_job = (
-        await mikrotik_provisioning_orchestrator
-        .get_or_create_provisioning_job(
-            router_id=router["id"],
-            artifact_id=stored_artifact["artifact_id"],
-            bundle_id=stored_artifact["bundle_id"],
-            snapshot_id=stored_artifact["snapshot_id"],
-            artifact_checksum=stored_artifact["checksum"],
-            payload={
-                "source": "router_discovery",
-                "topology_status": "inferred",
-                "topology_confidence": topology.confidence,
-            },
+    try:
+        provisioning_job = (
+            await mikrotik_provisioning_orchestrator
+            .get_or_create_provisioning_job(
+                router_id=router["id"],
+                artifact_id=stored_artifact["artifact_id"],
+                bundle_id=stored_artifact["bundle_id"],
+                snapshot_id=stored_artifact["snapshot_id"],
+                artifact_checksum=stored_artifact["checksum"],
+                payload={
+                    "source": "router_discovery",
+                    "topology_status": "inferred",
+                    "topology_confidence": topology.confidence,
+                },
+            )
         )
-    )
+    except MikroTikProvisioningOrchestrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     await record_router_event(
         router["id"],
@@ -6435,15 +6443,18 @@ async def confirm_mikrotik_connection(
         )
 
     # Discovery may already have created this job. Reuse it idempotently.
-    provisioning_job = (
-        await mikrotik_provisioning_orchestrator.get_or_create_provisioning_job(
-            router_id=request.router_id,
-            artifact_id=artifact["artifact_id"],
-            bundle_id=artifact["bundle_id"],
-            snapshot_id=artifact["snapshot_id"],
-            artifact_checksum=artifact["checksum"],
+    try:
+        provisioning_job = (
+            await mikrotik_provisioning_orchestrator.get_or_create_provisioning_job(
+                router_id=request.router_id,
+                artifact_id=artifact["artifact_id"],
+                bundle_id=artifact["bundle_id"],
+                snapshot_id=artifact["snapshot_id"],
+                artifact_checksum=artifact["checksum"],
+            )
         )
-    )
+    except MikroTikProvisioningOrchestrationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     now = datetime.now(timezone.utc).isoformat()
     update_data = {

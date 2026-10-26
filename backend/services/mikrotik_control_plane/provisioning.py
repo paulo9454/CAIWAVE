@@ -17,7 +17,10 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from backend.services.provisioning.job_service import job_service
-from backend.services.provisioning.repository import ProvisioningJobRepository
+from backend.services.provisioning.repository import (
+    ActiveProvisioningJobConflict,
+    ProvisioningJobRepository,
+)
 
 
 class MikroTikProvisioningOrchestrationError(ValueError):
@@ -155,4 +158,18 @@ class MikroTikProvisioningOrchestrator:
             payload=payload,
         )
 
-        return await self.repository.create(job)
+        try:
+            return await self.repository.create(job)
+        except ActiveProvisioningJobConflict as exc:
+            existing = exc.active_job
+            if (
+                existing
+                and existing.get("status") in {"queued", "dispatched", "running"}
+                and existing.get("artifact_checksum") == artifact_checksum
+                and existing.get("job_type") in {None, "provisioning"}
+            ):
+                return existing
+            raise MikroTikProvisioningOrchestrationError(
+                "Another active control-plane job was created concurrently. "
+                "No duplicate job was created; review the active job before retrying."
+            ) from exc

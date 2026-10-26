@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from backend.services.provisioning.repository import ActiveProvisioningJobConflict
+
 from backend.services.mikrotik_control_plane.provisioning import (
     MikroTikProvisioningOrchestrationError,
     MikroTikProvisioningOrchestrator,
@@ -155,5 +157,58 @@ def test_same_artifact_reuses_existing_active_job():
         assert result["job_id"] == "old-job"
         assert repository.created == []
         assert repository.active_job["status"] == "dispatched"
+
+    run(scenario())
+
+class ConcurrentCreateRepository(FakeRepository):
+    """Simulate the database unique-index conflict for active router jobs."""
+
+    def __init__(self):
+        super().__init__()
+        self.both_lookups_complete = asyncio.Event()
+
+    async def get_active_for_router(self, router_id, job_type=None):
+        # Snapshot before waiting so both racing requests see no active job.
+        snapshot = None
+        if (
+            self.active_job
+            and self.active_job.get("router_id") == router_id
+            and self.active_job.get("status") in {"queued", "dispatched", "running"}
+        ):
+            snapshot = dict(self.active_job)
+
+        self.active_lookup_calls += 1
+        if self.active_lookup_calls >= 2:
+            self.both_lookups_complete.set()
+        await self.both_lookups_complete.wait()
+        return snapshot
+
+    async def create(self, document):
+        if (
+            self.active_job
+            and self.active_job.get("router_id") == document.get("router_id")
+            and self.active_job.get("status") in {"queued", "dispatched", "running"}
+        ):
+            raise ActiveProvisioningJobConflict(self.active_job)
+
+        self.active_job = dict(document)
+        self.created.append(dict(document))
+        return dict(document)
+
+
+def test_concurrent_same_artifact_requests_reuse_database_winner():
+    async def scenario():
+        repository = ConcurrentCreateRepository()
+        orchestrator = MikroTikProvisioningOrchestrator(repository)
+
+        results = await asyncio.gather(
+            create_replacement(orchestrator),
+            create_replacement(orchestrator),
+        )
+
+        assert len(repository.created) == 1
+        assert results[0]["job_id"] == results[1]["job_id"]
+        assert results[0]["artifact_checksum"] == "new-checksum"
+        assert results[1]["artifact_checksum"] == "new-checksum"
 
     run(scenario())
