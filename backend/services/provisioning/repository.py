@@ -12,6 +12,19 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
+
+
+ACTIVE_JOB_STATUSES = ("queued", "dispatched", "running")
+ACTIVE_JOB_INDEX_NAME = "uniq_active_control_job_per_router"
+
+
+class ActiveProvisioningJobConflict(RuntimeError):
+    """Raised when MongoDB rejects a second active job for a router."""
+
+    def __init__(self, active_job):
+        self.active_job = dict(active_job) if active_job else None
+        super().__init__("An active control-plane job already exists for this router.")
 
 
 class ProvisioningJobNotFound(Exception):
@@ -44,6 +57,49 @@ class ProvisioningJobRepository:
             name="provisioning_job_status_created",
         )
 
+        invalid = await self.collection.find_one(
+            {
+                "status": {"$in": list(ACTIVE_JOB_STATUSES)},
+                "$or": [
+                    {"router_id": {"$exists": False}},
+                    {"router_id": None},
+                    {"router_id": ""},
+                ],
+            },
+            {"_id": 0},
+        )
+        if invalid:
+            raise RuntimeError(
+                "An active provisioning job has no valid router_id; "
+                "the active-job safety index cannot be established."
+            )
+
+        # Reconcile marker values before enabling the unique constraint.
+        await self.collection.update_many(
+            {"status": {"$in": list(ACTIVE_JOB_STATUSES)}},
+            {"$set": {"active_control_job": True}},
+        )
+        await self.collection.update_many(
+            {
+                "status": {"$nin": list(ACTIVE_JOB_STATUSES)},
+                "active_control_job": True,
+            },
+            {"$set": {"active_control_job": False}},
+        )
+
+        try:
+            await self.collection.create_index(
+                "router_id",
+                unique=True,
+                name=ACTIVE_JOB_INDEX_NAME,
+                partialFilterExpression={"active_control_job": True},
+            )
+        except DuplicateKeyError as exc:
+            raise RuntimeError(
+                "Cannot enforce one active control-plane job per router. "
+                "Resolve duplicate active jobs before startup."
+            ) from exc
+
     async def get_by_id(
         self,
         job_id: str,
@@ -69,22 +125,35 @@ class ProvisioningJobRepository:
         router_id: str,
         job_type: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
+        """Find the newest active job, including legacy untyped jobs."""
         query = {
             "router_id": router_id,
-            "status": {
-                "$in": [
-                    "queued",
-                    "dispatched",
-                    "running",
-                ],
-            },
+            "status": {"$in": ["queued", "dispatched", "running"]},
         }
-
-        if job_type is not None:
-            query["job_type"] = job_type
 
         jobs = await self.collection.find(
             query,
+            {"_id": 0},
+        ).sort("created_at", -1).to_list(1000)
+
+        for job in jobs:
+            if job_type is None or job.get("job_type") == job_type:
+                return job
+            if job_type == "provisioning" and "job_type" not in job:
+                return job
+
+        return None
+
+    async def get_manual_verification_for_router(
+        self,
+        router_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the newest job that still blocks provisioning."""
+        jobs = await self.collection.find(
+            {
+                "router_id": router_id,
+                "requires_manual_verification": True,
+            },
             {"_id": 0},
         ).sort("created_at", -1).to_list(1)
 
@@ -94,9 +163,26 @@ class ProvisioningJobRepository:
         self,
         document: Dict[str, Any],
     ) -> Dict[str, Any]:
-        await self.collection.insert_one(dict(document))
+        stored = dict(document)
+        is_active = stored.get("status") in ACTIVE_JOB_STATUSES
+        if is_active and not stored.get("router_id"):
+            raise ValueError("router_id is required for an active job")
+        stored["active_control_job"] = is_active
 
-        created = await self.get_by_id(document["job_id"])
+        try:
+            await self.collection.insert_one(stored)
+        except DuplicateKeyError as exc:
+            details = getattr(exc, "details", None) or {}
+            key_pattern = details.get("keyPattern") or {}
+            if (
+                key_pattern.get("router_id") != 1
+                and ACTIVE_JOB_INDEX_NAME not in str(exc)
+            ):
+                raise
+            active_job = await self.get_active_for_router(stored.get("router_id"))
+            raise ActiveProvisioningJobConflict(active_job) from exc
+
+        created = await self.get_by_id(stored["job_id"])
 
         if not created:
             raise RuntimeError(
@@ -169,6 +255,51 @@ class ProvisioningJobRepository:
             projection={"_id": 0},
             return_document=ReturnDocument.AFTER,
         )
+    async def claim_queued_job_for_router(
+        self,
+        router_id: str,
+        job_id: str,
+        job_type: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Atomically claim one specific queued job, preserving legacy support."""
+        now = datetime.now(timezone.utc)
+        base_query = {
+            "router_id": router_id,
+            "job_id": job_id,
+            "status": "queued",
+        }
+
+        async def claim(query, *, mark_provisioning: bool = False):
+            updates = {
+                "status": "dispatched",
+                "updated_at": now,
+                "dispatched_at": now,
+            }
+            if mark_provisioning:
+                updates["job_type"] = "provisioning"
+
+            return await self.collection.find_one_and_update(
+                query,
+                {"$set": updates},
+                projection={"_id": 0},
+                return_document=ReturnDocument.AFTER,
+            )
+
+        if job_type is None:
+            return await claim(base_query)
+
+        typed_query = {**base_query, "job_type": job_type}
+        claimed = await claim(typed_query)
+        if claimed is not None or job_type != "provisioning":
+            return claimed
+
+        # A legacy fallback is limited to the same router, job and queued state.
+        legacy_query = {
+            **base_query,
+            "job_type": {"$exists": False},
+        }
+        return await claim(legacy_query, mark_provisioning=True)
+
     async def update(
         self,
         job_id: str,
@@ -181,9 +312,14 @@ class ProvisioningJobRepository:
                 f"Provisioning job {job_id} not found."
             )
 
+        normalized = dict(updates)
+        if "status" in normalized:
+            normalized["active_control_job"] = (
+                normalized["status"] in ACTIVE_JOB_STATUSES
+            )
         await self.collection.update_one(
             {"job_id": job_id},
-            {"$set": dict(updates)},
+            {"$set": normalized},
         )
 
         updated = await self.get_by_id(job_id)
@@ -208,12 +344,17 @@ class ProvisioningJobRepository:
         a stale callback from overwriting a newer job state.
         Returns None if the status no longer matches or the job is missing.
         """
+        normalized = dict(updates)
+        if "status" in normalized:
+            normalized["active_control_job"] = (
+                normalized["status"] in ACTIVE_JOB_STATUSES
+            )
         result = await self.collection.update_one(
             {
                 "job_id": job_id,
                 "status": expected_status,
             },
-            {"$set": dict(updates)},
+            {"$set": normalized},
         )
 
         if result.matched_count == 0:
